@@ -34,7 +34,5 @@
     "tailwindcss": "^4.2.4",
     "vite": "^8.0.10"
   },
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  
 }
