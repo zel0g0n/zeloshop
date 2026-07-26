@@ -1,0 +1,21 @@
+@import "tailwindcss";
+* {
+  box-sizing: border-box;
+}
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.animate-shimmer {
+  animation: shimmer 3s linear infinite;
+}
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none; /* Chrome, Safari va Opera uchun */
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none; /* IE va Edge uchun */
+    scrollbar-width: none; /* Firefox uchun */
+  }
+}
