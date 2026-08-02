@@ -1,0 +1,143 @@
+rules_version = '2';
+
+// MUHIM: bu qoidalar yo'q bo'lsa, frontend'dagi barcha "sellerId bo'yicha
+// filtrlash" faqat KO'RINISH uchun ishlaydi — chunki har qanday odam
+// brauzer konsolidan yoki to'g'ridan-to'g'ri Firestore SDK orqali
+// boshqa sotuvchining sellerId'si bilan yozishga urinishi mumkin.
+// Bu qoidalar shuni SERVER TOMONIDA taqiqlaydi.
+//
+// Talab qilinadigan shart: foydalanuvchi avval Cloud Function
+// (verifyTelegramAuth) orqali tasdiqlangan bo'lishi va
+// signInWithCustomToken() bilan kirgan bo'lishi kerak — shundagina
+// request.auth.uid haqiqiy Telegram foydalanuvchi ID'siga teng bo'ladi.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(id) {
+      return isSignedIn() && request.auth.uid == id;
+    }
+
+    // Super admin — `admins/{uid}` hujjati mavjudligi bilan aniqlanadi.
+    // Bu kolleksiyaga HECH QACHON frontend'dan yozib bo'lmaydi (pastda
+    // `allow write: if false`) — yangi admin qo'shish FAQAT Firebase
+    // Console orqali (platforma egasi tomonidan) qo'lda qilinadi.
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // --- Super adminlar (admins/{uid}) ---
+    // Faqat EGASI o'z hujjatini o'qiy oladi (frontend "men adminmanmi"
+    // deb tekshirishi uchun kerak) — boshqa hech kim boshqa birovning
+    // admin holatini bila olmaydi. Yozish esa har doim taqiqlangan —
+    // yangi admin qo'shish FAQAT Firebase Console orqali qo'lda qilinadi.
+    match /admins/{adminId} {
+      allow read: if isOwner(adminId);
+      allow write: if false;
+    }
+
+    // --- Mijozlar (clients/{clientId}) ---
+    // Har bir mijoz FAQAT o'z hujjatini o'qiy/yoza oladi.
+    match /clients/{clientId} {
+      allow read, update: if isOwner(clientId);
+      // Hujjat Cloud Function orqali (Admin SDK bilan) yaratiladi;
+      // klient tomondan to'g'ridan-to'g'ri create qilinishiga
+      // ehtiyoj yo'q, shuning uchun create — false.
+      allow create: if false;
+      allow delete: if false;
+    }
+
+    // --- Sotuvchilar (sellers/{sellerId}) ---
+    // Sotuvchining o'ziga (o'z tgID'siga mos uid bilan) o'z hujjatini
+    // o'qish/yozishga, ADMIN'ga esa BARCHA sotuvchilarni o'qish/yozishga
+    // (masalan holatini "active"/"suspended" qilib o'zgartirish uchun)
+    // ruxsat beriladi. ⚠️ Agar kelajakda har bir sotuvchi o'z Telegram
+    // botiga ega bo'ladigan qilib qursangiz — bot tokenini bu yerda
+    // (Firestore'da) SAQLAMANG, chunki bu qoida ostida ham seller, ham
+    // admin uni ko'radi. Token uchun Secret Manager tavsiya etiladi.
+    match /sellers/{sellerId} {
+      // O'QISH: hamma uchun ochiq — mijozlar do'kon nomi, logotipi,
+      // telefoni kabi ommaviy ma'lumotni ko'rishi kerak (xuddi
+      // `products` kabi). OLDIN faqat egasi o'qiy olardi — shuning
+      // uchun mijozlar hech qachon do'kon nomi/logotipini ko'rmasdi
+      // (so'rov jimgina "ruxsat yo'q" xatosi bilan tugardi).
+      // YOZISH: hamon faqat egasi (yoki admin).
+      allow read: if true;
+      allow update: if isOwner(sellerId) || isAdmin();
+      // Do'kon ro'yxatdan o'tish oqimi orqali yaratiladi — faqat o'z
+      // uid'iga mos hujjatni, va faqat status="active" bilan (moderatsiya
+      // yo'q, lekin boshqa qiymat bilan yaratib bo'lmaydi).
+      allow create: if isOwner(sellerId) &&
+        request.resource.data.tgID == sellerId &&
+        request.resource.data.status == "active";
+      allow delete: if false;
+    }
+
+    // --- Sotuvchining MAXFIY ma'lumotlari (sellers/{sellerId}/private/*) ---
+    // To'lov tizimi (Click/Payme) hisob ma'lumotlari (secret key va h.k.)
+    // shu yerda saqlanadi — asosiy `sellers` hujjatidan ATAYLAB alohida,
+    // chunki o'sha hujjat endi OMMAVIY o'qiladi. Bu quyi kolleksiya esa
+    // faqat egasiga (yoki adminга) ko'rinadi — hech qachon ochiq emas.
+    // Cloud Function'lar (Admin SDK) bu qoidalardan mustasno — webhook
+    // funksiyalari bu yerni har doim o'qiy oladi.
+    match /sellers/{sellerId}/private/{document} {
+      allow read, write: if isOwner(sellerId) || isAdmin();
+    }
+
+    // --- Sotuvchining moliyaviy xarajatlari (P&L Dashboard uchun) ---
+    // Faqat egasi (yoki admin) o'qiy/yoza oladi — bu moliyaviy
+    // ma'lumot, boshqa hech kimga ko'rinmasligi kerak.
+    match /sellers/{sellerId}/expenses/{expenseId} {
+      allow read, write: if isOwner(sellerId) || isAdmin();
+    }
+
+    // --- Promokodlar (Marketing va Kuponlar uchun) ---
+    // O'QISH: ochiq — mijoz checkout paytida kodni tekshirishi kerak.
+    // YOZISH: faqat egasi (yoki admin).
+    match /sellers/{sellerId}/coupons/{code} {
+      allow read: if true;
+      allow write: if isOwner(sellerId) || isAdmin();
+    }
+
+    // --- Mahsulotlar (products/{productId}) ---
+    // O'qish: hamma uchun ochiq (mijozlar do'konni ko'rishi kerak;
+    // izolyatsiya frontend so'rovlari `where sellerId==` bilan
+    // ta'minlanadi — bu yerda faqat YOZISHNI cheklaymiz).
+    // Yozish: sotuvchining o'ziga tegishli mahsulot bo'lsa, YOKI admin
+    // bo'lsa (masalan qoidabuzar mahsulotni o'chirish uchun).
+    match /products/{productId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid;
+      allow update, delete: if isSignedIn() &&
+        (resource.data.sellerId == request.auth.uid || isAdmin());
+    }
+
+    // --- Buyurtmalar (orders/{orderId}) ---
+    // O'qish: shu buyurtmaning sotuvchisi, mijozi, YOKI admin.
+    // Yaratish: faqat mijozning o'zi, va clientId majburiy o'ziniki bo'lsin.
+    // Statusni o'zgartirish: shu buyurtmaning sotuvchisi yoki admin.
+    match /orders/{orderId} {
+      allow read: if isSignedIn() &&
+        (request.auth.uid == resource.data.sellerId ||
+         request.auth.uid == resource.data.clientId ||
+         isAdmin());
+
+      // YOZISH (yaratish): endi FAQAT `createOrder` Cloud Function
+      // orqali (Admin SDK, bu qoidalardan mustasno). Mijoz SDK'i
+      // orqali to'g'ridan-to'g'ri yozish butunlay YOPILDI — aks holda
+      // kimdir yangi server tomonidagi narx/promokod tekshiruvini
+      // chetlab o'tib, eski (tekshirilmagan) usulda yoza olardi.
+      allow create: if false;
+
+      allow update: if isSignedIn() &&
+        (request.auth.uid == resource.data.sellerId || isAdmin());
+
+      allow delete: if false;
+    }
+  }
+}

@@ -1,16 +1,31 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import useAddProduct from "@/hooks/seller/useAddProduct";
 import { useUploadImage } from "@/hooks/storage/useUploadStorage";
+import { useProductImages } from "@/hooks/seller/useProductImages";
+import { useAIDescription } from "@/hooks/seller/useAIDescription";
+import StatusModal from "@/components/ui/StatusModal";
 
 import PageHeader from "./PageHeader";
 import FormErrors from "./FormErrors";
-import ImageUploadCard from "./ImageUploadCard";
+import AIBanner from "./AIBanner";
+import MultiImageUploadCard from "./MultiImageUploadCard";
 import BasicInfoCard from "./BasicInfoCard";
 import PricingCard from "./PricingCard";
 import VariantsCard from "./VariantsCard";
 import DescriptionCard from "./DescriptionCard";
 import SubmitBar from "./SubmitBar";
 
+// OLDIN: butun sahifa oddiy `min-h-screen` bilan tabiiy skroll qilardi,
+// "Yaratish va Saqlash" tugmasi esa `position: fixed` orqali ekranga
+// mahkamlangan edi. Mobil klaviatura ochilganda, ba'zi WebView'larda
+// `fixed` elementlar noto'g'ri joyda qolib ketishi (yoki klaviatura
+// ostida yashirinib qolishi) mumkin edi.
+//
+// ENDI: butun sahifa FLEX USTUN (h-screen flex flex-col) tuzilishida —
+// forma o'zi (`flex-1 overflow-y-auto`) skroll bo'ladi, "Saqlash"
+// tugmasi esa oddiy flex elementi sifatida DOIM pastda, forma tagida
+// turadi (fixed emas) — bu klaviatura muammosini tub sababidan hal
+// qiladi, chunki brauzer buni tabiiy layout deb hisoblaydi.
 const AddProductPage = () => {
   const { addProduct, loading: dbLoading, success: dbSuccess, error: dbError, resetState } = useAddProduct();
   const {
@@ -21,95 +36,60 @@ const AddProductPage = () => {
     setError: setUploadError,
   } = useUploadImage();
 
+  const { images, addFiles, removeImage, setThumbnail, resolveUploadedUrls, reset: resetImages } = useProductImages();
+
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("Skincare");
+  const [category, setCategory] = useState("");
   const [price, setPrice] = useState("");
   const [costPrice, setCostPrice] = useState("");
+  const [discountPrice, setDiscountPrice] = useState("");
+  const [paymentTypes, setPaymentTypes] = useState(["prepay"]);
   const [stock, setStock] = useState("");
   const [description, setDescription] = useState("");
-
-  const [imagePreview, setImagePreview] = useState(null);
-  const [imageFile, setImageFile] = useState(null);
   const [variants, setVariants] = useState([]);
-  const [currentVariant, setCurrentVariant] = useState("");
 
-  // Joriy blob URL'ni kuzatib boramiz, shunda uni har doim to'g'ri
-  // vaqtda (almashtirilganda / o'chirilganda / unmountda) revoke qila olamiz.
-  const previewUrlRef = useRef(null);
-
-  useEffect(() => {
-    // Komponent unmount bo'lganda oxirgi blob URL tozalansin
-    return () => {
-      if (previewUrlRef.current) {
-        URL.revokeObjectURL(previewUrlRef.current);
-      }
-    };
-  }, []);
+  const { generating: aiGenerating, error: aiError, generate: handleGenerateAI } = useAIDescription({
+    productName: title,
+    category,
+    thumbnailImage: images[0],
+    onResult: setDescription,
+  });
 
   const resetForm = useCallback(() => {
     setTitle("");
-    setCategory("Skincare");
+    setCategory("");
     setPrice("");
     setCostPrice("");
+    setDiscountPrice("");
+    setPaymentTypes(["prepay"]);
     setStock("");
     setDescription("");
-    if (previewUrlRef.current) {
-      URL.revokeObjectURL(previewUrlRef.current);
-      previewUrlRef.current = null;
-    }
-    setImagePreview(null);
-    setImageFile(null);
     setVariants([]);
-  }, []);
+    resetImages();
+  }, [resetImages]);
+
+  const [showSavedModal, setShowSavedModal] = useState(false);
 
   useEffect(() => {
     if (dbSuccess) {
-      alert("Mahsulot muvaffaqiyatli saqlandi! 🎉");
+      setShowSavedModal(true);
       resetForm();
       resetState();
     }
   }, [dbSuccess, resetState, resetForm]);
 
-  const handleImageChange = useCallback(
-    (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      // Eski blob URL bo'lsa, xotira sizib chiqmasligi uchun avval uni tozalaymiz
-      if (previewUrlRef.current) {
-        URL.revokeObjectURL(previewUrlRef.current);
-      }
-      const nextUrl = URL.createObjectURL(file);
-      previewUrlRef.current = nextUrl;
-
-      setImageFile(file);
-      setImagePreview(nextUrl);
+  const handleAddFiles = useCallback(
+    (files) => {
       setUploadError(null);
+      addFiles(files);
     },
-    [setUploadError]
+    [addFiles, setUploadError]
   );
 
-  const handleRemoveImage = useCallback(() => {
-    if (previewUrlRef.current) {
-      URL.revokeObjectURL(previewUrlRef.current);
-      previewUrlRef.current = null;
-    }
-    setImagePreview(null);
-    setImageFile(null);
-  }, []);
-
-  const handleAddVariant = useCallback((e) => {
-    if (e.key !== "Enter") return;
-    const value = e.target.value.trim();
-    if (!value) return;
-
-    e.preventDefault();
-    setVariants((prev) => (prev.includes(value) ? prev : [...prev, value]));
-    setCurrentVariant("");
-  }, []);
-
-  const handleRemoveVariant = useCallback((index) => {
-    setVariants((prev) => prev.filter((_, i) => i !== index));
+  const handleTogglePaymentType = useCallback((type) => {
+    setPaymentTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
   }, []);
 
   const isGlobalLoading = uploadLoading || dbLoading;
@@ -118,21 +98,19 @@ const AddProductPage = () => {
     async (e) => {
       e.preventDefault();
 
-      let finalImageUrl = null;
-
       try {
-        if (imageFile) {
-          finalImageUrl = await uploadImage(imageFile, "products");
-        }
+        const imageUrls = await resolveUploadedUrls(uploadImage, "products");
 
         const finalProductData = {
           title,
           category,
           price: Number(price),
           costPrice: Number(costPrice),
+          discountPrice: discountPrice !== "" ? Number(discountPrice) : null,
+          paymentTypes,
           stock: Number(stock),
           description,
-          image: finalImageUrl,
+          images: imageUrls,
           variants,
         };
 
@@ -141,23 +119,26 @@ const AddProductPage = () => {
         console.error("Mahsulot yaratishda xatolik:", err);
       }
     },
-    [imageFile, uploadImage, title, category, price, costPrice, stock, description, variants, addProduct]
+    [resolveUploadedUrls, uploadImage, title, category, price, costPrice, discountPrice, paymentTypes, stock, description, variants, addProduct]
   );
 
   return (
-    <div className="bg-[#F4F5F9] min-h-screen text-slate-900 font-sans antialiased pb-32">
-      <PageHeader />
+    <div className="h-screen flex flex-col bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
+      <div className="shrink-0">
+        <PageHeader />
+      </div>
 
-      <form onSubmit={handleSubmit} className="p-4 space-y-4">
+      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
         <FormErrors uploadError={uploadError} dbError={dbError} />
 
-        <ImageUploadCard
-          imagePreview={imagePreview}
-          uploadLoading={uploadLoading}
-          uploadProgress={uploadProgress}
-          isGlobalLoading={isGlobalLoading}
-          onImageChange={handleImageChange}
-          onRemoveImage={handleRemoveImage}
+        <AIBanner generating={aiGenerating} error={aiError} onGenerate={handleGenerateAI} />
+
+        <MultiImageUploadCard
+          images={images}
+          disabled={isGlobalLoading}
+          onAddFiles={handleAddFiles}
+          onRemoveImage={removeImage}
+          onSetThumbnail={setThumbnail}
         />
 
         <BasicInfoCard
@@ -171,26 +152,43 @@ const AddProductPage = () => {
         <PricingCard
           price={price}
           costPrice={costPrice}
+          discountPrice={discountPrice}
+          paymentTypes={paymentTypes}
           stock={stock}
           disabled={isGlobalLoading}
           onPriceChange={setPrice}
           onCostPriceChange={setCostPrice}
+          onDiscountPriceChange={setDiscountPrice}
+          onTogglePaymentType={handleTogglePaymentType}
           onStockChange={setStock}
         />
 
         <VariantsCard
           variants={variants}
-          currentVariant={currentVariant}
           disabled={isGlobalLoading}
-          onCurrentVariantChange={setCurrentVariant}
-          onAddVariant={handleAddVariant}
-          onRemoveVariant={handleRemoveVariant}
+          onVariantsChange={setVariants}
         />
 
-        <DescriptionCard description={description} disabled={isGlobalLoading} onDescriptionChange={setDescription} />
-
-        <SubmitBar isGlobalLoading={isGlobalLoading} uploadLoading={uploadLoading} uploadProgress={uploadProgress} />
+        <DescriptionCard
+          description={description}
+          disabled={isGlobalLoading}
+          generating={aiGenerating}
+          onGenerate={handleGenerateAI}
+          onDescriptionChange={setDescription}
+        />
       </form>
+
+      <div className="shrink-0 px-4 pt-2 pb-24 bg-[#F4F5F9] dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800">
+        <SubmitBar isGlobalLoading={isGlobalLoading} uploadLoading={uploadLoading} uploadProgress={uploadProgress} floating={false} />
+      </div>
+
+      {showSavedModal && (
+        <StatusModal
+          variant="success"
+          title="Mahsulot muvaffaqiyatli saqlandi! 🎉"
+          onClose={() => setShowSavedModal(false)}
+        />
+      )}
     </div>
   );
 };

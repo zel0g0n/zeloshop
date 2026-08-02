@@ -1,20 +1,20 @@
-import { useDispatch, useSelector } from "react-redux";
-import { liveSearchProduct } from "@/store/slices/product/getProductSlice";
+import { useCatalogFilter } from "@/context/CatalogFilterContext";
+
+// OLDIN: Redux orqali ishlardi (butun ilova uchun umumiy). Endi
+// Katalogga xos Context orqali — Bosh sahifaga ta'sir qilmaydi.
 const useLiveSearch = () => {
-  const dispatch = useDispatch();
-  
-  const {searchQuery} = useSelector((state) => state.products);
+  const { queryKey, setQueryKey } = useCatalogFilter();
 
   const handleSearchChange = (value) => {
-    dispatch(liveSearchProduct(value));
+    setQueryKey(value);
   };
 
   const clearSearch = () => {
-    dispatch(liveSearchProduct(""));
+    setQueryKey("");
   };
 
   return {
-    searchQuery,
+    searchQuery: queryKey,
     handleSearchChange,
     clearSearch
   };

@@ -17,7 +17,6 @@ const initialState = {
   loading: false,
   error: null,
   success: false,
-  clientInfo: null,
 };
 
 const updateProfileSlice = createSlice({
@@ -36,13 +35,10 @@ const updateProfileSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(updateClientDataAsyncThunk.fulfilled, (state, action) => {
+      .addCase(updateClientDataAsyncThunk.fulfilled, (state) => {
         state.loading = false;
         state.error = null;
         state.success = true;
-        if (state.clientInfo) {
-          state.clientInfo = { ...state.clientInfo, ...action.payload };
-        }
       })
       .addCase(updateClientDataAsyncThunk.rejected, (state, action) => {
         state.loading = false;

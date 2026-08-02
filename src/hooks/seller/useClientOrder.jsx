@@ -8,7 +8,7 @@ import {
   setOrdersError
 } from "@/store/slices/seller/getClientOrderSlice";
 
-const useGetClientOrdersData = (ID) => {
+const useGetClientOrdersData = (ID, sellerId) => {
 
   const {
     loading,
@@ -22,13 +22,14 @@ const useGetClientOrdersData = (ID) => {
 
   useEffect(() => {
 
-    if (!ID) return;
+    if (!ID || !sellerId) return;
 
     dispatch(setOrdersLoading());
 
     const unsubscribe = getClientOrderData(
 
       ID,
+      sellerId,
 
       (orders) => {
 
@@ -52,7 +53,7 @@ const useGetClientOrdersData = (ID) => {
 
     };
 
-  }, [dispatch, ID]);
+  }, [dispatch, ID, sellerId]);
 
   return {
 

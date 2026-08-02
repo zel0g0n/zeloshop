@@ -44,15 +44,15 @@ const SearchCatalog = () => {
   }, []);
 
   return (
-    <div className='sticky top-0 bg-white/80 backdrop-blur-md z-30 border-b border-gray-100 p-4 space-y-3'>
+    <div className='sticky top-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md z-30 border-b border-gray-100 dark:border-slate-800 p-4 space-y-3'>
       <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <div className="flex-1 relative flex items-center bg-gray-100 rounded-2xl border border-transparent focus-within:border-blue-500/30 focus-within:bg-white transition-all duration-300 px-3 h-11">
+          <div className="flex-1 relative flex items-center bg-gray-100 dark:bg-slate-900 rounded-2xl border border-transparent focus-within:border-blue-500/30 focus-within:bg-white dark:focus-within:bg-slate-800 transition-all duration-300 px-3 h-11">
             <input
               type="text"
               value={searchInput}
               onChange={handleInputChange}
               placeholder="Katalogdan qidirish..."
-              className="flex-1 bg-transparent outline-none text-sm text-gray-700 placeholder:text-gray-400 px-1"
+              className="flex-1 bg-transparent outline-none text-sm text-gray-700 dark:text-slate-200 placeholder:text-gray-400 dark:placeholder:text-slate-500 px-1"
             />
             {searchInput && (
               <button
@@ -68,7 +68,7 @@ const SearchCatalog = () => {
             </button>
           </div>
           
-          <button type="button" className="w-11 h-11 bg-gray-100 rounded-2xl flex items-center justify-center text-gray-600 active:scale-95 transition-transform">
+          <button type="button" className="w-11 h-11 bg-gray-100 dark:bg-slate-900 rounded-2xl flex items-center justify-center text-gray-600 dark:text-slate-300 active:scale-95 transition-transform">
             <FiSliders size={18} />
           </button>
         </form>

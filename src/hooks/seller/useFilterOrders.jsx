@@ -25,7 +25,17 @@ const useGetOrdersData = (ID) => {
 
     if (!ID) return;
 
+    if (window.__appLoadStart !== undefined) {
+      console.log(
+        "5️⃣a Sahifa boshidan Buyurtmalar effekti BOSHLANGUNICHA:",
+        (performance.now() - window.__appLoadStart).toFixed(2),
+        "ms"
+      );
+    }
+
     dispatch(setOrdersLoading());
+    console.time("5️⃣ Buyurtmalar — birinchi Firestore javobi");
+    let timedOnce = false;
 
     const unsubscribe = getOrderData(
 
@@ -33,12 +43,20 @@ const useGetOrdersData = (ID) => {
 
       (orders) => {
 
+        if (!timedOnce) {
+          timedOnce = true;
+          console.timeEnd("5️⃣ Buyurtmalar — birinchi Firestore javobi");
+        }
         dispatch(setOrdersSuccess(orders));
 
       },
 
       (error) => {
 
+        if (!timedOnce) {
+          timedOnce = true;
+          console.timeEnd("5️⃣ Buyurtmalar — birinchi Firestore javobi");
+        }
         dispatch(
           setOrdersError(error.message)
         );

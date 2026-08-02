@@ -20,11 +20,22 @@ const cartSlice = createSlice({
       const product = action.payload;
       // 🔥 TUZATILDI: Mahsulot savatda allaqachon bormi, tekshiramiz (Takrorlanishni oldini oladi)
       const existingItem = state.items.find(item => item.id === product.id);
-      
+
+      // OLDIN: savat har doim `product.price`ni (to'liq narx) saqlardi,
+      // hatto mahsulotda haqiqiy chegirma (`discountPrice`) bo'lsa ham —
+      // natijada xaridor mahsulot sahifasida chegirmali narxni ko'rib,
+      // lekin savat/checkout'da TO'LIQ narxni to'lashga majbur bo'lardi.
+      // Endi savatga qo'shishda HAQIQIY (chegirma bo'lsa — chegirmali)
+      // narx saqlanadi.
+      const hasDiscount = product.discountPrice &&
+        Number(product.discountPrice) > 0 &&
+        Number(product.discountPrice) < Number(product.price);
+      const effectivePrice = hasDiscount ? Number(product.discountPrice) : Number(product.price) || 0;
+
       if (existingItem) {
         existingItem.quantity += 1;
       } else {
-        state.items.push({...product, quantity: 1});
+        state.items.push({...product, price: effectivePrice, quantity: 1});
       }
       localStorage.setItem('cart', JSON.stringify(state.items));
     },

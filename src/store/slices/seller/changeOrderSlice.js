@@ -2,9 +2,9 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import changeOrderStatus from "@/services/orders/changeOrderStatus";
 export const updateOrderStatusAsyncThunk = createAsyncThunk(
   'orders/updateOrderStatus',
-  async ({id, status},{rejectWithValue}) => {
+  async ({id, status, extraFields},{rejectWithValue}) => {
     try {
-      const result = await changeOrderStatus(id, status)
+      const result = await changeOrderStatus(id, status, extraFields)
       return result
     } catch(error) {
       return rejectWithValue(error.message || 'Xatolik yuz berdi');
@@ -33,8 +33,8 @@ const updateOrderSlice = createSlice({
         state.loading = false
       })
       .addCase(updateOrderStatusAsyncThunk.rejected, (state, action) => {
-        state.error = true
         state.error = action.payload
+        state.loading = false
       })
   }
 })

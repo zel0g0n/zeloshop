@@ -1,27 +1,24 @@
 import { useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { getProductAsyncThunk } from "@/store/slices/product/getProductSlice";
+import { useSession } from "@/context/SessionContext";
 
 // OLDIN: bu hook har bir mahsulot sahifasi ochilganda getProducts() orqali
-// "products" kolleksiyasini TO'LIQ qayta o'qirdi (getDocs), garchi bu
-// ma'lumot Home sahifasida allaqachon Redux'da keshlangan bo'lsa ham.
-// Bitta mahsulotni ko'rish oqibatida butun katalogni qayta yuklash —
-// Firebase o'qishlarini keraksiz ko'paytirar edi.
-//
-// ENDI: allaqachon Redux'da (state.products.products) mavjud bo'lgan
-// keshlangan ro'yxatdan foydalanamiz; agar u hali bo'sh bo'lsa (masalan
-// foydalanuvchi to'g'ridan-to'g'ri mahsulot havolasi orqali kirgan bo'lsa),
-// faqat o'shanda BIR MARTA yuklaymiz — Home sahifasi ham aynan shu keshni
-// ishlatgani uchun qo'shimcha o'qish deyarli hech qachon sodir bo'lmaydi.
+// "products" kolleksiyasini TO'LIQ (barcha sotuvchilarning) qayta o'qirdi.
+// ENDI: allaqachon Redux'da (state.products.products) mavjud bo'lgan,
+// JORIY sotuvchiga tegishli keshlangan ro'yxatdan foydalanamiz — bu
+// kesh Home/Catalog sahifasi bilan bir xil, sotuvchi bo'yicha to'g'ri
+// filtrlangan manba.
 export const useRelatedProducts = (product) => {
   const dispatch = useDispatch();
-  const { products, loading } = useSelector((state) => state.products);
+  const { sellerId } = useSession();
+  const { products, loading, loadedForSellerId } = useSelector((state) => state.products);
 
   useEffect(() => {
-    if (products.length === 0 && !loading) {
-      dispatch(getProductAsyncThunk());
+    if (sellerId && loadedForSellerId !== sellerId && !loading) {
+      dispatch(getProductAsyncThunk(sellerId));
     }
-  }, [dispatch, products.length, loading]);
+  }, [dispatch, sellerId, loadedForSellerId, loading]);
 
   const relatedProducts = useMemo(() => {
     try {

@@ -1,6 +1,7 @@
 import { useParams } from "react-router";
 import { useEffect } from "react";
 import { useProductDetail } from "@/hooks/useProductDetails";
+import { ProductDetailSkeleton } from "@/components/ui/Skeleton";
 import {
   ProductGallery,
   ProductInfo,
@@ -19,19 +20,15 @@ const ProductDetailPage = () => {
     window.scrollTo(0, 0);
 
     return () => handleClearProduct();
-  }, [id]);
+  }, [id, getSingleProduct, handleClearProduct]);
 
   if (loading || !product) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-white">
-        <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-      </div>
-    );
+    return <ProductDetailSkeleton />;
   }
 
   return (
-    <div className="pb-[140px] bg-white min-h-screen animate-fadeIn">
-      <ProductGallery product={product} image={product?.image} />
+    <div className="pb-[260px] bg-white dark:bg-slate-950 min-h-screen animate-fadeIn">
+      <ProductGallery product={product} />
 
       <div className="max-w-[440px] mx-auto px-4 space-y-6 mt-6">
         <ProductInfo info={product} />

@@ -1,6 +1,7 @@
 import { NavLink } from "react-router";
 import { useFavoritesList } from "../../hooks/useAddFavourite";
 import { useCartList } from "../../hooks/useAddToCard";
+import { useLanguage } from "@/context/LanguageContext";
 import {
   GoHome,
   LuTextSearch,
@@ -13,19 +14,20 @@ const Navbar = () => {
 
   const favoritesCount = useFavoritesList().favorites.length
   const cartsCount = useCartList().carts.length
+  const { t } = useLanguage();
 
     const navData = [
-      { id: 1, title: "Asosiy", path: '/', icon: GoHome },
-      { id: 2, title: "Katalog", path: '/catalog', icon: LuTextSearch },
-      { id: 3, title: "Savatcha", path: '/cart', icon: MdOutlineShoppingBag, notf: cartsCount || 0 },
-      { id: 4, title: "Saqlangan", path: '/saved', icon: FaRegHeart, notf: favoritesCount || 0 },
-      { id: 5, title: "Kabinet", path: '/cabinet', icon: FaRegCircleUser },
+      { id: 1, title: t("nav.home"), path: '/', icon: GoHome },
+      { id: 2, title: t("nav.catalog"), path: '/catalog', icon: LuTextSearch },
+      { id: 3, title: t("nav.cart"), path: '/cart', icon: MdOutlineShoppingBag, notf: cartsCount || 0 },
+      { id: 4, title: t("nav.saved"), path: '/saved', icon: FaRegHeart, notf: favoritesCount || 0 },
+      { id: 5, title: t("nav.cabinet"), path: '/cabinet', icon: FaRegCircleUser },
     ];
     return (
-      <div className="fixed bottom-2 left-0 right-0 z-1000">
+      <div className="fixed bottom-2 left-0 right-0 z-40">
         <nav className="max-w-[440px] mx-auto px-[10px]">
           
-          <div className="relative overflow-hidden rounded-[24px]  backdrop-blur-md border border-gray-100 shadow-lg px-[10px] py-4">
+          <div className="relative overflow-hidden rounded-[24px]  backdrop-blur-md border border-gray-100 dark:border-slate-800 shadow-lg px-[10px] py-4">
             
             <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600  py-4 text-sm font-bold text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition-all duration-300 active:scale-95"></div>
             <ul className="relative flex justify-between py-[10px] items-center">

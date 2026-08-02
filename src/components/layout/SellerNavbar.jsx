@@ -25,7 +25,7 @@ const navData = [
 
 const SellerNavbar = () => {
   return (
-    <div className="fixed bottom-4 left-0 right-0 z-1000">
+    <div className="fixed bottom-4 left-0 right-0 z-40">
       <nav className="max-w-[440px] mx-auto px-[10px]">
         
         <div className="relative overflow-hidden rounded-[24px]  backdrop-blur-md border border-gray-100 shadow-lg px-[10px] py-4">

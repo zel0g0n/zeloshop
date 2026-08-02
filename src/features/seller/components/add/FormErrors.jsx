@@ -4,7 +4,7 @@ const FormErrors = ({ uploadError, dbError }) => {
   if (!uploadError && !dbError) return null;
 
   return (
-    <div className="bg-rose-50 border border-rose-100 p-3 rounded-xl text-xs font-semibold text-rose-600 space-y-1">
+    <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 p-3 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400 space-y-1">
       {uploadError && <p>⚠️ Storage: {uploadError}</p>}
       {dbError && <p>⚠️ Firestore: {dbError?.message || dbError}</p>}
     </div>

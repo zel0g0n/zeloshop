@@ -4,9 +4,15 @@ const getClientData = async(id) => {
   try {
     const clientDoc = doc(db, `clients/${id}`);
     const clientSnapshot = await getDoc(clientDoc);
-    const clientData = { ...clientSnapshot.data(), id: clientSnapshot.id };
 
-    return clientData;
+    // OLDIN: mavjudlik tekshirilmasdan .data() chaqirilardi — hujjat
+    // hali yaratilmagan bo'lsa, `undefined` ustidan spread qilinib,
+    // "bo'sh profil" muvaffaqiyatli topilgandek ko'rinardi.
+    if (!clientSnapshot.exists()) {
+      return null;
+    }
+
+    return { ...clientSnapshot.data(), id: clientSnapshot.id };
   } catch(error) {
     throw new Error(error.message || "Xatolik yuz berdi", { cause: error });
   }

@@ -1,7 +1,11 @@
 import React from "react";
 
-const SubmitBar = ({ isGlobalLoading, uploadLoading, uploadProgress }) => (
-  <div className="fixed bottom-24 left-0 right-0 px-4 z-40">
+// `floating=true` (standart) — eski, `position: fixed` rejim.
+// `floating=false` — yangi flex-layout rejimi: tugma oddiy flex
+// elementi sifatida, forma tagida, hech qanday `fixed` bo'lmasdan
+// joylashadi (mobil klaviatura muammosini tub sababidan hal qiladi).
+const SubmitBar = ({ isGlobalLoading, uploadLoading, uploadProgress, floating = true, idleLabel = "Yaratish va Saqlash ✨", savingLabel = "Firestore-ga yozilmoqda..." }) => (
+  <div className={floating ? "fixed bottom-24 left-0 right-0 px-4 z-40" : ""}>
     <button
       type="submit"
       disabled={isGlobalLoading}
@@ -17,10 +21,10 @@ const SubmitBar = ({ isGlobalLoading, uploadLoading, uploadProgress }) => (
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
           </svg>
-          <span>{uploadLoading ? `Rasm yuklanmoqda (${uploadProgress}%)` : "Firestore-ga yozilmoqda..."}</span>
+          <span>{uploadLoading ? `Rasm yuklanmoqda (${uploadProgress}%)` : savingLabel}</span>
         </div>
       ) : (
-        <span>Yaratish va Saqlash ✨</span>
+        <span>{idleLabel}</span>
       )}
     </button>
   </div>

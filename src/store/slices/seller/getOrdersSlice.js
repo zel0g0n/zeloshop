@@ -31,15 +31,6 @@ const getOrdersDataSlice = createSlice({
       state.loading = false;
       state.success = false;
       state.error = action.payload;
-    },
-
-    // Statusni o'zgartirish uchun (optimistic update yoki mahalliy state o'zgarishi)
-    changeOrderStatus(state, action) {
-      const { orderId, newStatus } = action.payload;
-      const order = state.orders.find(o => o.id === orderId);
-      if (order) {
-        order.status = newStatus;
-      }
     }
   }
 });
@@ -47,8 +38,7 @@ const getOrdersDataSlice = createSlice({
 export const {
   setOrdersLoading,
   setOrdersSuccess,
-  setOrdersError,
-  changeOrderStatus
+  setOrdersError
 } = getOrdersDataSlice.actions;
 
 export default getOrdersDataSlice.reducer;

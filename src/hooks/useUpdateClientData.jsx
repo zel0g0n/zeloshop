@@ -8,7 +8,6 @@ const useUpdateClientData = () => {
   const loading = useSelector((state) => state.profileEdit?.loading);
   const error = useSelector((state) => state.profileEdit?.error);
   const success = useSelector((state) => state.profileEdit?.success);
-  const clientInfo = useSelector((state) => state.profileEdit?.clientInfo);
   const updateClient = useCallback(async (userID, fieldsToUpdate) => {
     try {
       await dispatch(updateClientDataAsyncThunk({ userID, updatedFields: fieldsToUpdate })).unwrap();
@@ -22,7 +21,7 @@ const useUpdateClientData = () => {
     dispatch(resetProfileStatus());
   }, [dispatch]);
 
-  return { loading, error, success, clientInfo, updateClient, clearStatus };
+  return { loading, error, success, updateClient, clearStatus };
 };
 
 export default useUpdateClientData;

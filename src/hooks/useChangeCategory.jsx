@@ -1,12 +1,12 @@
-import { useDispatch, useSelector } from "react-redux";
-import { filterCategory } from "@/store/slices/product/getProductSlice";
-const useChangeCategory = () => {
-  const dispatch = useDispatch()
-  const {activeCategory} = useSelector(state => state.products)
-  const changeCategory = (specialKey) => {
-    dispatch(filterCategory(specialKey))
-  }
-  return {changeCategory}
+import { useCatalogFilter } from "@/context/CatalogFilterContext";
 
-}
-export default useChangeCategory
+// Endi Katalogga xos Context orqali — Bosh sahifaga ta'sir qilmaydi.
+const useChangeCategory = () => {
+  const { activeCategory, setActiveCategory } = useCatalogFilter();
+  const changeCategory = (specialKey) => {
+    setActiveCategory(specialKey);
+  };
+  return { changeCategory, activeCategory };
+};
+
+export default useChangeCategory;

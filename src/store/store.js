@@ -11,6 +11,7 @@ import changeOrderStatus from '@/store/slices/seller/changeOrderSlice'
 import addProduct from '@/store/slices/seller/addProductSlice'
 import clientOrdersList from '@/store/slices/seller/getClientOrderSlice'
 import getSellerProducts from '@/store/slices/seller/getSellerProductsSlice'
+import createSeller from '@/store/slices/seller/createSellerSlice'
 export const store = configureStore({
   reducer: {
     products:  productReducer,
@@ -24,7 +25,8 @@ export const store = configureStore({
     changeOrderStatus: changeOrderStatus,
     addProduct: addProduct,
     clientOrdersList: clientOrdersList,
-    sellerProductsList: getSellerProducts
+    sellerProductsList: getSellerProducts,
+    createSeller: createSeller
 
   }
 })

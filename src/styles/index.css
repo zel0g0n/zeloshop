@@ -1,4 +1,23 @@
 @import "tailwindcss";
+
+/* Tailwind v4'da standart holatda `dark:` faqat OS sozlamasiga (prefers-color-scheme)
+   qarab ishlaydi. Bizga esa foydalanuvchi o'zi tugma bosib almashtiradigan tema kerak —
+   shuning uchun `dark:` variantni <html> elementidagi `.dark` klassiga bog'laymiz. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* OLDIN: <html>/<body> uchun hech qanday fon rangi berilmagan edi —
+   shuning uchun sahifa oxiridan o'tib ketilganda (overscroll/bounce,
+   ayniqsa Telegram WebView'da) yoki kontent ekrandan qisqaroq bo'lsa,
+   brauzerning standart (odatda oq) foni ko'rinib qolardi — bu qorong'i
+   rejimda ayniqsa ko'zga tashlanadigan "rang yo'q" bo'shliq sifatida
+   namoyon bo'lardi. */
+html, body {
+  background-color: #f3f4f6; /* gray-100 — yorug' rejim standart foni */
+}
+html.dark, html.dark body {
+  background-color: #030712; /* slate-950 — qorong'i rejim standart foni */
+}
+
 * {
   box-sizing: border-box;
 }
@@ -8,6 +27,18 @@
 }
 .animate-shimmer {
   animation: shimmer 3s linear infinite;
+}
+/* OLDIN: `animate-fade-in` va `animate-fadeIn` klasslari bir nechta
+   joyda (ShareStoreModal, SalesSummaryCard, ProductDetailPage va h.k.)
+   ishlatilgan edi, lekin bunday klass HECH QACHON aniqlanmagan edi —
+   Tailwind noma'lum klass nomlarini jimgina e'tiborsiz qoldiradi,
+   shuning uchun bu animatsiya hech qachon ishlamagan (ko'rinmas bug). */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in, .animate-fadeIn {
+  animation: fadeIn 0.35s ease-out;
 }
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar {

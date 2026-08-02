@@ -1,38 +1,37 @@
-import { createSlice,createAsyncThunk } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import getProducts from "@/services/products/getProducts";
 
-export const getProductAsyncThunk  = createAsyncThunk(
+export const getProductAsyncThunk = createAsyncThunk(
   'products/fetchProducts',
-  async (_, {rejectWithValue}) => {
+  async (sellerId, { rejectWithValue }) => {
     try {
-      const data = await getProducts()
-      return data
+      const data = await getProducts(sellerId)
+      return { products: data, sellerId }
     } catch (error) {
       return (rejectWithValue(error.message || `Xatolik yuz berdi`))
     }
   }
 )
 
+// OLDIN: qidiruv/filtr holati (`queryKey`, `activeCategory`, `activeType`)
+// shu yerda, Redux'da (butun ilova uchun umumiy) saqlanardi. Bu Bosh
+// sahifa va Katalog sahifasini keraksiz bog'lab qo'ygan edi. Endi bu
+// holat faqat Katalogga tegishli — `context/CatalogFilterContext.jsx`da
+// yashaydi. Bu yerda faqat HAQIQIY, umumiy ma'lumot — mahsulotlarning
+// o'zi — saqlanadi.
 const initialState = {
   products: [],
   loading: false,
   error: null,
-  queryKey: "",
-  activeCategory: "all"
+  // Keshlangan `products` massivi AYNAN qaysi sotuvchiga tegishli
+  // ekanini kuzatib boradi — shu orqali sotuvchi o'zgarsa (masalan
+  // ikkinchi Mini App sessiyasi), eski keshdan foydalanib qolinmaydi.
+  loadedForSellerId: null,
 }
 
 const getProductSlice = createSlice({
   name: 'products',
-  reducers: {
-    liveSearchProduct: (state, action) => {
-      state.queryKey = action.payload
-    },
-    filterCategory: (state, action) => {
-      state.activeCategory = action.payload
-    }
-   
-    
-  },
+  reducers: {},
   initialState,
   extraReducers: (builder) => {
     builder
@@ -40,8 +39,9 @@ const getProductSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(getProductAsyncThunk.fulfilled, (state,action) => {
-        state.products = action.payload
+      .addCase(getProductAsyncThunk.fulfilled, (state, action) => {
+        state.products = action.payload.products
+        state.loadedForSellerId = action.payload.sellerId
         state.loading = false
       })
       .addCase(getProductAsyncThunk.rejected, (state, action) => {
@@ -50,5 +50,5 @@ const getProductSlice = createSlice({
       })
   }
 })
-export const {liveSearchProduct, filterCategory} = getProductSlice.actions
+
 export default getProductSlice.reducer

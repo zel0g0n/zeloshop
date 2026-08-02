@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { FiArrowLeft, FiUser, FiPhone, FiAtSign, FiCheckCircle, FiCamera } from 'react-icons/fi'; 
+import { FiArrowLeft, FiUser, FiPhone, FiAtSign, FiCamera } from 'react-icons/fi'; 
 import { useUploadImage } from '@/hooks/storage/useUploadStorage';
 import useUpdateClientData from '@/hooks/useUpdateClientData';
 import { useSession } from '@/context/SessionContext';
+import { formatUzPhone, isValidUzPhone } from '@/utils/phone';
+import StatusModal from '@/components/ui/StatusModal';
 
 const ProfileEditPage = () => {
   const navigate = useNavigate();
@@ -83,6 +85,10 @@ const ProfileEditPage = () => {
 
   const handleInputChange = useCallback((e) => {
     const { name, value } = e.target;
+    if (name === 'phone') {
+      setFormData(prev => ({ ...prev, phone: formatUzPhone(value) }));
+      return;
+    }
     setFormData(prev => ({ ...prev, [name]: value }));
   }, []);
 
@@ -100,6 +106,11 @@ const ProfileEditPage = () => {
 
     if (!nameTrimmed || !phoneTrimmed) {
       setUploadError("Ism va telefon raqam maydonlarini to'ldirish shart!");
+      return;
+    }
+
+    if (!isValidUzPhone(phoneTrimmed)) {
+      setUploadError("Iltimos, to'liq telefon raqam kiriting (masalan: +998 90 123 45 67).");
       return;
     }
 
@@ -167,21 +178,21 @@ const ProfileEditPage = () => {
   const anyError = uploadError || updateError;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-12 pt-4 relative select-none">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 pb-12 pt-4 relative select-none transition-colors duration-300">
       {/* HEADER */}
       <div className="max-w-md mx-auto px-4 mb-6 flex items-center justify-between">
         <button 
           type="button"
           onClick={handleBack} 
-          className="w-10 h-10 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer"
+          className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer"
         >
-          <FiArrowLeft size={18} className="text-gray-600" />
+          <FiArrowLeft size={18} className="text-gray-600 dark:text-slate-300" />
         </button>
-        <h1 className="text-lg font-bold text-[#1e293b] flex-1 text-center mr-10">Profilni tahrirlash</h1>
+        <h1 className="text-lg font-bold text-[#1e293b] dark:text-white flex-1 text-center mr-10">Profilni tahrirlash</h1>
       </div>
 
       <div className="max-w-md mx-auto px-4">
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100/80 space-y-6">
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-sm border border-gray-100/80 dark:border-slate-800 space-y-6">
           
           {/* AVATAR RENDER & UPLOAD */}
           <div className="flex flex-col items-center justify-center py-4">
@@ -220,25 +231,25 @@ const ProfileEditPage = () => {
                 <button 
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute -bottom-1 -right-1 w-8 h-8 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer border-2 border-white hover:bg-blue-700"
+                  className="absolute -bottom-1 -right-1 w-8 h-8 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer border-2 border-white dark:border-slate-900 hover:bg-blue-700"
                 >
                   <FiCamera size={14} />
                 </button>
               )}
             </div>
             
-            <p className="text-xs text-gray-400 mt-3">Profil rasmini o'zgartirish uchun kamerani bosing</p>
-            {isUploading && <p className="text-xs text-blue-500 mt-1 font-semibold">Siqilmoqda va yuklanmoqda...</p>}
-            {anyError && <p className="text-xs text-red-500 mt-1 text-center font-medium bg-red-50 px-3 py-1 rounded-full">{anyError}</p>}
+            <p className="text-xs text-gray-400 dark:text-slate-500 mt-3">Profil rasmini o'zgartirish uchun kamerani bosing</p>
+            {isUploading && <p className="text-xs text-blue-500 dark:text-blue-400 mt-1 font-semibold">Siqilmoqda va yuklanmoqda...</p>}
+            {anyError && <p className="text-xs text-red-500 mt-1 text-center font-medium bg-red-50 dark:bg-red-500/10 px-3 py-1 rounded-full">{anyError}</p>}
           </div>
 
           {/* INPUT FORM */}
           <form onSubmit={handleSaveChanges} className="space-y-5">
             {/* TO'LIQ ISM */}
             <div className="relative">
-              <label className="block text-xs font-semibold text-gray-400 mb-1.5 pl-1 uppercase tracking-wider">To'liq ism</label>
+              <label className="block text-xs font-semibold text-gray-400 dark:text-slate-500 mb-1.5 pl-1 uppercase tracking-wider">To'liq ism</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500">
                   <FiUser size={16} />
                 </span>
                 <input 
@@ -248,35 +259,38 @@ const ProfileEditPage = () => {
                   value={formData.name} 
                   onChange={handleInputChange}
                   placeholder="Max Tiger" 
-                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#f8fafc] border border-gray-100 outline-none focus:border-blue-500 focus:bg-white transition-all text-sm text-gray-800 font-medium placeholder-gray-400"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#f8fafc] dark:bg-slate-800 border border-gray-100 dark:border-slate-700 outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-gray-800 dark:text-white font-medium placeholder-gray-400 dark:placeholder-slate-500"
                 />
               </div>
             </div>
 
             {/* TELEFON */}
             <div>
-              <label className="block text-xs font-semibold text-gray-400 mb-1.5 pl-1 uppercase tracking-wider">Telefon raqam</label>
+              <label className="block text-xs font-semibold text-gray-400 dark:text-slate-500 mb-1.5 pl-1 uppercase tracking-wider">Telefon raqam</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500">
                   <FiPhone size={16} />
                 </span>
                 <input 
                   type="tel" 
+                  inputMode="numeric"
                   name="phone"
                   required  
                   value={formData.phone}
+                  onFocus={() => { if (!formData.phone) setFormData(prev => ({ ...prev, phone: '+998 ' })); }}
                   onChange={handleInputChange}
                   placeholder="+998 90 123 45 67" 
-                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#f8fafc] border border-gray-100 outline-none focus:border-blue-500 focus:bg-white transition-all text-sm text-gray-800 font-medium placeholder-gray-400"
+                  maxLength={17}
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#f8fafc] dark:bg-slate-800 border border-gray-100 dark:border-slate-700 outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-gray-800 dark:text-white font-medium placeholder-gray-400 dark:placeholder-slate-500"
                 />
               </div>
             </div>
 
             {/* TELEGRAM USERNAME */}
             <div>
-              <label className="block text-xs font-semibold text-gray-400 mb-1.5 pl-1 uppercase tracking-wider">Telegram Username</label>
+              <label className="block text-xs font-semibold text-gray-400 dark:text-slate-500 mb-1.5 pl-1 uppercase tracking-wider">Telegram Username</label>
               <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500">
                   <FiAtSign size={16} />
                 </span>
                 <input 
@@ -285,7 +299,7 @@ const ProfileEditPage = () => {
                   value={formData.username}
                   onChange={handleInputChange}
                   placeholder="max_tiger" 
-                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#f8fafc] border border-gray-100 outline-none focus:border-blue-500 focus:bg-white transition-all text-sm text-gray-800 font-medium placeholder-gray-400"
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#f8fafc] dark:bg-slate-800 border border-gray-100 dark:border-slate-700 outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-gray-800 dark:text-white font-medium placeholder-gray-400 dark:placeholder-slate-500"
                 />
               </div>
             </div>
@@ -306,12 +320,11 @@ const ProfileEditPage = () => {
 
       {/* MUVAFFAQIYATLI SAQLANDI MODAL */}
       {isSaved && (
-        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-200 animate-fade-in">
-          <div className="bg-white p-6 rounded-3xl shadow-xl flex flex-col items-center max-w-xs text-center scale-up">
-            <FiCheckCircle size={44} className="text-green-500 mb-3" />
-            <h3 className="text-base font-bold text-gray-800 mb-1">Muvaffaqiyatli saqlandi!</h3>
-          </div>
-        </div>
+        <StatusModal
+          variant="success"
+          title="Muvaffaqiyatli saqlandi!"
+          onClose={() => navigate(-1)}
+        />
       )}
     </div>
   );

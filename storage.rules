@@ -1,0 +1,48 @@
+rules_version = '2';
+
+// OLDIN: Firebase Console'da haqiqiy deploy qilingan qoida
+// `allow read, write: if true;` edi — BUTUN Storage uchun, hech
+// qanday cheklovsiz. Bu degani: tizimga kirmagan ISTALGAN odam
+// ISTALGAN faylni (boshqa sotuvchining logotipi, mahsulot rasmi,
+// mijoz avatari) o'chira, o'zgartira yoki ustidan yozib qo'ya olardi
+// — hatto zararli/nomaqbul fayllarni ham yuklashi mumkin edi.
+//
+// ENDI: standart holat — RUXSAT YO'Q (default-deny). Har bir aniq
+// papka uchun faqat KERAKLI ruxsat aniq beriladi:
+// - O'QISH — hamma uchun ochiq (mahsulot rasmlari, logotiplar
+//   mijozlarga ko'rinishi kerak — bu Firestore'dagi bilan bir xil,
+//   ataylab qilingan qaror).
+// - YOZISH — faqat tizimga kirgan, va shu papkaning HAQIQIY egasi
+//   bo'lgan foydalanuvchiga.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Do'kon logotiplari — faqat shu sotuvchining o'zi yoza oladi.
+    match /store-logos/{sellerId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == sellerId;
+    }
+
+    // Mijoz profil rasmlari — faqat shu foydalanuvchining o'zi.
+    match /avatars/{uid}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Mahsulot rasmlari — istalgan TIZIMGA KIRGAN foydalanuvchi
+    // yoza oladi (aniq mahsulot egaligi Firestore darajasida —
+    // products/{id} hujjatini yaratish/yangilashda — tekshiriladi;
+    // Storage darajasida esa hech bo'lmasa anonim yozishning oldi
+    // olinadi).
+    match /products/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Aniq belgilanmagan boshqa BARCHA yo'llar uchun — eng xavfsiz
+    // standart: hech kimga na o'qish, na yozish ruxsati yo'q.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

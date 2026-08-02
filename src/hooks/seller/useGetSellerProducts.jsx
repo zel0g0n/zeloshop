@@ -24,7 +24,17 @@ const useGetProductsData = (ID) => {
 
     if (!ID) return;
 
+    if (window.__appLoadStart !== undefined) {
+      console.log(
+        "6️⃣a Sahifa boshidan Mahsulotlar effekti BOSHLANGUNICHA:",
+        (performance.now() - window.__appLoadStart).toFixed(2),
+        "ms"
+      );
+    }
+
     dispatch(setProductsLoading());
+    console.time("6️⃣ Mahsulotlar — birinchi Firestore javobi");
+    let timedOnce = false;
 
     const unsubscribe = getSellerProducts(
 
@@ -32,12 +42,20 @@ const useGetProductsData = (ID) => {
 
       (products) => {
 
+        if (!timedOnce) {
+          timedOnce = true;
+          console.timeEnd("6️⃣ Mahsulotlar — birinchi Firestore javobi");
+        }
         dispatch(setProductsSuccess(products));
 
       },
 
       (error) => {
 
+        if (!timedOnce) {
+          timedOnce = true;
+          console.timeEnd("6️⃣ Mahsulotlar — birinchi Firestore javobi");
+        }
         dispatch(
           setProductsError(error.message)
         );
