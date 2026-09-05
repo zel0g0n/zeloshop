@@ -1,10 +1,13 @@
 import { memo } from "react"
 import ProductList from "./ProductList"
-import { useCatalogFilter } from "@/context/CatalogFilterContext"
+import { useCatalogSearch } from "@/context/CatalogFilterContext"
 import { productVerticalListStyle } from "@/constants/custom-css.jsx";
+import { SearchX } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 const FilteredCatalogProducts = () => {
-  const { filteredProducts, loading } = useCatalogFilter();
+  const { filteredProducts, loading } = useCatalogSearch();
+  const { t } = useLanguage();
 
   if (loading && filteredProducts.length === 0) {
     return (
@@ -19,9 +22,9 @@ const FilteredCatalogProducts = () => {
   if (filteredProducts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-center px-6">
-        <span className="text-4xl mb-2">🔍</span>
-        <p className="text-sm font-bold text-gray-700 dark:text-slate-200">Hech qanday mahsulot topilmadi</p>
-        <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">Boshqa kalit so'z bilan qidirib ko'ring</p>
+        <SearchX size={36} className="text-gray-300 dark:text-slate-700 mb-2" />
+        <p className="text-sm font-bold text-gray-700 dark:text-slate-200">{t("catalog.notFoundTitle")}</p>
+        <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">{t("catalog.notFoundSubtitle")}</p>
       </div>
     );
   }

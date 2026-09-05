@@ -3,17 +3,25 @@
 // (u yerda sotuvchi o'z joylashuvini bitta aniq viloyat sifatida
 // tanlaydi). Bu yerda esa kuryer narxini sozlashni soddalashtirish
 // uchun 5 ta kengroq mintaqaga guruhlangan.
+//
+// KO'P TILLILIK TUZATISHI: bu qiymatlar SOTUVCHI SOZLAMALARIDA VA
+// XARIDOR CHECKOUT'IDA ham ko'rsatiladi — shuning uchun `label`
+// endi to'g'ridan-to'g'ri matn EMAS, balki tarjima kaliti
+// (`labelKey`). Chaqiruvchi tomon `t(\`deliveryZones.${labelKey}\`)`
+// orqali oladi.
 export const DELIVERY_ZONES = [
-  { key: "tashkent_city", label: "Toshkent shahri" },
-  { key: "tashkent_region", label: "Toshkent viloyati" },
-  { key: "fergana_valley", label: "Farg'ona vodiysi" },
-  { key: "samarkand_bukhara", label: "Samarqand / Buxoro (Voha)" },
-  { key: "far_regions", label: "Uzoq viloyatlar (Xorazm/Qoraqalpog'iston)" },
+  { key: "tashkent_city", labelKey: "tashkentCity" },
+  { key: "tashkent_region", labelKey: "tashkentRegion" },
+  { key: "fergana_valley", labelKey: "ferganaValley" },
+  { key: "samarkand_bukhara", labelKey: "samarkandBukhara" },
+  { key: "far_regions", labelKey: "farRegions" },
 ];
 
-export const DELIVERY_TIME_OPTIONS = [
-  "1-2 kun ichida",
-  "2-3 kun ichida",
-  "3-5 kun ichida",
-  "5-7 kun ichida",
-];
+// MUHIM: bu qiymatlar OLDIN to'g'ridan-to'g'ri (tarjima qilinmagan)
+// matn sifatida Firestore'ga SAQLANARDI. Endi — barqaror KALITLAR
+// (`deliveryZones.${key}` orqali tarjima qilinadi). Eski, xom matn
+// sifatida saqlangan qiymatlar hali ham xavfsiz — `t()` funksiyasi
+// tanimagan kalitni topilmasa, uni o'zgarishsiz qaytaradi (demak eski
+// sotuvchilar sozlamalari buzilmaydi, faqat yangi saqlanganlar
+// to'liq ko'p tillilikka ega bo'ladi).
+export const DELIVERY_TIME_KEYS = ["days1_2", "days2_3", "days3_5", "days5_7"];

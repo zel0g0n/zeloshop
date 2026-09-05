@@ -1,14 +1,16 @@
 import { memo } from "react";
+import { Sun, Moon, X, Check } from "lucide-react";
 import { useTheme } from "@/context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 const ThemeModal = ({ onClose }) => {
   const { theme, setTheme } = useTheme();
   const { t } = useLanguage();
 
   const options = [
-    { id: "light", icon: "☀️", label: t("themePage.light"), desc: t("themePage.lightDesc") },
-    { id: "dark", icon: "🌙", label: t("themePage.dark"), desc: t("themePage.darkDesc") },
+    { id: "light", icon: Sun, label: t("themePage.light"), desc: t("themePage.lightDesc") },
+    { id: "dark", icon: Moon, label: t("themePage.dark"), desc: t("themePage.darkDesc") },
   ];
 
   const handleSelect = (id) => {
@@ -16,8 +18,10 @@ const ThemeModal = ({ onClose }) => {
     onClose();
   };
 
+  useEscapeToClose(onClose);
+
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-end justify-center animate-fade-in">
+    <div className="fixed inset-0 bg-slate-900/55 z-50 flex items-end justify-center animate-fade-in" role="dialog" aria-modal="true">
       <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[28px] p-5 space-y-4 shadow-xl border-t border-slate-100 dark:border-slate-800">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
           <div>
@@ -26,9 +30,9 @@ const ThemeModal = ({ onClose }) => {
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 rounded-full flex items-center justify-center font-bold text-xs"
+            className="w-7 h-7 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 rounded-full flex items-center justify-center"
           >
-            ✕
+            <X size={13} />
           </button>
         </div>
 
@@ -44,14 +48,18 @@ const ThemeModal = ({ onClose }) => {
               }`}
             >
               <span className="flex items-center gap-3">
-                <span className="text-xl">{opt.icon}</span>
+                <span className="w-9 h-9 rounded-xl bg-white dark:bg-slate-900 flex items-center justify-center shrink-0">
+                  <opt.icon size={17} />
+                </span>
                 <span className="text-left">
                   <span className="block font-bold text-sm">{opt.label}</span>
                   <span className="block text-xs opacity-70">{opt.desc}</span>
                 </span>
               </span>
               {theme === opt.id && (
-                <span className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs shrink-0">✓</span>
+                <span className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0">
+                  <Check size={11} strokeWidth={3} />
+                </span>
               )}
             </button>
           ))}

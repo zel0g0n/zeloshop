@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { useNavigate } from 'react-router';
-import { FiChevronRight} from "react-icons/fi";
+import { ChevronRight } from "lucide-react";
 
 // `isToggle` elementlar uchun bosilganda navigatsiya qilinmaydi — ular
 // o'zining `toggled`/`onToggleClick` orqali to'g'ridan-to'g'ri boshqariladi
@@ -53,7 +53,7 @@ const CabinetMenu = ({ section }) => {
                     )}
                     
                     {!item.isToggle && (
-                      <FiChevronRight size={16} className="text-gray-300 dark:text-slate-600 group-hover:text-gray-400 transition-colors" />
+                      <ChevronRight size={16} className="text-gray-300 dark:text-slate-600 group-hover:text-gray-400 transition-colors" />
                     )}
                   </div>
                 </div>

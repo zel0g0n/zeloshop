@@ -1,6 +1,9 @@
 import { memo, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { Package, Share2 } from "lucide-react";
 import { useAddFavorite } from "@/hooks/useAddFavourite";
+import { useSession } from "@/context/SessionContext";
+import { shareProductAsPost, PRODUCT_SHARE_BUTTON_ENABLED } from "@/utils/shareProductAsPost";
 import {
   IoArrowBack,
   FaRegHeart,
@@ -14,9 +17,22 @@ import {
 // uchun ham ishlaydi (`images` bo'lmasa `image`ga qaytadi).
 export const ProductGallery = memo(({ product }) => {
   const { isFavorite, toggleFavorite } = useAddFavorite(product);
+  const { sellerId } = useSession();
   const navigate = useNavigate();
   const scrollRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
+
+  // MUHIM: mahsulot havolasi VA "SMM mutaxassisi darajasidagi" matn
+  // - tayyor shablondan (tezkor, bepul, ishonchli - Gemini API
+  // chaqirilmaydi) quriladi. Web Share API'ning O'ZI qurilma
+  // darajasida BARCHA o'rnatilgan ilovalarni (Telegram, Instagram,
+  // SMS va h.k.) ko'rsatadi.
+  const handleShareProduct = useCallback(async () => {
+    // FOYDALANUVCHI SO'ROVI BILAN QO'SHILDI: endi RASM+matn "post"
+    // ko'rinishida ulashiladi (mumkin bo'lganda) - batafsil izoh:
+    // `shareProductAsPost.js`.
+    await shareProductAsPost(product, sellerId);
+  }, [product, sellerId]);
 
   const images = Array.isArray(product?.images) && product.images.length > 0
     ? product.images
@@ -55,7 +71,9 @@ export const ProductGallery = memo(({ product }) => {
               />
             ))
           ) : (
-            <div className="h-full w-full shrink-0 flex items-center justify-center text-6xl">📦</div>
+            <div className="h-full w-full shrink-0 flex items-center justify-center text-slate-300 dark:text-slate-700">
+              <Package size={56} strokeWidth={1.5} />
+            </div>
           )}
         </div>
 
@@ -80,7 +98,7 @@ export const ProductGallery = memo(({ product }) => {
           
           <div
             onClick={() => navigate(-1)}
-            className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/20 text-white backdrop-blur-xl"
+            className="flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-white/35 text-white"
           >
             <IoArrowBack className="text-[22px]" />
           </div>
@@ -94,6 +112,16 @@ export const ProductGallery = memo(({ product }) => {
           >
             <FaRegHeart className="text-[20px]" />
           </button>
+
+          {PRODUCT_SHARE_BUTTON_ENABLED && (
+            <button
+              type="button"
+              onClick={handleShareProduct}
+              className="absolute right-3 top-16 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/95 dark:bg-slate-800/95 text-slate-400 active:scale-75 transition-all duration-300"
+            >
+              <Share2 size={17} />
+            </button>
+          )}
         </div>
 
       </div>

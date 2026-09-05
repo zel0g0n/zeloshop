@@ -28,6 +28,13 @@ const createSeller = async (uid, storeData) => {
       description: description?.trim() || null,
       logo: logo || null,
       status: "active",
+      // 2026-09 audit: bu maydonni ANIQ (aniq `true` sifatida) shu
+      // yerda yozib qo'yish — kelajakda `referralLeaderboardBonus.js`
+      // cron so'rovini xavfsiz optimallashtirish (butun `sellers`
+      // kolleksiyasini o'qish o'rniga `where("referralLeaderboardBonusEnabled",
+      // "==", true)`) uchun zamin tayyorlaydi — batafsil izoh o'sha
+      // faylning `backfillMissingBonusFlag` funksiyasida.
+      referralLeaderboardBonusEnabled: true,
       createdAt: serverTimestamp(),
     });
     return { id: uid };

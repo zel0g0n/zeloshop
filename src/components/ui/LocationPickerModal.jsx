@@ -1,31 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-
-const LEAFLET_CSS = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css";
-const LEAFLET_JS = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+import { X } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
+import { loadLeaflet } from "@/utils/loadLeaflet";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 // Toshkent markazi — standart boshlang'ich nuqta.
 const DEFAULT_CENTER = { lat: 41.311081, lng: 69.240562 };
-
-let leafletLoadPromise = null;
-const loadLeaflet = () => {
-  if (window.L) return Promise.resolve(window.L);
-  if (leafletLoadPromise) return leafletLoadPromise;
-
-  leafletLoadPromise = new Promise((resolve, reject) => {
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = LEAFLET_CSS;
-    document.head.appendChild(link);
-
-    const script = document.createElement("script");
-    script.src = LEAFLET_JS;
-    script.onload = () => resolve(window.L);
-    script.onerror = reject;
-    document.body.appendChild(script);
-  });
-
-  return leafletLoadPromise;
-};
 
 /**
  * Xarita orqali joylashuv tanlash — qo'lda manzil yozish o'rniga
@@ -41,11 +21,14 @@ const loadLeaflet = () => {
  * ko'rsatiladi.
  */
 const LocationPickerModal = ({ initialLocation, onConfirm, onClose }) => {
+  const { t } = useLanguage();
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const markerRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState(initialLocation || DEFAULT_CENTER);
+
+  useEscapeToClose(onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,24 +92,26 @@ const LocationPickerModal = ({ initialLocation, onConfirm, onClose }) => {
   }, [initialLocation]);
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[100] flex items-end justify-center">
+    <div className="fixed inset-0 bg-black/50 z-[100] flex items-end justify-center" role="dialog" aria-modal="true">
       <div className="bg-white dark:bg-slate-900 w-full max-w-[440px] rounded-t-[28px] overflow-hidden">
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-slate-800">
-          <h3 className="text-sm font-bold text-gray-800 dark:text-white">Joylashuvni belgilang</h3>
-          <button type="button" onClick={onClose} className="text-gray-400 dark:text-slate-500 text-lg leading-none">✕</button>
+          <h3 className="text-sm font-bold text-gray-800 dark:text-white">{t("checkout.mapModalTitle")}</h3>
+          <button type="button" onClick={onClose} className="text-gray-400 dark:text-slate-500">
+            <X size={16} />
+          </button>
         </div>
 
         <div className="relative w-full h-[360px] bg-gray-100 dark:bg-slate-800">
           <div ref={mapContainerRef} className="w-full h-full" />
           {!ready && (
             <div className="absolute inset-0 flex items-center justify-center text-xs text-gray-400 dark:text-slate-500 pointer-events-none">
-              Xarita yuklanmoqda...
+              {t("checkout.mapLoading")}
             </div>
           )}
         </div>
 
         <p className="px-4 pt-3 text-[11px] text-gray-400 dark:text-slate-500 text-center">
-          Xaritaga bosing yoki belgini suring — aniq joyni ko'rsating
+          {t("checkout.mapInstructions")}
         </p>
 
         <div className="p-4">
@@ -136,7 +121,7 @@ const LocationPickerModal = ({ initialLocation, onConfirm, onClose }) => {
             onClick={() => onConfirm(selected)}
             className="w-full h-12 bg-blue-600 text-white font-bold rounded-2xl text-sm disabled:opacity-50"
           >
-            Joylashuvni tasdiqlash
+            {t("checkout.mapConfirm")}
           </button>
         </div>
       </div>

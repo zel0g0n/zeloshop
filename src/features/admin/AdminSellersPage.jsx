@@ -1,30 +1,26 @@
-import { useMemo, useState } from "react";
 import useGetAllSellers from "@/hooks/admin/useGetAllSellers";
 import AdminSellerCard from "./AdminSellerCard";
 import { ListSkeleton } from "@/components/ui/Skeleton";
 
 const AdminSellersPage = () => {
-  const { sellers, loading, error } = useGetAllSellers();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all"); // 'all' | 'active' | 'suspended'
-
-  const filteredSellers = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return sellers.filter((seller) => {
-      const matchesSearch =
-        !query ||
-        seller.storeName?.toLowerCase().includes(query) ||
-        seller.phone?.includes(query);
-
-      const isActive = seller.status !== "suspended";
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "active" && isActive) ||
-        (statusFilter === "suspended" && !isActive);
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [sellers, searchQuery, statusFilter]);
+  const {
+    sellers,
+    loading,
+    loadingMore,
+    hasMore,
+    loadMore,
+    error,
+    counts,
+    statusFilter,
+    setStatusFilter,
+    searchQuery,
+    setSearchQuery,
+    isSearching,
+    searchIsApproximate,
+    patchSellerStatus,
+    patchSellerTariffPlan,
+    removeSeller,
+  } = useGetAllSellers();
 
   return (
     <div className="p-4 space-y-4 pb-28">
@@ -40,9 +36,9 @@ const AdminSellersPage = () => {
 
       <div className="flex gap-2">
         {[
-          { id: "all", label: `Barchasi (${sellers.length})` },
-          { id: "active", label: "Faol" },
-          { id: "suspended", label: "To'xtatilgan" },
+          { id: "all", label: `Barchasi (${counts.total})` },
+          { id: "active", label: `Faol (${counts.active})` },
+          { id: "suspended", label: `To'xtatilgan (${counts.suspended})` },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -58,24 +54,52 @@ const AdminSellersPage = () => {
         ))}
       </div>
 
+      {/* HALOL ogohlantirish: qidiruv platformadagi ENG SO'NGGI
+          `ADMIN_SELLER_SEARCH_SCAN_CAP` ta sotuvchi orasida
+          o'tkazilgani, va bu chegaraga yetilgani (demak undan eski
+          sotuvchilar orasida mos kelishi mumkin bo'lgan natijalar
+          tekshirilmagan bo'lishi mumkinligi) uchun ko'rsatiladi. */}
+      {isSearching && searchIsApproximate && (
+        <div className="text-xs text-amber-600 dark:text-amber-400 font-semibold bg-amber-50 dark:bg-amber-950/30 rounded-xl px-3 py-2">
+          Diqqat: qidiruv faqat eng so'nggi qo'shilgan sotuvchilar orasida amalga oshirildi — juda eski
+          sotuvchilar natijada ko'rinmasligi mumkin.
+        </div>
+      )}
+
       {loading && <ListSkeleton count={4} />}
 
       {!loading && error && (
         <div className="text-center py-16 text-sm text-rose-500 font-medium">Xatolik: {error}</div>
       )}
 
-      {!loading && !error && filteredSellers.length === 0 && (
+      {!loading && !error && sellers.length === 0 && (
         <div className="text-center py-16 text-sm text-gray-400 dark:text-slate-500">
           Hech qanday sotuvchi topilmadi
         </div>
       )}
 
-      {!loading && !error && filteredSellers.length > 0 && (
+      {!loading && !error && sellers.length > 0 && (
         <div className="space-y-3">
-          {filteredSellers.map((seller) => (
-            <AdminSellerCard key={seller.id} seller={seller} />
+          {sellers.map((seller) => (
+            <AdminSellerCard
+              key={seller.id}
+              seller={seller}
+              onStatusChanged={patchSellerStatus}
+              onTariffPlanChanged={patchSellerTariffPlan}
+              onDeleted={removeSeller}
+            />
           ))}
         </div>
+      )}
+
+      {!loading && !error && !isSearching && hasMore && (
+        <button
+          onClick={loadMore}
+          disabled={loadingMore}
+          className="w-full h-11 rounded-2xl text-sm font-bold bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border border-gray-100 dark:border-slate-800 disabled:opacity-60"
+        >
+          {loadingMore ? "Yuklanmoqda..." : "Yana yuklash"}
+        </button>
       )}
     </div>
   );

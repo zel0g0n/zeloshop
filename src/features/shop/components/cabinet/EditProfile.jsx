@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { FiArrowLeft, FiUser, FiPhone, FiAtSign, FiCamera } from 'react-icons/fi'; 
+import { ArrowLeft, User, Phone, AtSign, Camera, Gift } from 'lucide-react';
 import { useUploadImage } from '@/hooks/storage/useUploadStorage';
 import useUpdateClientData from '@/hooks/useUpdateClientData';
 import { useSession } from '@/context/SessionContext';
 import { formatUzPhone, isValidUzPhone } from '@/utils/phone';
+import { deriveBirthdayMonthDay } from '@/utils/birthday';
 import StatusModal from '@/components/ui/StatusModal';
 
 const ProfileEditPage = () => {
@@ -18,12 +19,11 @@ const ProfileEditPage = () => {
   const { clientId: currentUserId } = useSession();
 
   // Bazani yangilash hooki (Unga tegishli holatlarni qayta nomlaymiz)
-  const { 
-    updateClient, 
-    loading: isUpdating, 
-    success: isUpdateSuccess, 
-    error: updateError, 
-    clearStatus 
+  const {
+    updateClient,
+    loading: isUpdating,
+    error: updateError,
+    clearStatus
   } = useUpdateClientData();
 
   const { 
@@ -37,8 +37,13 @@ const ProfileEditPage = () => {
 
   const [formData, setFormData] = useState(() => ({
     name: clientInfo?.name || '',
-    phone: clientInfo?.phone || '', 
-    username: clientInfo?.username ? clientInfo.username.replace('@', '') : ''
+    phone: clientInfo?.phone || '',
+    username: clientInfo?.username ? clientInfo.username.replace('@', '') : '',
+    // TUG'ILGAN KUN AVTOMATIK CHEGIRMASI uchun - IXTIYORIY maydon.
+    // Kiritilsa, tug'ilgan kunida (agar sotuvchi shu funksiyani
+    // yoqqan bo'lsa) avtomatik chegirma va tabrik xabari keladi
+    // (batafsil: `functions/birthdayRewards.js`).
+    birthDate: clientInfo?.birthDate || ''
   }));
 
   const [imagePreview, setImagePreview] = useState(() => clientInfo?.avatar || null);
@@ -50,8 +55,9 @@ const ProfileEditPage = () => {
     if (clientInfo && !isInitializedRef.current) {
       setFormData({
         name: clientInfo.name || '',
-        phone: clientInfo.phone || '', 
-        username: clientInfo.username ? clientInfo.username.replace('@', '') : ''
+        phone: clientInfo.phone || '',
+        username: clientInfo.username ? clientInfo.username.replace('@', '') : '',
+        birthDate: clientInfo.birthDate || ''
       });
       if (clientInfo.avatar) {
         setImagePreview(clientInfo.avatar);
@@ -133,9 +139,11 @@ const ProfileEditPage = () => {
 
       const updateData = {
         name: nameTrimmed,
-        phone: phoneTrimmed, 
+        phone: phoneTrimmed,
         username: formattedUsername,
-        avatar: finalAvatarUrl
+        avatar: finalAvatarUrl,
+        birthDate: formData.birthDate || null,
+        birthdayMonthDay: deriveBirthdayMonthDay(formData.birthDate),
       };
 
       
@@ -178,7 +186,7 @@ const ProfileEditPage = () => {
   const anyError = uploadError || updateError;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 pb-12 pt-4 relative select-none transition-colors duration-300">
+    <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 pb-36 pt-4 relative select-none transition-colors duration-300">
       {/* HEADER */}
       <div className="max-w-md mx-auto px-4 mb-6 flex items-center justify-between">
         <button 
@@ -186,7 +194,7 @@ const ProfileEditPage = () => {
           onClick={handleBack} 
           className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-gray-100 dark:border-slate-800 flex items-center justify-center shadow-sm active:scale-95 transition-all cursor-pointer"
         >
-          <FiArrowLeft size={18} className="text-gray-600 dark:text-slate-300" />
+          <ArrowLeft size={18} className="text-gray-600 dark:text-slate-300" />
         </button>
         <h1 className="text-lg font-bold text-[#1e293b] dark:text-white flex-1 text-center mr-10">Profilni tahrirlash</h1>
       </div>
@@ -206,7 +214,7 @@ const ProfileEditPage = () => {
 
                 {/* Yuklanish progress overlay'i */}
                 {isUploading && (
-                  <div className="absolute inset-0 bg-black/60 backdrop-blur-xs flex flex-col items-center justify-center text-white text-xs font-bold">
+                  <div className="absolute inset-0 bg-black/75 flex flex-col items-center justify-center text-white text-xs font-bold">
                     <span>{uploadProgress}%</span>
                     <button 
                       type="button" 
@@ -233,7 +241,7 @@ const ProfileEditPage = () => {
                   onClick={() => fileInputRef.current?.click()}
                   className="absolute -bottom-1 -right-1 w-8 h-8 bg-blue-600 text-white rounded-xl flex items-center justify-center shadow-md active:scale-90 transition-all cursor-pointer border-2 border-white dark:border-slate-900 hover:bg-blue-700"
                 >
-                  <FiCamera size={14} />
+                  <Camera size={14} />
                 </button>
               )}
             </div>
@@ -250,7 +258,7 @@ const ProfileEditPage = () => {
               <label className="block text-xs font-semibold text-gray-400 dark:text-slate-500 mb-1.5 pl-1 uppercase tracking-wider">To'liq ism</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500">
-                  <FiUser size={16} />
+                  <User size={16} />
                 </span>
                 <input 
                   type="text" 
@@ -269,7 +277,7 @@ const ProfileEditPage = () => {
               <label className="block text-xs font-semibold text-gray-400 dark:text-slate-500 mb-1.5 pl-1 uppercase tracking-wider">Telefon raqam</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500">
-                  <FiPhone size={16} />
+                  <Phone size={16} />
                 </span>
                 <input 
                   type="tel" 
@@ -291,7 +299,7 @@ const ProfileEditPage = () => {
               <label className="block text-xs font-semibold text-gray-400 dark:text-slate-500 mb-1.5 pl-1 uppercase tracking-wider">Telegram Username</label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500">
-                  <FiAtSign size={16} />
+                  <AtSign size={16} />
                 </span>
                 <input 
                   type="text" 
@@ -302,6 +310,25 @@ const ProfileEditPage = () => {
                   className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#f8fafc] dark:bg-slate-800 border border-gray-100 dark:border-slate-700 outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-gray-800 dark:text-white font-medium placeholder-gray-400 dark:placeholder-slate-500"
                 />
               </div>
+            </div>
+
+            {/* TUG'ILGAN SANA (IXTIYORIY) */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 dark:text-slate-500 mb-1.5 pl-1 uppercase tracking-wider">Tug'ilgan sana (ixtiyoriy)</label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 dark:text-slate-500">
+                  <Gift size={16} />
+                </span>
+                <input
+                  type="date"
+                  name="birthDate"
+                  value={formData.birthDate}
+                  onChange={handleInputChange}
+                  max={new Date().toISOString().slice(0, 10)}
+                  className="w-full pl-11 pr-4 py-3.5 rounded-2xl bg-[#f8fafc] dark:bg-slate-800 border border-gray-100 dark:border-slate-700 outline-none focus:border-blue-500 focus:bg-white dark:focus:bg-slate-800 transition-all text-sm text-gray-800 dark:text-white font-medium"
+                />
+              </div>
+              <p className="text-[11px] text-gray-400 dark:text-slate-500 mt-1.5 pl-1">Kiritsangiz, tug'ilgan kuningizda ba'zi do'konlardan avtomatik chegirma va tabrik olishingiz mumkin.</p>
             </div>
 
             {/* SUBMIT TUGMASI */}

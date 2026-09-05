@@ -17,26 +17,147 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // 2026-09 audit (P2 — storage.rules qattiqlashtirish): pastdagi
+    // BARCHA "rasm yuklash" yo'llarida (`store-logos`, `avatars`,
+    // `products`, `crm-banners`, `banners`, `review-photos`,
+    // `payment-receipts`) OLDIN hujjat/fayl HAJMI yoki TURI (content
+    // type) UMUMAN tekshirilmagan edi — faqat "kim yozayotgani"
+    // (egalik) tekshirilardi. Frontend (`useUploadImage.jsx`) rasmni
+    // yuklashdan OLDIN siqadi (max 1000x1000, sifat 0.75) va faqat
+    // jpeg/png/webp'ga ruxsat beradi — LEKIN bu FAQAT ilova ICHIDAGI
+    // tekshiruv: Firebase Storage SDK'siga to'g'ridan-to'g'ri
+    // (ilovadan tashqarida, masalan brauzer konsolidan) murojaat
+    // qilingan holda bu tekshiruv OSON chetlab o'tiladi. Bu ayniqsa
+    // `review-photos` va `avatars` uchun MUHIM — bu yo'llarga
+    // platformadagi ISTALGAN (mijoz sifatida) autentifikatsiya qilingan
+    // foydalanuvchi yoza oladi (faqat sotuvchilar emas), ya'ni eng
+    // KENG, eng kam ishonchli auditoriya. Bunday tekshiruvsiz holda,
+    // zararlangan/soxta "rasm" (aslida ixtiyoriy, katta hajmli fayl)
+    // yuklab, Storage'ni BEPUL fayl xostingiga aylantirish yoki
+    // xarajatni sun'iy oshirish mumkin edi.
+    //
+    // Bu yordamchi funksiya HAR BIR yozish qoidasiga qo'shiladi —
+    // fayl HAQIQATAN rasm (`image/*`) turida VA 10MB dan OSHMASLIGI
+    // kerak (frontend siqilgandan keyingi haqiqiy hajmdan ANCHA katta
+    // zaxira bilan — legitim foydalanuvchiga hech qanday ta'sir
+    // qilmaydi, faqat suiiste'molni to'sadi).
+    function isValidImageUpload() {
+      return request.resource.size < 10 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+
+    // XODIMLAR (STAFF) UCHUN QO'SHILDI: `firestore.rules`dagi
+    // `staffPermission()` funksiyasi bilan AYNAN BIR XIL tekshiruv,
+    // lekin bu yerda — Storage qoidalarida — Firestore hujjatini
+    // to'g'ridan-to'g'ri o'qish uchun maxsus `firestore.get()`/
+    // `firestore.exists()` funksiyalaridan foydalaniladi (Storage va
+    // Firestore qoidalari ALOHIDA ishlaydi, umumiy funksiya bo'lishi
+    // mumkin emas). MUHIM: bu YO'Q bo'lganda, `manageProducts`
+    // ruxsatiga ega xodim mahsulot rasmini yuklashga uringanda
+    // Firestore yozuvi muvaffaqiyatli bo'lsa ham, rasm yuklash
+    // "storage/unauthorized" bilan muvaffaqiyatsiz tugagan bo'lardi
+    // (pastdagi `products/{sellerId}/...` qoidasi FAQAT
+    // `request.auth.uid == sellerId`ni tekshirar edi).
+    function staffCanManageProducts(sellerId) {
+      return request.auth != null &&
+        firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data.sellerId == sellerId &&
+        firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data.status == "active" &&
+        firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data.permissions.manageProducts == true;
+    }
+
+    // 2026-09 punkt-royxati, 2-band ("Advanced Team & RBAC"): yuqoridagi
+    // `staffCanManageProducts`ning UMUMIY (ixtiyoriy ruxsat nomi
+    // qabul qiluvchi) versiyasi — `firestore.rules`dagi
+    // `staffPermission(sellerId, perm)` bilan AYNAN BIR XIL mantiq,
+    // faqat Storage tomonida. `manageCustomers` ruxsatiga ega xodim
+    // ("Marketing menejeri") CRM broadcast banner rasmini yuklashi
+    // uchun kerak (pastga qarang: `crm-banners/{sellerId}/...`).
+    function staffHasPermission(sellerId, perm) {
+      return request.auth != null &&
+        firestore.exists(/databases/(default)/documents/staff/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data.sellerId == sellerId &&
+        firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data.status == "active" &&
+        firestore.get(/databases/(default)/documents/staff/$(request.auth.uid)).data.permissions[perm] == true;
+    }
+
     // Do'kon logotiplari — faqat shu sotuvchining o'zi yoza oladi.
     match /store-logos/{sellerId}/{fileName} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == sellerId;
+      allow write: if request.auth != null && request.auth.uid == sellerId && isValidImageUpload();
     }
 
     // Mijoz profil rasmlari — faqat shu foydalanuvchining o'zi.
     match /avatars/{uid}/{fileName} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow write: if request.auth != null && request.auth.uid == uid && isValidImageUpload();
     }
 
-    // Mahsulot rasmlari — istalgan TIZIMGA KIRGAN foydalanuvchi
-    // yoza oladi (aniq mahsulot egaligi Firestore darajasida —
-    // products/{id} hujjatini yaratish/yangilashda — tekshiriladi;
-    // Storage darajasida esa hech bo'lmasa anonim yozishning oldi
-    // olinadi).
-    match /products/{fileName} {
+    // Mahsulot rasmlari — MUHIM TUZATISH: oldin BARCHA sotuvchilar
+    // uchun umumiy (`products/{fileName}`), sotuvchi bo'yicha
+    // ajratilmagan yo'lda edi — bu, nazariy jihatdan, boshqa
+    // sotuvchining rasm faylini "ustidan yozib qo'yish" xavfini
+    // tug'dirardi. Endi `store-logos`/`avatars` bilan bir xil
+    // naqshda, har bir sotuvchi FAQAT o'z papkasiga yoza oladi.
+    match /products/{sellerId}/{fileName} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null &&
+        (request.auth.uid == sellerId || staffCanManageProducts(sellerId)) &&
+        isValidImageUpload();
+    }
+
+    // CRM Broadcast banner rasmlari — MUHIM TUZATISH: bu yo'l uchun
+    // HECH QANDAY qoida yo'q edi, shuning uchun u pastdagi umumiy
+    // "hech kimga ruxsat yo'q" qoidasiga tushib qolardi — natijada
+    // CRM'dagi banner rasm yuklash funksiyasi HAQIQATDA ISHLAMAS edi
+    // (har doim "ruxsat yo'q" xatosi bilan tugardi).
+    // 2026-09 punkt-royxati, 2-band: `manageCustomers` ruxsatiga ega
+    // FAOL xodim ("Marketing menejeri"/"Sotuv menejeri") ham banner
+    // yuklay oladi — u `sendCrmNotification`ni chaqirib, HAQIQIY
+    // kampaniya yuborishi mumkin (`functions/notifications.js`).
+    match /crm-banners/{sellerId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null &&
+        (request.auth.uid == sellerId || staffHasPermission(sellerId, "manageCustomers")) &&
+        isValidImageUpload();
+    }
+
+    // Bosh sahifa banner (slayder) rasmlari — MUHIM, YANGI TOPILGAN
+    // TUZATISH: `BannerSettingsPage.jsx` rasmlarni `banners/{sellerId}/...`
+    // yo'liga yuklaydi, lekin bu yo'l uchun ham (yuqoridagi
+    // `crm-banners` bilan AYNAN BIR XIL sabab bilan) HECH QANDAY
+    // qoida yozilmagan edi — banner qo'shish funksiyasi HAR DOIM
+    // "storage/unauthorized" xatosi bilan muvaffaqiyatsiz tugardi.
+    match /banners/{sellerId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == sellerId && isValidImageUpload();
+    }
+
+    // To'lov cheki skrinshotlari (2026-09 punkt-royxati, 14-band): ATMOS
+    // hali ulanmagani uchun, mijoz "Karta orqali" to'lov usulini
+    // tanlaganda, sotuvchining shaxsiy kartasiga o'tkazma qilgach, shu
+    // to'lov chekining skrinshotini shu yerga yuklaydi — sotuvchi buni
+    // buyurtmani tasdiqlashdan oldin ko'rib, pul tushganini tekshiradi.
+    // MOLIYAVIY/SHAXSIY hujjat bo'lgani uchun ATAYLAB `allow read: if
+    // true` EMAS — faqat shu buyurtmaning MIJOZI (yuklovchi) va shu
+    // do'konning SOTUVCHISI (yoki admin) ko'ra oladi.
+    match /payment-receipts/{sellerId}/{clientId}/{fileName} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == sellerId || request.auth.uid == clientId ||
+         firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)));
+      allow write: if request.auth != null && request.auth.uid == clientId && isValidImageUpload();
+    }
+
+    // MAHSULOT SHARHIGA BIRIKTIRILGAN RASMLAR — sharhlarning o'zi
+    // OMMAVIY ko'rinadi (`firestore.rules`dagi `products/{id}/reviews`
+    // - `allow read: if true`), shuning uchun bu rasmlar ham xuddi
+    // shunday OCHIQ o'qiladi. Yozish esa faqat shu sharhni
+    // yozayotgan mijozning O'ZIGA — `functions/reviews.js`dagi
+    // `submitProductReview` bu yerga emas, faqat tayyor URL manzilga
+    // ishonadi, HAQIQIY egalikni bu qoida ta'minlaydi.
+    match /review-photos/{productId}/{clientId}/{fileName} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == clientId && isValidImageUpload();
     }
 
     // Aniq belgilanmagan boshqa BARCHA yo'llar uchun — eng xavfsiz

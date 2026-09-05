@@ -23,7 +23,7 @@ const getOrdersDataSlice = createSlice({
       state.success = true;
       state.error = null;
       state.orders = action.payload;
-      state.ordersCounter = action.payload.length; // ✅ To'g'ri hisoblash
+      state.ordersCounter = action.payload.length; // To'g'ri hisoblash
     },
 
     

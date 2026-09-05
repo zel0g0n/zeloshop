@@ -1,14 +1,20 @@
 import { Component } from "react";
+import { AlertTriangle } from "lucide-react";
+import { Sentry } from "@/lib/sentry";
 
-// OLDIN: agar biror komponent render paytida xato tashlasa (masalan
-// kutilmagan `undefined` maydon, tarmoq javobidagi noto'g'ri shakl),
-// butun React ilovasi qulab tushib, foydalanuvchiga BO'SH OQ EKRAN
-// qolardi — hech qanday tushunarli xabar yoki tiklanish imkoniyati
-// bo'lmasdan. Bu — ayniqsa Telegram Mini App'da juda yomon tajriba,
-// chunki foydalanuvchi nima bo'lganini bilmaydi.
+// Ushbu boundary ichida render paytida yuzaga keladigan istalgan kutilmagan
+// xato Sentry orqali kuzatiladi (`componentDidCatch`), bu esa production
+// muhitidagi bunday holatlarni aniqlash va tekshirish imkonini beradi.
 //
-// Error Boundary faqat CLASS komponent sifatida yozilishi mumkin —
-// React hozircha bu uchun hook taklif qilmaydi.
+// Error Boundary bo'lmasa, biror komponent render paytida xato tashlaganda
+// (masalan, kutilmagan `undefined` maydon yoki tarmoq javobidagi noto'g'ri
+// shakl) butun React ilovasi qulab tushib, foydalanuvchiga hech qanday
+// tushunarli xabarsiz bo'sh oq ekran qolardi — bu ayniqsa Telegram Mini
+// App'da yomon tajriba beradi, chunki foydalanuvchi nima bo'lganini
+// bilmaydi.
+//
+// Error Boundary faqat class komponent sifatida yozilishi mumkin — React
+// hozircha bu uchun hook taklif qilmaydi.
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -20,9 +26,8 @@ class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, errorInfo) {
-    // Ishlab chiqarishda bu yerga tashqi xato kuzatuv xizmati (masalan
-    // Sentry) ulanishi mumkin — hozircha faqat konsolga yozamiz.
     console.error("Ilovada kutilmagan xato:", error, errorInfo);
+    Sentry.captureException(error, { extra: { componentStack: errorInfo?.componentStack } });
   }
 
   handleReload = () => {
@@ -33,7 +38,7 @@ class ErrorBoundary extends Component {
     if (this.state.hasError) {
       return (
         <div className="w-full h-screen flex flex-col items-center justify-center bg-gray-100 dark:bg-slate-950 px-6 text-center gap-3">
-          <span className="text-4xl">😕</span>
+          <AlertTriangle size={36} className="text-amber-500" />
           <p className="text-sm font-bold text-gray-800 dark:text-white">Kutilmagan xatolik yuz berdi</p>
           <p className="text-xs text-gray-500 dark:text-slate-400 max-w-xs">
             Ilovani qayta yuklab ko'ring. Agar muammo davom etsa, birozdan so'ng qayta urinib ko'ring.

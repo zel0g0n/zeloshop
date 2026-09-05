@@ -2,6 +2,7 @@ import { NavLink } from "react-router";
 import { useFavoritesList } from "../../hooks/useAddFavourite";
 import { useCartList } from "../../hooks/useAddToCard";
 import { useLanguage } from "@/context/LanguageContext";
+import { useKeyboardVisible } from "@/hooks/useKeyboardVisible";
 import {
   GoHome,
   LuTextSearch,
@@ -15,6 +16,10 @@ const Navbar = () => {
   const favoritesCount = useFavoritesList().favorites.length
   const cartsCount = useCartList().carts.length
   const { t } = useLanguage();
+  // MUHIM TUZATISH: klaviatura ochilganda (masalan Checkout
+  // formasida), Navbar klaviatura ustida "muallaq" ko'rinib
+  // qolmasligi uchun, silliq animatsiya bilan vaqtincha yashiriladi.
+  const isKeyboardVisible = useKeyboardVisible();
 
     const navData = [
       { id: 1, title: t("nav.home"), path: '/', icon: GoHome },
@@ -24,12 +29,12 @@ const Navbar = () => {
       { id: 5, title: t("nav.cabinet"), path: '/cabinet', icon: FaRegCircleUser },
     ];
     return (
-      <div className="fixed bottom-2 left-0 right-0 z-40">
+      <div className={`fixed bottom-2 left-0 right-0 z-40 transition-transform duration-200 ${isKeyboardVisible ? "translate-y-[calc(100%+2rem)]" : "translate-y-0"}`}>
         <nav className="max-w-[440px] mx-auto px-[10px]">
           
-          <div className="relative overflow-hidden rounded-[24px]  backdrop-blur-md border border-gray-100 dark:border-slate-800 shadow-lg px-[10px] py-4">
+          <div className="relative overflow-hidden rounded-[24px] border border-gray-100 dark:border-slate-800 shadow-lg px-[10px] py-4">
             
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600  py-4 text-sm font-bold text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition-all duration-300 active:scale-95"></div>
+            <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 py-4 text-sm font-bold text-white shadow-[0_10px_30px_rgba(37,99,235,0.35)] transition-all duration-300 active:scale-95"></div>
             <ul className="relative flex justify-between py-[10px] items-center">
               {navData.map((item) => {
 
@@ -49,7 +54,7 @@ const Navbar = () => {
                           }`}
                         >
                           {isActive && (
-                            <div className="absolute mx-auto w-full h-15 rounded-2xl bg-white/15 backdrop-blur-md border border-white/70 p-1"></div>
+                            <div className="absolute mx-auto w-full h-15 rounded-2xl bg-white/20 border border-white/70 p-1"></div>
                           )}
 
                           <div className="relative">

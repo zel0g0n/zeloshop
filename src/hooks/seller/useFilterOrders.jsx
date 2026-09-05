@@ -1,5 +1,5 @@
 import { useDispatch, useSelector } from "react-redux";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 
 import getOrderData from "@/services/orders/getOrderData";
 
@@ -8,6 +8,8 @@ import {
   setOrdersSuccess,
   setOrdersError
 } from "@/store/slices/seller/getOrdersSlice";
+
+const PAGE_SIZE = 150;
 
 const useGetOrdersData = (ID) => {
 
@@ -20,22 +22,13 @@ const useGetOrdersData = (ID) => {
   } = useSelector(state => state.sellerOrdersList);
 
   const dispatch = useDispatch();
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
 
   useEffect(() => {
 
     if (!ID) return;
 
-    if (window.__appLoadStart !== undefined) {
-      console.log(
-        "5️⃣a Sahifa boshidan Buyurtmalar effekti BOSHLANGUNICHA:",
-        (performance.now() - window.__appLoadStart).toFixed(2),
-        "ms"
-      );
-    }
-
     dispatch(setOrdersLoading());
-    console.time("5️⃣ Buyurtmalar — birinchi Firestore javobi");
-    let timedOnce = false;
 
     const unsubscribe = getOrderData(
 
@@ -43,25 +36,19 @@ const useGetOrdersData = (ID) => {
 
       (orders) => {
 
-        if (!timedOnce) {
-          timedOnce = true;
-          console.timeEnd("5️⃣ Buyurtmalar — birinchi Firestore javobi");
-        }
         dispatch(setOrdersSuccess(orders));
 
       },
 
       (error) => {
 
-        if (!timedOnce) {
-          timedOnce = true;
-          console.timeEnd("5️⃣ Buyurtmalar — birinchi Firestore javobi");
-        }
         dispatch(
           setOrdersError(error.message)
         );
 
-      }
+      },
+
+      pageSize
 
     );
 
@@ -71,7 +58,12 @@ const useGetOrdersData = (ID) => {
 
     };
 
-  }, [dispatch, ID]);
+  }, [dispatch, ID, pageSize]);
+
+  const hasMore = orders.length >= pageSize;
+  const loadMore = useCallback(() => {
+    setPageSize((prev) => prev + PAGE_SIZE);
+  }, []);
 
   return {
 
@@ -79,7 +71,9 @@ const useGetOrdersData = (ID) => {
     loading,
     error,
     success,
-    ordersCounter
+    ordersCounter,
+    hasMore,
+    loadMore
 
   };
 

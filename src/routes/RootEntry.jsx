@@ -8,8 +8,18 @@ import HomePage from "@/pages/client/HomePage";
 // har safar Menu tugmasini bosganda o'z Dashboard'i o'rniga katalogni
 // ko'rardi va qo'lda "/seller" manziliga o'tishning iloji yo'q edi
 // (Telegram Mini App'da manzil satri ko'rinmaydi).
+//
+// MUHIM QO'SHIMCHA: agar sessiya CHUQUR HAVOLA orqali kirilgan bo'lsa
+// (`deepLinkPath` — masalan bitta kategoriyaga to'g'ridan-to'g'ri
+// havola orqali), bu HAR QANDAY boshqa yo'naltirishdan USTUN turadi -
+// mijoz aynan o'zi bosgan havola olib borishi kerak bo'lgan sahifaga
+// tushadi, sotuvchining oddiy Dashboard/Katalog holatiga emas.
 const RootEntry = () => {
-  const { isSeller } = useSession();
+  const { isSeller, deepLinkPath } = useSession();
+
+  if (deepLinkPath) {
+    return <Navigate to={deepLinkPath} replace />;
+  }
 
   if (isSeller) {
     return <Navigate to="/seller" replace />;

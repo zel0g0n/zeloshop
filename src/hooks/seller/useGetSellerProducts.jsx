@@ -1,5 +1,5 @@
 import { useDispatch, useSelector } from "react-redux";
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import getSellerProducts from "@/services/products/getSellerProducts";
 
 import {
@@ -7,6 +7,8 @@ import {
   setProductsSuccess,
   setProductsError
 } from "@/store/slices/seller/getSellerProductsSlice";
+
+const PAGE_SIZE = 100;
 
 const useGetProductsData = (ID) => {
 
@@ -19,22 +21,13 @@ const useGetProductsData = (ID) => {
   } = useSelector(state => state.sellerProductsList);
 
   const dispatch = useDispatch();
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
 
   useEffect(() => {
 
     if (!ID) return;
 
-    if (window.__appLoadStart !== undefined) {
-      console.log(
-        "6️⃣a Sahifa boshidan Mahsulotlar effekti BOSHLANGUNICHA:",
-        (performance.now() - window.__appLoadStart).toFixed(2),
-        "ms"
-      );
-    }
-
     dispatch(setProductsLoading());
-    console.time("6️⃣ Mahsulotlar — birinchi Firestore javobi");
-    let timedOnce = false;
 
     const unsubscribe = getSellerProducts(
 
@@ -42,25 +35,19 @@ const useGetProductsData = (ID) => {
 
       (products) => {
 
-        if (!timedOnce) {
-          timedOnce = true;
-          console.timeEnd("6️⃣ Mahsulotlar — birinchi Firestore javobi");
-        }
         dispatch(setProductsSuccess(products));
 
       },
 
       (error) => {
 
-        if (!timedOnce) {
-          timedOnce = true;
-          console.timeEnd("6️⃣ Mahsulotlar — birinchi Firestore javobi");
-        }
         dispatch(
           setProductsError(error.message)
         );
 
-      }
+      },
+
+      pageSize
 
     );
 
@@ -70,7 +57,15 @@ const useGetProductsData = (ID) => {
 
     };
 
-  }, [dispatch, ID]);
+  }, [dispatch, ID, pageSize]);
+
+  // Ro'yxat aynan `pageSize`ga teng bo'lsa — ehtimol yana ko'proq
+  // mahsulot bor (aniq bilishning yagona arzon yo'li: agar to'liq
+  // sahifa qaytgan bo'lsa, chegaraga yetgan bo'lishi mumkin).
+  const hasMore = products.length >= pageSize;
+  const loadMore = useCallback(() => {
+    setPageSize((prev) => prev + PAGE_SIZE);
+  }, []);
 
   return {
 
@@ -78,7 +73,9 @@ const useGetProductsData = (ID) => {
     loading,
     error,
     success,
-    productsCounter
+    productsCounter,
+    hasMore,
+    loadMore
 
   };
 

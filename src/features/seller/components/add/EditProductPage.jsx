@@ -1,13 +1,16 @@
-import React, { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { ChevronLeft } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
+import { useLanguage } from "@/context/LanguageContext";
 import FullScreenSpinner from "@/components/ui/FullScreenSpinner";
 import { useLoadProductForEdit } from "@/hooks/seller/useLoadProductForEdit";
 import useUpdateProductFull from "@/hooks/seller/useUpdateProductFull";
 import { useUploadImage } from "@/hooks/storage/useUploadStorage";
 import { useProductImages } from "@/hooks/seller/useProductImages";
 import { useAIDescription } from "@/hooks/seller/useAIDescription";
-import { getCategoriesForNiche } from "@/constants/productCategories";
+import { useSocialPost } from "@/hooks/seller/useSocialPost";
+import { getEffectiveCategoriesForStore } from "@/config/categoryCustomization";
 import StatusModal from "@/components/ui/StatusModal";
 
 import FormErrors from "./FormErrors";
@@ -16,20 +19,26 @@ import MultiImageUploadCard from "./MultiImageUploadCard";
 import BasicInfoCard from "./BasicInfoCard";
 import PricingCard from "./PricingCard";
 import VariantsCard from "./VariantsCard";
+import AttributesCard from "./AttributesCard";
 import DescriptionCard from "./DescriptionCard";
+import SocialPostGeneratorCard from "./SocialPostGeneratorCard";
+import InstagramAdImageCard from "./InstagramAdImageCard";
+import StoryAdImageCard from "./StoryAdImageCard";
+import SellerReviewsCard from "./SellerReviewsCard";
 import SubmitBar from "./SubmitBar";
+import StockHistoryPanel from "./StockHistoryPanel";
 
 // OLDIN: mahsulotni tahrirlash faqat pastdan chiqadigan tor modal
 // (QuickEditSheet) orqali, faqat narx va stok uchun mumkin edi. Endi
 // bu — to'liq, alohida marshrutga ega sahifa (/seller/products/:id/edit),
-// AddProductPage bilan bir xil, tanish shaklda. Sahifa tuzilishi ham
-// endi AddProductPage bilan bir xil — flex ustun, forma o'zi skroll
-// bo'ladi, "Saqlash" tugmasi oddiy flex elementi (fixed emas) —
-// mobil klaviatura muammosini oldini oladi.
+// AddProductPage bilan bir xil, tanish shaklda — shu jumladan
+// "Saqlash" tugmasi ham, formaning ODDIY, TABIIY oxirgi elementi
+// sifatida (sun'iy joylashuvsiz, forma bilan birga skroll bo'ladi).
 const EditProductPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { sellerId, store } = useSession();
+  const { t } = useLanguage();
   const { product, loading: productLoading, error: productError } = useLoadProductForEdit(id);
   const { updateProduct, loading: saving, error: saveError } = useUpdateProductFull();
   const {
@@ -46,18 +55,46 @@ const EditProductPage = () => {
   const [price, setPrice] = useState("");
   const [costPrice, setCostPrice] = useState("");
   const [discountPrice, setDiscountPrice] = useState("");
-  const [paymentTypes, setPaymentTypes] = useState(["prepay"]);
   const [stock, setStock] = useState("");
+  // ZAXIRA HARAKATI AUDIT JURNALI (2026-09, "ombor nazorati" — haqiqiy
+  // muammoni yechish bo'limi): `originalStock` — mahsulot YUKLANGAN
+  // paytdagi qiymat (o'zgarmaydi), sotuvchi nechaga o'zgartirganini
+  // aniqlash uchun. `stockChangeReason` — `PricingCard.jsx`dagi
+  // sabab-tanlash chiplaridan tanlangan qiymat.
+  const [originalStock, setOriginalStock] = useState(null);
+  const [stockChangeReason, setStockChangeReason] = useState(null);
   const [description, setDescription] = useState("");
   const [variants, setVariants] = useState([]);
+  // 15-NICHE UNIVERSAL PLATFORMA: batafsil izoh - `AddProductPage.jsx`.
+  const [attributes, setAttributes] = useState({});
   const [showSavedModal, setShowSavedModal] = useState(false);
   const [notOwner, setNotOwner] = useState(false);
+  // Sabab tanlanmagani haqidagi ogohlantirish FAQAT saqlashga
+  // URINIB KO'RGANDAN keyin ko'rsatiladi (hali stock maydonini
+  // o'zgartirib, chip tanlashga ULGURMAGAN sotuvchini bezovta
+  // qilmaslik uchun).
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
   const { generating: aiGenerating, error: aiError, generate: handleGenerateAI } = useAIDescription({
     productName: title,
     category,
     thumbnailImage: images[0],
     onResult: setDescription,
+  });
+
+  const {
+    platform: socialPlatform,
+    setPlatform: setSocialPlatform,
+    postText: socialPostText,
+    setPostText: setSocialPostText,
+    generating: socialGenerating,
+    error: socialError,
+    generate: handleGenerateSocialPost,
+  } = useSocialPost({
+    productName: title,
+    description,
+    price,
+    thumbnailImage: images[0],
   });
 
   useEffect(() => {
@@ -69,18 +106,16 @@ const EditProductPage = () => {
     }
 
     setTitle(product.name || "");
-    setCategory(product.category || getCategoriesForNiche(store?.category)[0]?.value || "");
+    setCategory(product.category || getEffectiveCategoriesForStore(store)[0]?.value || "");
     setPrice(String(product.price ?? ""));
     setCostPrice(String(product.costPrice ?? ""));
     setDiscountPrice(product.discountPrice != null ? String(product.discountPrice) : "");
-    setPaymentTypes(
-      Array.isArray(product.paymentTypes) && product.paymentTypes.length > 0
-        ? product.paymentTypes
-        : (product.paymentType ? [product.paymentType] : ["prepay"])
-    );
     setStock(String(product.stock ?? ""));
+    setOriginalStock(Number(product.stock) || 0);
+    setStockChangeReason(null);
     setDescription(product.description || "");
     setVariants(product.variants || []);
+    setAttributes(product.attributes || {});
 
     const existingImages = Array.isArray(product.images) && product.images.length > 0
       ? product.images
@@ -97,37 +132,45 @@ const EditProductPage = () => {
     [addFiles, setUploadError]
   );
 
-  const handleTogglePaymentType = useCallback((type) => {
-    setPaymentTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
-  }, []);
-
   const isGlobalLoading = uploadLoading || saving;
+
+  // ZAXIRA HARAKATI AUDIT JURNALI: zaxira HAQIQATAN o'zgargan, lekin
+  // sabab hali TANLANMAGAN bo'lsa - true (submitni bloklaydi, xuddi
+  // boshqa "required" maydonlar kabi).
+  const stockActuallyChanged = originalStock != null && stock !== "" && Number(stock) !== originalStock;
+  const stockReasonMissing = stockActuallyChanged && !stockChangeReason;
 
   const handleSubmit = useCallback(
     async (e) => {
       e.preventDefault();
+      if (stockReasonMissing) {
+        setAttemptedSubmit(true); // Enter orqali submit qilinsa ham, ogohlantirish endi ko'rinadi
+        return;
+      }
       try {
-        const imageUrls = await resolveUploadedUrls(uploadImage, "products");
+        const imageUrls = await resolveUploadedUrls(uploadImage, `products/${sellerId}`);
         await updateProduct(id, {
           title,
           category,
           price: Number(price),
           costPrice: Number(costPrice),
           discountPrice: discountPrice !== "" ? Number(discountPrice) : null,
-          paymentTypes,
           stock: Number(stock),
           description,
           images: imageUrls,
           variants,
+          attributes,
+          ...(stockActuallyChanged ? { lastStockChangeReason: stockChangeReason } : {}),
         });
         setShowSavedModal(true);
       } catch (err) {
         console.error("Mahsulotni yangilashda xatolik:", err);
       }
     },
-    [id, resolveUploadedUrls, uploadImage, title, category, price, costPrice, discountPrice, paymentTypes, stock, description, variants, updateProduct]
+    [
+      id, sellerId, resolveUploadedUrls, uploadImage, title, category, price, costPrice, discountPrice, stock,
+      description, variants, attributes, updateProduct, stockActuallyChanged, stockChangeReason, stockReasonMissing,
+    ]
   );
 
   if (productLoading) {
@@ -138,7 +181,7 @@ const EditProductPage = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-[#F4F5F9] dark:bg-slate-950 px-6 text-center">
         <p className="text-sm font-bold text-slate-800 dark:text-white">
-          {notOwner ? "Bu mahsulot sizga tegishli emas." : productError}
+          {notOwner ? t("sellerProductForm.notOwner") : productError}
         </p>
         <button
           onClick={() => navigate("/seller/products")}
@@ -151,25 +194,27 @@ const EditProductPage = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
-      <div className="shrink-0 bg-white dark:bg-slate-900 px-5 py-4 shadow-xs flex items-center gap-3">
+    <div className="h-screen overflow-y-auto bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
+      <div className="sticky top-0 z-30 bg-white dark:bg-slate-900 px-5 py-4 shadow-xs flex items-center gap-3">
         <button
           type="button"
           className="p-1 text-slate-500 dark:text-slate-300 active:scale-95 transition-transform"
           onClick={() => navigate("/seller/products")}
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
+          <ChevronLeft size={20} strokeWidth={2.5} />
         </button>
         <div>
-          <h1 className="text-base font-black text-slate-800 dark:text-white tracking-tight">Mahsulotni tahrirlash</h1>
+          <h1 className="text-base font-black text-slate-800 dark:text-white tracking-tight">{t("sellerProductForm.editTitle")}</h1>
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate max-w-[220px]">{title}</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 space-y-4">
-        <FormErrors uploadError={uploadError} dbError={saveError} />
+      <form id="edit-product-form" onSubmit={handleSubmit} className="p-4 pb-36 space-y-4">
+        <FormErrors
+          uploadError={uploadError}
+          dbError={saveError}
+          validationError={attemptedSubmit && stockReasonMissing ? t("sellerProductForm.stockChangeReasonRequired") : null}
+        />
 
         <AIBanner generating={aiGenerating} error={aiError} onGenerate={handleGenerateAI} />
 
@@ -193,20 +238,31 @@ const EditProductPage = () => {
           price={price}
           costPrice={costPrice}
           discountPrice={discountPrice}
-          paymentTypes={paymentTypes}
           stock={stock}
           disabled={isGlobalLoading}
           onPriceChange={setPrice}
           onCostPriceChange={setCostPrice}
           onDiscountPriceChange={setDiscountPrice}
-          onTogglePaymentType={handleTogglePaymentType}
           onStockChange={setStock}
+          originalStock={originalStock}
+          stockChangeReason={stockChangeReason}
+          onStockChangeReasonChange={setStockChangeReason}
         />
+
+        {originalStock != null && (
+          <StockHistoryPanel sellerId={sellerId} productId={id} />
+        )}
 
         <VariantsCard
           variants={variants}
           disabled={isGlobalLoading}
           onVariantsChange={setVariants}
+        />
+
+        <AttributesCard
+          attributes={attributes}
+          disabled={isGlobalLoading}
+          onAttributesChange={setAttributes}
         />
 
         <DescriptionCard
@@ -216,23 +272,43 @@ const EditProductPage = () => {
           onGenerate={handleGenerateAI}
           onDescriptionChange={setDescription}
         />
-      </form>
 
-      <div className="shrink-0 px-4 pt-2 pb-24 bg-[#F4F5F9] dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800">
+        {store?.aiCeoEnabled === true && (
+          <SocialPostGeneratorCard
+            platform={socialPlatform}
+            onPlatformChange={setSocialPlatform}
+            postText={socialPostText}
+            onPostTextChange={setSocialPostText}
+            generating={socialGenerating}
+            error={socialError}
+            onGenerate={handleGenerateSocialPost}
+            productImageUrl={images[0]?.url || null}
+          />
+        )}
+
+        <InstagramAdImageCard imageUrl={product?.aiAdImageUrl || null} />
+
+        <StoryAdImageCard
+          productId={id}
+          initialImageUrl={product?.aiStoryImageUrl || null}
+          aiCeoEnabled={store?.aiCeoEnabled === true}
+        />
+
+        <SellerReviewsCard productId={id} />
+
         <SubmitBar
           isGlobalLoading={isGlobalLoading}
           uploadLoading={uploadLoading}
           uploadProgress={uploadProgress}
-          floating={false}
-          idleLabel="O'zgarishlarni saqlash"
-          savingLabel="Saqlanmoqda..."
+          idleLabel={t("sellerProductForm.saveChanges")}
+          savingLabel={t("sellerProductForm.saving")}
         />
-      </div>
+      </form>
 
       {showSavedModal && (
         <StatusModal
           variant="success"
-          title="O'zgarishlar saqlandi! ✅"
+          title={t("sellerProductForm.changesSaved")}
           onClose={() => navigate(-1)}
         />
       )}

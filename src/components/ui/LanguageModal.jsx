@@ -1,11 +1,13 @@
 import { memo } from "react";
+import { X, Check } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { SUPPORTED_LANGUAGES, translations } from "@/i18n/translations";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 const LANGUAGE_META = {
-  uz: { flag: "🇺🇿" },
-  ru: { flag: "🇷🇺" },
-  en: { flag: "🇬🇧" },
+  uz: { code: "UZ", colorClass: "bg-emerald-500" },
+  ru: { code: "RU", colorClass: "bg-blue-500" },
+  en: { code: "EN", colorClass: "bg-indigo-500" },
 };
 
 const LanguageModal = ({ onClose }) => {
@@ -16,8 +18,10 @@ const LanguageModal = ({ onClose }) => {
     onClose();
   };
 
+  useEscapeToClose(onClose);
+
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-end justify-center animate-fade-in">
+    <div className="fixed inset-0 bg-slate-900/55 z-50 flex items-end justify-center animate-fade-in" role="dialog" aria-modal="true">
       <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[28px] p-5 space-y-4 shadow-xl border-t border-slate-100 dark:border-slate-800">
         <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3">
           <div>
@@ -26,9 +30,9 @@ const LanguageModal = ({ onClose }) => {
           </div>
           <button
             onClick={onClose}
-            className="w-7 h-7 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 rounded-full flex items-center justify-center font-bold text-xs"
+            className="w-7 h-7 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 rounded-full flex items-center justify-center"
           >
-            ✕
+            <X size={13} />
           </button>
         </div>
 
@@ -44,11 +48,15 @@ const LanguageModal = ({ onClose }) => {
               }`}
             >
               <span className="flex items-center gap-3 font-bold text-sm">
-                <span className="text-xl">{LANGUAGE_META[lang].flag}</span>
+                <span className={`w-8 h-8 rounded-lg ${LANGUAGE_META[lang].colorClass} text-white text-[10px] font-black flex items-center justify-center shrink-0`}>
+                  {LANGUAGE_META[lang].code}
+                </span>
                 {translations[lang].language_name}
               </span>
               {language === lang && (
-                <span className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs">✓</span>
+                <span className="w-5 h-5 rounded-full bg-blue-600 flex items-center justify-center text-white">
+                  <Check size={11} strokeWidth={3} />
+                </span>
               )}
             </button>
           ))}

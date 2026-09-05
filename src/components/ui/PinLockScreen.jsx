@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Lock, Delete } from "lucide-react";
 
 const PinLockScreen = ({ correctPin, onUnlock }) => {

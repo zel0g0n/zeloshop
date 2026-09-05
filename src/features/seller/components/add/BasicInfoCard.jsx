@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
-import { getCategoriesForNiche } from "@/constants/productCategories";
+import { getEffectiveCategoriesForStore } from "@/config/categoryCustomization";
 import { useSession } from "@/context/SessionContext";
+import { useLanguage } from "@/context/LanguageContext";
 
 const CUSTOM_OPTION = "__custom__";
 
@@ -10,7 +11,13 @@ const CUSTOM_OPTION = "__custom__";
 // ilovaning boshqa qismlari bilan bir xil dizaynda.
 const BasicInfoCard = ({ title, category, disabled, onTitleChange, onCategoryChange }) => {
   const { store } = useSession();
-  const categoryOptions = getCategoriesForNiche(store?.category);
+  const { t } = useLanguage();
+  // 15-NICHE UNIVERSAL PLATFORMA (band #20): niche'ning bazaviy
+  // kategoriyalari ENDI sotuvchining shaxsiy moslashtirishi
+  // (yashirilgan/nomlangan/tartiblangan/qo'shilgan - "Kategoriyalarni
+  // boshqarish" sozlamalari) bilan birlashtirilgan holda ko'rsatiladi -
+  // batafsil izoh: `config/categoryCustomization.js`.
+  const categoryOptions = getEffectiveCategoriesForStore(store);
   const dropdownRef = useRef(null);
 
   const isKnownOption = categoryOptions.some((opt) => opt.value === category);
@@ -46,12 +53,12 @@ const BasicInfoCard = ({ title, category, disabled, onTitleChange, onCategoryCha
   return (
     <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs space-y-3.5">
       <div className="space-y-1">
-        <label className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Mahsulot nomi *</label>
+        <label className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{t("sellerProductForm.productNameLabel")}</label>
         <input
           type="text"
           required
           disabled={disabled}
-          placeholder="Masalan: Vitamin C Serum"
+          placeholder={t("sellerProductForm.productNamePlaceholder")}
           value={title}
           onChange={(e) => onTitleChange(e.target.value)}
           className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl font-semibold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 border border-transparent disabled:opacity-60"
@@ -59,7 +66,7 @@ const BasicInfoCard = ({ title, category, disabled, onTitleChange, onCategoryCha
       </div>
 
       <div className="space-y-1">
-        <label className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">Kategoriya tanlang</label>
+        <label className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block">{t("sellerProductForm.categoryLabel")}</label>
 
         {!isCustomMode ? (
           <div className="relative" ref={dropdownRef}>
@@ -71,7 +78,7 @@ const BasicInfoCard = ({ title, category, disabled, onTitleChange, onCategoryCha
                 isOpen ? "ring-1 ring-indigo-500" : ""
               } ${selectedLabel ? "text-slate-700 dark:text-slate-200" : "text-slate-400 dark:text-slate-500"}`}
             >
-              <span className="truncate">{selectedLabel || "Kategoriyani tanlang"}</span>
+              <span className="truncate">{selectedLabel || t("sellerProductForm.chooseCategoryPlaceholder")}</span>
               <span className={`text-slate-400 dark:text-slate-500 transition-transform shrink-0 ml-2 ${isOpen ? "rotate-180" : ""}`}>▾</span>
             </button>
 
@@ -97,7 +104,7 @@ const BasicInfoCard = ({ title, category, disabled, onTitleChange, onCategoryCha
                   onClick={() => handleSelect(CUSTOM_OPTION)}
                   className="w-full text-left px-4 py-2.5 text-xs font-black text-indigo-500 dark:text-indigo-400"
                 >
-                  + O'z kategoriyamni yozaman
+                  {t("sellerProductForm.ownCategory")}
                 </button>
               </div>
             )}
@@ -108,7 +115,7 @@ const BasicInfoCard = ({ title, category, disabled, onTitleChange, onCategoryCha
               type="text"
               autoFocus
               disabled={disabled}
-              placeholder="Kategoriya nomini yozing"
+              placeholder={t("sellerProductForm.customCategoryPlaceholder")}
               value={category}
               onChange={(e) => onCategoryChange(e.target.value)}
               className="flex-1 h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl font-bold text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
@@ -119,7 +126,7 @@ const BasicInfoCard = ({ title, category, disabled, onTitleChange, onCategoryCha
               onClick={() => { setIsCustomMode(false); onCategoryChange(""); }}
               className="shrink-0 h-11 px-3 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-xl text-xs font-bold"
             >
-              Bekor
+              {t("sellerProductForm.cancelBtn")}
             </button>
           </div>
         )}

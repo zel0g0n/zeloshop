@@ -67,22 +67,25 @@ export const useProductImages = () => {
   }, []);
 
   /**
-   * Barcha YANGI (fayl sifatida tanlangan) rasmlarni yuklaydi, mavjud
-   * (allaqachon URL'ga ega) rasmlarni o'zgarishsiz qoldiradi, va
-   * natijada tartiblangan URL massivini qaytaradi (birinchisi — asosiy).
+   * Barcha YANGI (fayl sifatida tanlangan) rasmlarni PARALLEL
+   * yuklaydi (mavjud, allaqachon URL'ga ega rasmlar tegilmaydi), va
+   * natijada tartiblangan URL massivini qaytaradi (birinchisi —
+   * asosiy).
+   *
+   * MUHIM TUZATISH: oldin bu yerda `for...await` orqali rasmlar
+   * KETMA-KET (bittasi tugagach, keyingisi boshlanadi) yuklanardi —
+   * 4 ta rasm bo'lsa, bu umumiy kutish vaqtini 4 baravargacha
+   * cho'zishi mumkin edi. Endi `Promise.all` bilan barchasi BIR
+   * VAQTDA yuklanadi — tartib (birinchi rasm = asosiy) baribir
+   * saqlanadi, chunki `Promise.all` natijalarni KIRISH massivi bilan
+   * BIR XIL tartibda qaytaradi (tugash tartibiga qarab EMAS).
    */
   const resolveUploadedUrls = useCallback(
     async (uploadImageFn, folder) => {
-      const urls = [];
-      for (const img of images) {
-        if (img.url) {
-          urls.push(img.url);
-        } else if (img.file) {
-          const uploadedUrl = await uploadImageFn(img.file, folder);
-          urls.push(uploadedUrl);
-        }
-      }
-      return urls;
+      const uploadPromises = images.map((img) =>
+        img.url ? Promise.resolve(img.url) : uploadImageFn(img.file, folder)
+      );
+      return Promise.all(uploadPromises);
     },
     [images]
   );

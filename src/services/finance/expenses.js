@@ -7,8 +7,17 @@ import { collection, addDoc, deleteDoc, doc, serverTimestamp, query, orderBy } f
  * Bular avtomatik hisoblanmaydi (kuryer haqi, reklama va h.k. hech
  * qayerda kuzatilmaydi) — shuning uchun sotuvchi ularni QO'LDA
  * kiritadi.
+ *
+ * MUHIM (2026-09, xodim/kuryer "batafsil statistika" paneli):
+ * `linkedStaffId`/`linkedCourierId` — ixtiyoriy, xarajatni MA'LUM BIR
+ * xodim yoki kuryerga bog'lash uchun (masalan "Aliyevga to'langan
+ * kuryer haqi"). Umumiy (hech kimga bog'lanmagan) xarajatlar uchun bu
+ * maydonlar `null` bo'lib qoladi — P&L Dashboard'dagi eski, umumiy
+ * xarajat qo'shish oqimi (`AddExpenseForm.jsx`) O'ZGARISHSIZ ishlayveradi.
+ * Firestore `undefined` qiymatni yozishga ruxsat bermagani uchun
+ * ataylab `|| null` bilan aniq belgilanadi.
  */
-export const addExpense = async (sellerId, { name, amount, category }) => {
+export const addExpense = async (sellerId, { name, amount, category, linkedStaffId, linkedCourierId }) => {
   if (!sellerId) throw new Error("Sotuvchi ID topilmadi.");
   if (!name?.trim() || !amount || Number(amount) <= 0) {
     throw new Error("Xarajat nomi va summasi to'g'ri kiritilishi shart.");
@@ -18,6 +27,8 @@ export const addExpense = async (sellerId, { name, amount, category }) => {
       name: name.trim(),
       amount: Number(amount),
       category: category === "marketing" ? "marketing" : "opex",
+      linkedStaffId: linkedStaffId || null,
+      linkedCourierId: linkedCourierId || null,
       createdAt: serverTimestamp(),
       createdAtMs: Date.now(),
     });

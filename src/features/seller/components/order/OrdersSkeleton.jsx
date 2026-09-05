@@ -1,4 +1,3 @@
-import React from "react";
 
 const Block = ({ className }) => (
   <div className={`bg-slate-200 dark:bg-slate-800 rounded-2xl animate-pulse ${className}`} />

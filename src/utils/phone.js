@@ -45,3 +45,21 @@ export const isValidUzPhone = (value) => {
   if (digits.startsWith("998")) digits = digits.slice(3);
   return digits.length === DIGITS_AFTER_CODE;
 };
+
+/**
+ * YANGI (kuryer taklifnomasi maydonidagi kritik xato tuzatishi bilan
+ * birga qo'shildi) — "998" mamlakat kodidan KEYIN haqiqatan biror
+ * raqam kiritilganmi, yo'qmi ekanini tekshiradi. IXTIYORIY telefon
+ * maydonlari (masalan `CourierManagementPage.jsx`dagi kuryer telefoni)
+ * uchun kerak: `onFocus`da "+998 " bilan "to'ldirilgan", lekin
+ * FOYDALANUVCHI TOMONIDAN aslida bo'sh qoldirilgan maydonni "raqam
+ * kiritilgan" deb NOTO'G'RI hisoblab, ortiqcha "to'liq raqam kiriting"
+ * xatosini ko'rsatib yubormaslik uchun - oddiy `isValidUzPhone`ning
+ * o'zi buni ajrata olmaydi (u FAQAT "to'liq 9 xonami" tekshiradi,
+ * "umuman bo'shmi" emas).
+ */
+export const hasMeaningfulPhoneDigits = (value) => {
+  let digits = extractDigits(value);
+  if (digits.startsWith("998")) digits = digits.slice(3);
+  return digits.length > 0;
+};

@@ -16,7 +16,7 @@ const FilterType = () => {
   const { activeType, changeType } = useChangeType();
 
   return (
-    <div className='sticky top-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md z-30 border-b border-gray-100 dark:border-slate-800 p-4 space-y-3'>
+    <div className='sticky top-0 bg-white/95 dark:bg-slate-950/95 z-30 border-b border-gray-100 dark:border-slate-800 p-4 space-y-3'>
        <div className="flex gap-2 overflow-x-auto no-scrollbar py-0.5 scrollbar-hide">
           {categories.map((cat) => (
             <button

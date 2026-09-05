@@ -1,26 +1,30 @@
-import React, { memo } from 'react'
+import { memo } from 'react';
 import ProductItem from './ProductItem'
 
-const ProductsList = ({ products, selectedIds, onToggleSelect, onEditProduct, onDuplicate, onToggleActive, onDelete, onInlineUpdate }) => {
+// OLDIN: mahsulotlar 2 ustunli katakda (`sm:grid-cols-2`) ko'rsatilardi.
+// Endi — spetsifikatsiyaga mos, YAGONA ustunli, ixcham ro'yxat (har
+// bir mahsulot — o'zining, to'liq kenglikdagi qatorida).
+// `staffId`/`staffName` - FAQAT xodim Mini App'idan (`StaffProductsSection.jsx`)
+// beriladi, "ombor nazorati" (zaxira harakati audit jurnali) uchun
+// (batafsil izoh: `ProductItem.jsx`).
+const ProductsList = ({ products, selectedIds, onToggleSelect, onEditProduct, onDuplicate, onToggleActive, onDelete, onInlineUpdate, staffId, staffName }) => {
   return (
     <div>
-      {products.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-          {products.map((product) => (
-            <ProductItem
-              key={product.id}
-              prod={product}
-              isSelected={selectedIds.has(product.id)}
-              onToggleSelect={onToggleSelect}
-              onEdit={onEditProduct}
-              onDuplicate={onDuplicate}
-              onToggleActive={onToggleActive}
-              onDelete={onDelete}
-              onInlineUpdate={onInlineUpdate}
-            />
-          ))}
-        </div>
-      )}
+      {products.map((product) => (
+        <ProductItem
+          key={product.id}
+          prod={product}
+          isSelected={selectedIds.has(product.id)}
+          onToggleSelect={onToggleSelect}
+          onEdit={onEditProduct}
+          onDuplicate={onDuplicate}
+          onToggleActive={onToggleActive}
+          onDelete={onDelete}
+          onInlineUpdate={onInlineUpdate}
+          staffId={staffId}
+          staffName={staffName}
+        />
+      ))}
     </div>
   )
 }

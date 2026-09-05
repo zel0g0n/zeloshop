@@ -1,11 +1,11 @@
-import React, { memo } from "react";
+import { memo } from "react";
 import { Package } from "lucide-react";
-import { getCategoriesForNiche } from "@/constants/productCategories";
+import { getEffectiveCategoriesForStore } from "@/config/categoryCustomization";
 import { useSession } from "@/context/SessionContext";
 
 const ProductsCategoryTabs = ({ selectedCategory, onSelectCategory }) => {
   const { store } = useSession();
-  const categories = ["Barchasi", ...getCategoriesForNiche(store?.category).map((c) => c.value)];
+  const categories = ["Barchasi", ...getEffectiveCategoriesForStore(store).map((c) => c.value)];
 
   return (
     <div className="px-4 pt-3 flex gap-2 overflow-x-auto no-scrollbar py-1 bg-white dark:bg-slate-900">

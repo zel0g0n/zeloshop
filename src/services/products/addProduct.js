@@ -14,18 +14,34 @@ const addProduct = async (productData, sellerId) => {
     // CartItem va boshqa ko'plab joylar hali ham shu maydonni o'qiydi.
     const images = Array.isArray(productData.images) ? productData.images.filter(Boolean).slice(0, 4) : [];
 
+    // 15-NICHE UNIVERSAL PLATFORMA: sohaga mos dinamik atributlar
+    // (`AttributesCard.jsx`, `src/config/niches.js`) - faqat sotuvchi
+    // haqiqatan to'ldirgan (bo'sh bo'lmagan) qiymatlar saqlanadi, bo'sh
+    // maydonlar Firestore hujjatini keraksiz shishirmasligi uchun.
+    const attributes = {};
+    if (productData.attributes && typeof productData.attributes === "object") {
+      Object.entries(productData.attributes).forEach(([key, value]) => {
+        if (value !== "" && value != null) attributes[key] = value;
+      });
+    }
+
     const productDataForFirebase = {
       name: productData.title || "",
       category: productData.category || "Boshqa",
       price: Number(productData.price) || 0,
       costPrice: Number(productData.costPrice) || 0,
       discountPrice: productData.discountPrice != null ? Number(productData.discountPrice) : null,
-      paymentTypes: Array.isArray(productData.paymentTypes) && productData.paymentTypes.length > 0
-        ? productData.paymentTypes
-        : ["prepay"],
+      // OLDIN: `paymentTypes` shu yerda, MAHSULOT darajasida saqlanardi
+      // - bu, savatda turli mahsulotlar turli to'lov turini talab
+      // qilishi mumkinligi sababli, checkout'da "hech qanday umumiy
+      // to'lov turi topilmadi" xatosiga olib kelardi. ENDI to'lov turi
+      // BUTUN DO'KON uchun `sellers/{id}.paymentTypes`da (2026-09
+      // punkt-royxati, "To'lovlar va Tariflar" sozlamasi) saqlanadi -
+      // mahsulot hujjatida bu maydon UMUMAN yo'q.
       stock: Number(productData.stock) || 0,
       description: productData.description || "",
       variants: productData.variants || [],
+      attributes,
       images,
       image: images[0] || productData.image || null,
 

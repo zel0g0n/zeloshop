@@ -31,6 +31,61 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    // --- Xodimlar (Staff) ruxsat tekshiruvi ---
+    // "Xodimlar" funksiyasi uchun: sotuvchi cheklangan huquqli xodim
+    // hisoblari qo'sha oladi (`staff/{staffId}` — pastga qarang), har
+    // biriga qaysi amallarni ruxsat berishni O'ZI belgilaydi
+    // (`permissions.manageProducts` / `permissions.manageOrders`).
+    // Bu funksiya, berilgan `sellerId`ga tegishli MA'LUMOT ustida
+    // ishlayotgan chaqiruvchi (`request.auth.uid`) HAQIQATAN o'sha
+    // sotuvchining FAOL xodimi ekanligini, VA aynan so'ralgan ruxsatga
+    // ega ekanligini tekshiradi. ATAYLAB: AI CEO uchun HECH QANDAY
+    // `perm` qiymati mavjud emas — AI CEO'ga tegishli barcha
+    // to'plamlar (pastga qarang) bu funksiyani UMUMAN chaqirmaydi,
+    // shuning uchun xodim ularga hech qachon kira olmaydi.
+    function staffPermission(sellerId, perm) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/staff/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.sellerId == sellerId &&
+        get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.status == "active" &&
+        get(/databases/$(database)/documents/staff/$(request.auth.uid)).data.permissions[perm] == true;
+    }
+
+    // --- Z-TARIFLAR (Z-Start/Z-Pro/Z-Biznes) — HAQIQIY chegara
+    // tekshiruvi (2026-09, "tarif tanlashni to'liq ishga tushir"
+    // bo'limi) ---
+    // MUHIM: bu yerdagi sonlar `functions/lib/tariffs.js`dagi
+    // `TARIFF_LIMITS` bilan ATAYLAB QAYTA YOZILGAN (rules alohida
+    // tilda yozilgani uchun, boshqa fayldan import qila olmaydi) —
+    // xuddi `STAFF_BOT_USERNAME` bilan bir xil, loyihada allaqachon
+    // o'rnatilgan "frontend+backend duplikatsiyasi" naqshi. Ikkalasi
+    // o'zgarsa, IKKALASINI HAM birga yangilash SHART.
+    //
+    // Banner (`sellers.heroBanners` — bitta hujjat ichidagi massiv)
+    // to'g'ridan-to'g'ri shu yerda `.size()` bilan tekshiriladi.
+    // Aksiya (`products.discountPrice`) va promo kod
+    // (`sellers/{id}/coupons`) esa KO'P HUJJATGA tarqalgan bo'lgani
+    // uchun (rules kolleksiya bo'yicha "nechta hujjat bor" so'rovini
+    // BAJARA OLMAYDI) — OLDINDAN HISOBLANGAN hisoblagich maydonlariga
+    // (`sellers.activeDiscountCount` / `sellers.couponCount`,
+    // `functions/products.js`/`functions/coupons.js`dagi trigger'lar
+    // orqali avtomatik yangilanadi) tayanadi.
+    function tariffRank(plan) {
+      return plan == "biznes" ? 2 : (plan == "pro" ? 1 : 0);
+    }
+    function tariffEffectivePlan(sellerData) {
+      let basePlan = sellerData.get("tariffPlan", "start");
+      let trialPlan = sellerData.get("tariffTrialPlan", "start");
+      let trialActive = sellerData.get("tariffTrialActive", false) == true;
+      let trialExpires = sellerData.get("tariffTrialExpiresAt", request.time);
+      return (trialActive && trialExpires > request.time && tariffRank(trialPlan) > tariffRank(basePlan))
+        ? trialPlan
+        : basePlan;
+    }
+    function tariffBannerLimit(plan) { return plan == "start" ? 3 : 999999999; }
+    function tariffDiscountLimit(plan) { return plan == "start" ? 3 : 999999999; }
+    function tariffCouponLimit(plan) { return plan == "start" ? 0 : (plan == "pro" ? 3 : 999999999); }
+
     // --- Super adminlar (admins/{uid}) ---
     // Faqat EGASI o'z hujjatini o'qiy oladi (frontend "men adminmanmi"
     // deb tekshirishi uchun kerak) — boshqa hech kim boshqa birovning
@@ -41,15 +96,68 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // --- Tarif almashtirish so'rovlari (`tariffRequests/{id}`, 2026-09) ---
+    // Sotuvchi "Tariflar" sahifasidan "Qiziqish bildirish" bosganda,
+    // `functions/notifications.js`dagi `contactAdmin` (Admin SDK, bu
+    // qoidalardan MUSTASNO) yozadi — shuning uchun CREATE hech qachon
+    // mijoz SDK'idan kelmaydi, doim `false`.
+    //
+    // O'QISH: so'rov egasi (sotuvchi) o'zinikini, admin esa BARCHASINI
+    // ko'ra oladi (`AdminTariffRequestsPage.jsx`).
+    //
+    // YANGILASH: FAQAT admin, va FAQAT holat/hal qilingan-vaqt/kim-hal-
+    // qilgan maydonlarini — so'rovning asl mazmuni (kim, qaysi tarif,
+    // qanday xabar, qachon yaratilgan) o'zgarmas bo'lib qolishi kerak
+    // (audit izi sifatida).
+    match /tariffRequests/{requestId} {
+      allow read: if isAdmin() || isOwner(resource.data.sellerId);
+      allow create: if false;
+      allow update: if isAdmin() &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(["sellerId", "storeName", "phone", "requestedPlan", "currentPlan", "message", "createdAt"]);
+      allow delete: if false;
+    }
+
     // --- Mijozlar (clients/{clientId}) ---
     // Har bir mijoz FAQAT o'z hujjatini o'qiy/yoza oladi.
     match /clients/{clientId} {
-      allow read, update: if isOwner(clientId);
+      allow read: if isOwner(clientId);
+      // XAVFSIZLIK TUZATISHI (2026-09 audit, P0): `referredBy`,
+      // `referredForSellerId`, `referralDiscountUsed` — bular FAQAT
+      // `verifyTelegramAuth` Cloud Function (Admin SDK) tomonidan,
+      // haqiqiy Telegram taklif havolasi orqali BIR MARTA yoziladigan
+      // maydonlar (`functions/auth.js`). Frontend hech qachon bu
+      // maydonlarni to'g'ridan-to'g'ri `updateDoc` bilan yozmaydi —
+      // shuning uchun ularni bloklash MAVJUD funksionallikni buzmaydi.
+      // Oldin bu maydonlar ham "erkin yoziladigan" ro'yxatda edi —
+      // ya'ni istalgan mijoz o'zini "taklif qilingan" deb yozib,
+      // chegirma/referal mukofotini firibgarlik bilan qo'lga kirita
+      // olardi (`functions/orders.js`dagi referal mantiqi orqali).
+      allow update: if isOwner(clientId) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(["referredBy", "referredForSellerId", "referralDiscountUsed"]);
       // Hujjat Cloud Function orqali (Admin SDK bilan) yaratiladi;
       // klient tomondan to'g'ridan-to'g'ri create qilinishiga
       // ehtiyoj yo'q, shuning uchun create — false.
       allow create: if false;
       allow delete: if false;
+    }
+
+    // Bildirishnoma jurnali (`notificationLogs/{id}`) - mijoz ilova
+    // ICHIDA, o'ziga yuborilgan xabarlar TARIXINI ko'rishi uchun
+    // (savat/sevimlilar/qayta sotib olish eslatmalari, CRM xabarlari,
+    // referal mukofoti). Mijoz FAQAT O'ZINIKINI o'qiy oladi, yozish
+    // esa FAQAT server (Admin SDK) tomonidan.
+    //
+    // QO'SHILDI ("Universal Inbox" MVP, ZeloShop TOP 15, #12): SOTUVCHI
+    // ham o'zi yuborgan (`resource.data.sellerId` unga mos) barcha
+    // xabarlar jurnalini (qaysi mijozga bo'lishidan qat'i nazar)
+    // ko'ra oladi - bu, sotuvchining "avtomatik xabarlar" birlashtirilgan
+    // oqimi uchun kerak (`ProductAssistant`dagi kabi emas, bu yerda
+    // ALLAQACHON mavjud, haqiqiy hodisa-darajasidagi ma'lumot).
+    match /notificationLogs/{logId} {
+      allow read: if isSignedIn() && (request.auth.uid == resource.data.clientId || request.auth.uid == resource.data.sellerId);
+      allow write: if false;
     }
 
     // --- Sotuvchilar (sellers/{sellerId}) ---
@@ -68,7 +176,41 @@ service cloud.firestore {
       // (so'rov jimgina "ruxsat yo'q" xatosi bilan tugardi).
       // YOZISH: hamon faqat egasi (yoki admin).
       allow read: if true;
-      allow update: if isOwner(sellerId) || isAdmin();
+      // XAVFSIZLIK TUZATISHI (2026-09 audit, P0): oldin egasi
+      // HUJJATNING ISTALGAN maydonini o'zgartira olardi — shu jumladan
+      // `aiCeoEnabled` (pullik AI CEO funksiyasi, faqat admin
+      // `setSellerAiCeoAccess.js` orqali yoqishi kerak) va `status`
+      // (admin tomonidan "suspended" qilingan sotuvchi o'zini o'zi
+      // qaytadan "active" qilib qo'yishi mumkin edi, `updateSellerStatus.js`
+      // orqali qo'yilgan cheklovni butunlay chetlab o'tib). Bu maydonlar
+      // frontend'dagi HECH BIR sotuvchi-tarafdagi `updateSeller(...)`
+      // chaqiruvida ishlatilmaydi (faqat admin-only servicelarda) —
+      // shuning uchun bloklash mavjud funksionallikni buzmaydi.
+      // Z-TARIFLAR (2026-09): `tariffPlan`/`tariffTrial*`/
+      // `aiCeoGrantedViaTariff` — FAQAT Cloud Function'lar (Admin SDK,
+      // bu qoidalardan MUSTASNO — `functions/tariffs.js`) yozadi,
+      // sotuvchi o'zi TO'G'RIDAN-TO'G'RI o'zgartira olmasligi SHART
+      // (aks holda brauzer konsolidan o'zini "biznes" qilib qo'yishi
+      // mumkin edi). `activeDiscountCount`/`couponCount` esa
+      // `functions/products.js`/`functions/coupons.js`dagi trigger'lar
+      // yozadigan HISOBLAGICH — xuddi shunday himoyalangan.
+      //
+      // BANNER LIMITI: `heroBanners` o'zgarayotgan bo'lsagina (boshqa
+      // maydonlarni yangilash, plan pasaytirilgandan keyin ESKI,
+      // endi limitdan OSHIB ketgan massivga tegmasdan, bloklanmasligi
+      // uchun) yangi uzunlik joriy tarifga mos kelishi tekshiriladi.
+      allow update: if isAdmin() ||
+        (isOwner(sellerId) &&
+         !request.resource.data.diff(resource.data).affectedKeys()
+           .hasAny(["aiCeoEnabled", "status", "tgID", "referredBySellerId",
+                    "referralPaidConfirmed", "referralPaidConfirmedAt",
+                    "trustStats", "rollupsBackfilledAt",
+                    "tariffPlan", "tariffTrialActive", "tariffTrialPlan",
+                    "tariffTrialStartedAt", "tariffTrialExpiresAt", "tariffTrialsUsed",
+                    "aiCeoGrantedViaTariff", "activeDiscountCount", "couponCount",
+                    "tariffCountersBackfilledAt"]) &&
+         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["heroBanners"]) ||
+          request.resource.data.get("heroBanners", []).size() <= tariffBannerLimit(tariffEffectivePlan(resource.data))));
       // Do'kon ro'yxatdan o'tish oqimi orqali yaratiladi — faqat o'z
       // uid'iga mos hujjatni, va faqat status="active" bilan (moderatsiya
       // yo'q, lekin boshqa qiymat bilan yaratib bo'lmaydi).
@@ -89,19 +231,241 @@ service cloud.firestore {
       allow read, write: if isOwner(sellerId) || isAdmin();
     }
 
-    // --- Sotuvchining moliyaviy xarajatlari (P&L Dashboard uchun) ---
-    // Faqat egasi (yoki admin) o'qiy/yoza oladi — bu moliyaviy
-    // ma'lumot, boshqa hech kimga ko'rinmasligi kerak.
-    match /sellers/{sellerId}/expenses/{expenseId} {
+    // --- Mijozlar haqida sotuvchining shaxsiy izohlari (CRM Notes) ---
+    // Moliyaviy/maxfiy ma'lumot emas — faqat sotuvchining o'zi
+    // yozgan eslatmalar. Faqat egasi (yoki admin) o'qiy/yoza oladi.
+    match /sellers/{sellerId}/customerNotes/{clientId} {
       allow read, write: if isOwner(sellerId) || isAdmin();
+    }
+
+    // --- AI CEO: mahsulot qoralamalari (2-bosqich) ---
+    // Sotuvchi tez-tarzda (rasm + qisqa izoh) navbatga qo'shadi,
+    // vaqt bo'yicha funksiya (Admin SDK) AI orqali qayta ishlaydi,
+    // sotuvchi ilovada ko'rib chiqib tasdiqlaydi/rad etadi - hammasi
+    // FAQAT egasi tomonidan boshqariladi.
+    match /sellers/{sellerId}/productDrafts/{draftId} {
+      allow read, write: if isOwner(sellerId) || isAdmin();
+    }
+
+    // --- Sotuvchining moliyaviy xarajatlari (P&L Dashboard uchun) ---
+    // Faqat egasi (yoki admin) YOZA oladi — bu moliyaviy ma'lumot,
+    // faqat sotuvchi o'zi qo'shadi/o'zgartiradi. O'QISH esa (2026-09
+    // punkt-royxati, 2-band "Advanced Team & RBAC"): `viewFinance`
+    // ruxsatiga ega FAOL xodimga (masalan "Buxgalter" roli) ham
+    // ochiq — u FAQAT O'QIYDI, hech qachon yozmaydi.
+    match /sellers/{sellerId}/expenses/{expenseId} {
+      allow read: if isOwner(sellerId) || isAdmin() || staffPermission(sellerId, "viewFinance");
+      allow write: if isOwner(sellerId) || isAdmin();
+    }
+
+    // --- Har bir buyurtmaning TANNARX surati (real P&L uchun) ---
+    // `orders/{orderId}`ning O'ZINI xaridor ham o'qiy oladi - shuning
+    // uchun tannarx (ulgurji narx) ATAYLAB shu yerga, ALOHIDA
+    // hujjatga yoziladi, faqat sotuvchi (yoki admin) ko'rishi uchun.
+    // Faqat `createOrder` Cloud Function (Admin SDK) yozadi - mijoz
+    // SDK'i orqali yozib/o'zgartirib bo'lmaydi.
+    match /sellers/{sellerId}/orderCosts/{orderId} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow write: if false;
+    }
+
+    // --- Kunlik savdo/foyda YIG'MA yozuvlari (server-side rollup) ---
+    // Dashboard/P&L/Foyda tahlili grafigi endi buyurtmalar tarixini
+    // to'liq skanerlash o'rniga shu KICHIK, kun-darajasidagi
+    // hujjatlarni o'qiydi (batafsil: `functions/orderRollups.js`).
+    // Bu — moliyaviy ma'lumot, faqat egasi o'qiy oladi; faqat Cloud
+    // Function (trigger/migratsiya) yozadi. 2026-09 punkt-royxati,
+    // 2-band: `viewFinance` ruxsatiga ega xodim ham o'qiy oladi.
+    match /sellers/{sellerId}/orderRollups/{dateKey} {
+      allow read: if isOwner(sellerId) || isAdmin() || staffPermission(sellerId, "viewFinance");
+      allow write: if false;
+    }
+
+    // --- Mijozlar bo'yicha YIG'MA yozuvlar (CRM uchun, server-side) ---
+    // CRM Hub endi har bir mijozning butun buyurtma tarixini qayta
+    // skanerlash o'rniga shu (mijozlar soniga teng, odatda ancha
+    // kam) yozuvlarni o'qiydi. Faqat egasi o'qiy oladi; faqat Cloud
+    // Function (trigger/migratsiya) yozadi. 2026-09 punkt-royxati,
+    // 2-band ("Advanced Team & RBAC"): `manageCustomers` ruxsatiga
+    // ega xodim (masalan "Marketing menejeri"/"Sotuv menejeri") ham
+    // mijozlar ro'yxatini/segmentlarni ko'ra oladi.
+    match /sellers/{sellerId}/customers/{clientId} {
+      allow read: if isOwner(sellerId) || isAdmin() || staffPermission(sellerId, "manageCustomers");
+      allow write: if false;
+    }
+
+    // --- Yuborilgan CRM (marketing) kampaniyalari (Biznes Buyruq
+    // Markazi, 2026-09, 3-band "eng yaxshi marketing kampaniyasi") ---
+    // `functions/notifications.js`dagi `handleSendCrmNotification` har
+    // bir "Yuborish" bosilganda shu yerga bitta yozuv qo'shadi -
+    // sotuvchi keyinchalik qaysi kampaniya qancha auditoriyaga
+    // yetganini (va, promokod bo'lsa, qancha daromad keltirganini)
+    // ko'rishi uchun. Faqat egasi o'qiydi; faqat Cloud Function
+    // yozadi. `manageCustomers` ruxsatiga ega xodim ham o'qiy oladi
+    // (2026-09 punkt-royxati, 2-band) — u shu kampaniyalarni yaratgan
+    // bo'lishi ham mumkin (`sendCrmNotification` endi xodimni ham
+    // qabul qiladi).
+    match /sellers/{sellerId}/campaigns/{campaignId} {
+      allow read: if isOwner(sellerId) || isAdmin() || staffPermission(sellerId, "manageCustomers");
+      allow write: if false;
+    }
+
+    // --- Hamkor/blogger promokodlari uchun SOTUV STATISTIKASI (#117) ---
+    // `functions/orders.js` har bir buyurtma yaratilganda, agar
+    // ishlatilgan promokod `partnerName`ga ega bo'lsa (ya'ni aniq bir
+    // hamkorga bog'langan bo'lsa), shu yerga (buyurtmalar soni +
+    // umumiy sof savdo summasi) ATOMIK ravishda oshiradi - sotuvchi
+    // BARCHA buyurtmalarni qayta skanerlamasdan, har bir hamkorning
+    // haqiqiy samaradorligini ko'radi. Moliyaviy ma'lumot bo'lgani
+    // uchun, xuddi boshqa YIG'MA statistikalar kabi, faqat egasi
+    // o'qiydi va yozish HAR DOIM taqiqlangan (faqat Cloud Function).
+    match /sellers/{sellerId}/partnerCodeStats/{code} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow write: if false;
+    }
+
+    // --- AI CEO — Telegram orqali "1-tugmali tasdiqlash" uchun
+    // KUTILAYOTGAN HARAKATLAR (`telegramApproval.js`) ---
+    // Bu kolleksiya faqat Cloud Functions (Admin SDK, bu qoidalardan
+    // MUSTASNO) tomonidan yoziladi va o'qiladi — sotuvchi ilovasi
+    // hech qachon to'g'ridan-to'g'ri murojaat qilmaydi (tasdiqlash
+    // FAQAT Telegram bot tugmasi orqali). Shunga qaramay, EGASI o'z
+    // ma'lumotini kelajakda (masalan diagnostika uchun) o'qiy olishi
+    // uchun ochiq qoldirilgan — yozish esa HAR DOIM taqiqlangan.
+    match /sellers/{sellerId}/aiCeoPendingActions/{actionId} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow write: if false;
+    }
+
+    // --- AI CEO — rasmiy AUDIT LOG (`lib/aiAuditLog.js`) ---
+    // Yuqoridagi `aiCeoPendingActions` bilan BIR XIL naqsh: FAQAT
+    // Admin SDK (Cloud Functions) yozadi, sotuvchi/admin faqat
+    // diagnostika uchun O'QIY oladi, YOZISH har doim taqiqlangan.
+    match /sellers/{sellerId}/aiAuditLog/{logId} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow write: if false;
+    }
+
+    // --- ZAXIRA HARAKATI AUDIT JURNALI (2026-09, "ombor nazorati" —
+    // haqiqiy muammoni yechish bo'limi: `functions/lib/stockAuditLog.js`) ---
+    // Yuqoridagi `aiAuditLog` bilan BIR XIL naqsh: FAQAT Admin SDK
+    // (`functions/products.js`dagi `onProductWriteUpdateStockAudit`
+    // trigger) yozadi — mijoz SDK'i orqali HECH QACHON yozilmaydi.
+    // O'qish — do'kon egasi, "mahsulot boshqaruvi" (`manageProducts`)
+    // ruxsatiga ega FAOL xodim (masalan "ombor" roli), yoki admin —
+    // bir nechta xodim shu jurnalni ko'rib, "kim nima o'zgartirdi"
+    // savoliga javob topa olishi kerak (bu — funksiyaning ASOSIY
+    // maqsadi).
+    match /sellers/{sellerId}/stockAuditLog/{entryId} {
+      allow read: if isOwner(sellerId) || isAdmin() || staffPermission(sellerId, "manageProducts");
+      allow write: if false;
+    }
+
+    // --- AI narx tavsiyalari (`functions/pricingSuggestions.js`) ---
+    // Yozish HAR DOIM `false` — bitta narx tavsiyasi FAQAT ikkita
+    // yo'l bilan yaratiladi/o'zgaradi: haftalik cron (`computePricingSuggestions`)
+    // yoki sotuvchining o'zi `applyPricingSuggestion`/
+    // `dismissPricingSuggestion` onCall funksiyalarini chaqirishi -
+    // ikkalasi ham Admin SDK orqali, bu qoidalardan MUSTASNO. Mahsulot
+    // narxini o'zgartirish haqiqiy moliyaviy ta'sirga ega bo'lgani
+    // uchun, mijoz/sotuvchi tomonidan to'g'ridan-to'g'ri Firestore
+    // yozuviga YO'L QO'YILMAYDI (`aiCeoPendingActions` bilan BIR XIL
+    // xavfsizlik naqshi).
+    match /sellers/{sellerId}/pricingSuggestions/{productId} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow write: if false;
+    }
+
+    // --- AI CEO — 7-BOSQICH: "NATIJA KUZATUVI VA O'RGANISH"
+    // (`aiCeoLearning.js`) ---
+    // Ikkalasi ham FAQAT Cloud Functions (Admin SDK, bu qoidalardan
+    // MUSTASNO) tomonidan yoziladi va o'qiladi — sotuvchi ilovasi
+    // to'g'ridan-to'g'ri MUROJAAT QILMAYDI (natija hisoboti
+    // `generateDailyAiCeoReport`ning `learningSummary` maydoni orqali
+    // keladi). Shunga qaramay, EGASI kelajakda (diagnostika uchun)
+    // o'qiy olishi uchun ochiq qoldirilgan — yozish HAR DOIM
+    // taqiqlangan (yuqoridagi `aiCeoPendingActions` bilan BIR XIL
+    // naqsh).
+    match /sellers/{sellerId}/aiCeoOutcomes/{outcomeId} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow write: if false;
+    }
+    match /sellers/{sellerId}/aiCeoLearning/{document} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow write: if false;
+    }
+
+    // --- Sotuvchidan-sotuvchiga taklif dasturi (`functions/
+    // sellerReferrals.js`) --- O'qish: faqat egasi (o'zi taklif qilgan
+    // sotuvchilar ro'yxatini ko'radi). Yozish: HAMMA holatlarda
+    // `false` — bu yozuvlar FAQAT ishonchli server (Cloud Function,
+    // Admin SDK) tomonidan yaratiladi/yangilanadi, chunki bu yerga
+    // "rewarded" holatini mijoz tomonidan qo'lda yozib qo'yish
+    // AI CEOga bepul kirishni firibgarlik yo'li bilan olishga imkon
+    // berardi.
+    match /sellers/{sellerId}/sellerReferrals/{referredSellerId} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow write: if false;
     }
 
     // --- Promokodlar (Marketing va Kuponlar uchun) ---
     // O'QISH: ochiq — mijoz checkout paytida kodni tekshirishi kerak.
-    // YOZISH: faqat egasi (yoki admin).
+    // YARATISH: egasi (yoki admin), VA Z-Tariflar promo kod limitidan
+    // (Start: 0/yo'q, Pro: 3, Biznes: cheksiz) OSHMASLIGI SHART —
+    // `sellers.couponCount` hisoblagichi (`functions/coupons.js`dagi
+    // trigger orqali avtomatik yangilanadi) tekshiriladi. YANGILASH/
+    // O'CHIRISH — limitga taalluqli EMAS (mavjud promokodni
+    // o'chirish/tahrirlash har doim ochiq bo'lishi kerak).
     match /sellers/{sellerId}/coupons/{code} {
       allow read: if true;
+      allow create: if (isOwner(sellerId) || isAdmin()) &&
+        (isAdmin() ||
+         get(/databases/$(database)/documents/sellers/$(sellerId)).data.get("couponCount", 0) <
+           tariffCouponLimit(tariffEffectivePlan(get(/databases/$(database)/documents/sellers/$(sellerId)).data)));
+      allow update, delete: if isOwner(sellerId) || isAdmin();
+    }
+
+    // --- Mahsulot bandllari/combo takliflar (sellers/{id}/bundles/{bundleId}) ---
+    // Kupon bilan BIR XIL naqsh: o'qish ochiq (client sahifasi
+    // "bu mahsulot bilan combo" bo'limini `where productIds array-
+    // contains` orqali so'raydi), yozish faqat sotuvchi/admin.
+    match /sellers/{sellerId}/bundles/{bundleId} {
+      allow read: if true;
       allow write: if isOwner(sellerId) || isAdmin();
+    }
+
+    // --- Advanced Automation (Z-Biznes, 2026-09 punkt-royxati, 5-band) ---
+    // Sotuvchi O'ZI quradigan WHEN -> IF -> THEN avtomatlashtirish
+    // qoidalari (batafsil izoh: `functions/automationRules.js`).
+    // Kupon bilan BIR XIL naqsh — klient TO'G'RIDAN-TO'G'RI yozadi
+    // (murakkab CRUD onCall funksiyalar shart emas), lekin yaratish/
+    // yangilash FAQAT Biznes tarifidagi (yoki uning faol sinovidagi)
+    // sotuvchiga ochiq — VA faqat asosiy shakl (trigger/action turi,
+    // `isActive` mantiqiy qiymat ekanligi) tekshiriladi. MUHIM: bu
+    // yerdagi tarif tekshiruvi YAGONA himoya EMAS — sotuvchi
+    // keyinchalik tarifni pasaytirsa, eski `isActive:true` qoidalar
+    // bazada qolishi mumkin, shuning uchun CRON (`processSellerAutomationRules`)
+    // HAR BIR ishga tushirishda samarali tarifni YANA BIR MARTA
+    // tekshiradi. O'chirish tarifga bog'liq EMAS (kuponlar bilan bir
+    // xil — eski qoidani istalgan vaqt o'chirish mumkin bo'lishi
+    // kerak).
+    match /sellers/{sellerId}/automationRules/{ruleId} {
+      allow read: if isOwner(sellerId) || isAdmin();
+      allow create, update: if (isOwner(sellerId) || isAdmin()) &&
+        (isAdmin() ||
+         tariffEffectivePlan(get(/databases/$(database)/documents/sellers/$(sellerId)).data) == "biznes") &&
+        request.resource.data.triggerType in ["customer_inactive", "order_undelivered", "low_stock"] &&
+        request.resource.data.actionType in ["notify_customer_telegram", "alert_manager"] &&
+        request.resource.data.isActive is bool;
+      allow delete: if isOwner(sellerId) || isAdmin();
+
+      // Ikki marta xabar yubormaslik uchun ("sovish"/cooldown
+      // kuzatuvi) — FAQAT Cloud Function (Admin SDK, bu qoidalardan
+      // MUSTASNO) yozadi/o'qiydi, klient ilovasi UMUMAN murojaat
+      // qilmaydi.
+      match /firedFor/{entityId} {
+        allow read, write: if false;
+      }
     }
 
     // --- Mahsulotlar (products/{productId}) ---
@@ -112,20 +476,116 @@ service cloud.firestore {
     // bo'lsa (masalan qoidabuzar mahsulotni o'chirish uchun).
     match /products/{productId} {
       allow read: if true;
-      allow create: if isSignedIn() && request.resource.data.sellerId == request.auth.uid;
-      allow update, delete: if isSignedIn() &&
+      // XODIMLAR QO'SHILDI: `permissions.manageProducts` huquqiga ega
+      // FAOL xodim ham, o'zi ishlaydigan do'kon nomidan (
+      // `request.resource.data.sellerId`/`resource.data.sellerId` —
+      // sotuvchining O'ZINING uid'i, xodimning EMAS), mahsulot
+      // qo'shishi/tahrirlashi mumkin. MUHIM: xodimga O'CHIRISH
+      // (delete) huquqi ATAYLAB berilmagan — bu doim faqat sotuvchi
+      // (yoki admin) qo'lida qoladi, xodim faqat faolsizlantirish
+      // (`isActive: false`) orqali mahsulotni "o'chira" oladi (bu —
+      // oddiy `update`).
+      // Z-TARIFLAR — AKSIYA (`discountPrice`) LIMITI (2026-09):
+      // YANGI faol chegirma qo'shilayotganda (avval yo'q/`null` edi,
+      // endi qiymat bo'lsa) - Start tarifda ko'pi bilan 3 ta, Pro/
+      // Biznes'da cheksiz (`sellers.activeDiscountCount` hisoblagichi,
+      // `functions/products.js`dagi trigger orqali avtomatik
+      // yangilanadi). Narxning O'ZI o'zgarishi, yoki chegirma OLIB
+      // TASHLANISHI (endi `null`) HECH QACHON bloklanmaydi.
+      function isNewActiveDiscount(existingData) {
+        return request.resource.data.get("discountPrice", null) != null &&
+          (existingData == null || existingData.get("discountPrice", null) == null);
+      }
+      function discountLimitOk(sellerId, existingData) {
+        return !isNewActiveDiscount(existingData) ||
+          get(/databases/$(database)/documents/sellers/$(sellerId)).data.get("activeDiscountCount", 0) <
+            tariffDiscountLimit(tariffEffectivePlan(get(/databases/$(database)/documents/sellers/$(sellerId)).data));
+      }
+      // ZAXIRA HARAKATI AUDIT JURNALI (2026-09, "ombor nazorati" —
+      // haqiqiy muammoni yechish bo'limi): `stock` HAQIQATAN
+      // o'zgarayotgan bo'lsa (yaratishda EMAS — faqat mavjud
+      // mahsulotni tahrirlashda), sabab (`lastStockChangeReason`)
+      // ALBATTA quyidagi ro'yxatdan bo'lishi SHART — aks holda
+      // `functions/lib/stockAuditLog.js`dagi trigger yozadigan
+      // audit-yozuv "sababsiz" bo'lib qolib, butun funksiyaning
+      // maqsadini (bir nechta xodim ichida HISOBDORLIK) yo'qqa
+      // chiqarardi. Ro'yxat `stockAuditLog.js`dagi
+      // `CLIENT_STOCK_CHANGE_REASONS` bilan ATAYLAB QAYTA YOZILGAN
+      // (rules alohida tilda) — `TARIFF_LIMITS`/`STAFF_BOT_USERNAME`
+      // bilan bir xil, loyihada allaqachon o'rnatilgan naqsh.
+      // `order_sale` ATAYLAB bu yerda YO'Q — buni FAQAT server
+      // (`functions/orders.js`, Admin SDK) yoza oladi, u bu
+      // qoidalardan mustasno.
+      function isStockChanging(existingData) {
+        return request.resource.data.get("stock", null) !=
+          (existingData != null ? existingData.get("stock", null) : null);
+      }
+      function stockChangeReasonOk() {
+        return request.resource.data.get("lastStockChangeReason", null) in
+          ["restock", "manual_correction", "damaged_lost", "inventory_count", "other"];
+      }
+      allow create: if isSignedIn() &&
+        (request.resource.data.sellerId == request.auth.uid ||
+         staffPermission(request.resource.data.sellerId, "manageProducts")) &&
+        discountLimitOk(request.resource.data.sellerId, null);
+      // XAVFSIZLIK TUZATISHI (2026-09 audit, P1): oldin `sellerId`
+      // maydonining O'ZI update paytida tekshirilmagan edi — ya'ni
+      // mahsulot egasi o'z mahsulotini BOSHQA (jabrlangan) sotuvchining
+      // `sellerId`siga "yopishtirib", uning roziligisiz o'z do'koniga
+      // ko'chirib qo'yishi mumkin edi. Frontendda hech qanday oqim
+      // `sellerId`ni update paytida o'zgartirmaydi (faqat create
+      // paytida bir marta belgilanadi) — shuning uchun bloklash mavjud
+      // funksionallikni buzmaydi.
+      allow update: if isSignedIn() &&
+        request.resource.data.sellerId == resource.data.sellerId &&
+        (resource.data.sellerId == request.auth.uid || isAdmin() ||
+         staffPermission(resource.data.sellerId, "manageProducts")) &&
+        (isAdmin() || discountLimitOk(resource.data.sellerId, resource.data)) &&
+        (isAdmin() || !isStockChanging(resource.data) || stockChangeReasonOk());
+      allow delete: if isSignedIn() &&
         (resource.data.sellerId == request.auth.uid || isAdmin());
     }
 
+    // --- Mahsulot sharhlari (reviews) ---
+    // O'qish — OMMAVIY (har kim ko'ra oladi). Yozish — FAQAT Cloud
+    // Function orqali (`submitProductReview`/`moderateProductReview`,
+    // Admin SDK): sharh qoldirish uchun HAQIQIY xarid tekshiriladi,
+    // o'chirish/pin qilish uchun mahsulot egaligi tekshiriladi — bu
+    // tekshiruvlarni Firestore qoidalarida takrorlash o'rniga, bir
+    // joyda (Cloud Function) markazlashtirilgan.
+    match /products/{productId}/reviews/{reviewId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // --- Buyurtmalar (orders/{orderId}) ---
-    // O'qish: shu buyurtmaning sotuvchisi, mijozi, YOKI admin.
-    // Yaratish: faqat mijozning o'zi, va clientId majburiy o'ziniki bo'lsin.
-    // Statusni o'zgartirish: shu buyurtmaning sotuvchisi yoki admin.
+    // O'qish: shu buyurtmaning sotuvchisi, mijozi, TOPSHIRILGAN
+    // kuryeri, YOKI admin. Yaratish: faqat mijozning o'zi, va clientId
+    // majburiy o'ziniki bo'lsin. Statusni o'zgartirish: shu
+    // buyurtmaning sotuvchisi yoki admin.
+    //
+    // KURYER QO'SHILDI (v39): kuryer Mini App'i o'ziga BIRIKTIRILGAN
+    // buyurtmalarni (`courierId == request.auth.uid`) to'g'ridan-to'g'ri
+    // Firestore SDK orqali (`where("courierId","==",...)`) real vaqtda
+    // o'qiy olishi uchun. MUHIM: bu FAQAT O'QISH huquqi — `courierId`
+    // maydonining O'ZI faqat ISHONCHLI `assignOrderToCourier` Cloud
+        // Function (Admin SDK) tomonidan yoziladi, shuning uchun bu yerda
+    // qo'shimcha yozish huquqi berilmaydi (kuryer holat yangilashi
+    // ham FAQAT `updateCourierOrderStatus` Cloud Function orqali,
+    // Admin SDK bilan, quyidagi `allow update` qoidasidan MUSTASNO
+    // holda amalga oshiriladi).
     match /orders/{orderId} {
+      // XODIMLAR QO'SHILDI: `permissions.manageOrders` huquqiga ega
+      // FAOL xodim, o'zi ishlaydigan do'konning barcha buyurtmalarini
+      // o'qiy oladi (sotuvchining o'zi ko'radigan "Buyurtmalar"
+      // sahifasi bilan bir xil ro'yxat) va (pastdagi `allow update`ga
+      // qarang) holatini o'zgartira oladi (qabul qilish/tasdiqlash).
       allow read: if isSignedIn() &&
         (request.auth.uid == resource.data.sellerId ||
          request.auth.uid == resource.data.clientId ||
-         isAdmin());
+         request.auth.uid == resource.data.courierId ||
+         isAdmin() ||
+         staffPermission(resource.data.sellerId, "manageOrders"));
 
       // YOZISH (yaratish): endi FAQAT `createOrder` Cloud Function
       // orqali (Admin SDK, bu qoidalardan mustasno). Mijoz SDK'i
@@ -134,10 +594,169 @@ service cloud.firestore {
       // chetlab o'tib, eski (tekshirilmagan) usulda yoza olardi.
       allow create: if false;
 
+      // MUHIM TUZATISH: oldin sotuvchi buyurtmaning ISTALGAN
+      // maydonini o'zgartira olardi (faqat statusni emas) — bu,
+      // `createOrder`ning server tomonida tekshirilgan narx/mahsulot
+      // ma'lumotlarini keyinchalik qo'lda buzish (masalan `totalAmount`,
+      // `clientId`, hatto `sellerId`ni o'zgartirish) imkonini berardi.
+      // Endi FAQAT status, bekor qilish sababi VA "tarixdan yashirish"
+      // belgisi o'zgarishi mumkin — qolgan barcha maydonlar (narx,
+      // mijoz, mahsulotlar) o'zgarmas. `hiddenAt` — "Yetkazildi"/"Bekor
+      // qilindi" ro'yxatidan "O'chirish" tugmasi uchun (haqiqiy
+      // o'chirish EMAS, faqat ro'yxatdan yashirish - hisob-kitoblarga
+      // ta'sir qilmaydi, chunki ular `hiddenAt`ni tekshirmaydi).
+      // `lastActionByStaffId`/`lastActionByStaffName` — 2026-09 punkt-
+      // ro'yxati, 11-band: xodim boshqaruv sahifasida ("Xodimlar")
+      // faoliyat statistikasi ko'rsatish uchun, `applyStaffOrderAction`
+      // (Cloud Function) VA xodim Mini App'ining O'ZI (`StaffOrderCard.
+      // jsx`dagi `changeOrderStatus(..., {lastActionByStaffId, ...})`)
+      // shu ikki maydonni yozadi — sof MA'LUMOT maydonlari, HECH QANDAY
+      // qo'shimcha huquq bermaydi.
       allow update: if isSignedIn() &&
-        (request.auth.uid == resource.data.sellerId || isAdmin());
+        (request.auth.uid == resource.data.sellerId || isAdmin() ||
+         staffPermission(resource.data.sellerId, "manageOrders")) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(["status", "updatedAt", "cancelReason", "hiddenAt", "lastActionByStaffId", "lastActionByStaffName"]);
 
       allow delete: if false;
+    }
+
+    // --- So'rovlarni chegaralash (rate limiting) uchun ichki hisoblagich ---
+    // Faqat Cloud Function'lar (Admin SDK) ishlatadi — mijoz SDK'i
+    // orqali HECH QACHON o'qilmaydi/yozilmaydi. Bu qoida yo'q bo'lsa
+    // ham, Firestore standart bo'yicha rad etardi — shu aniqlik uchun
+    // ochiq yozilgan.
+    match /rateLimits/{document} {
+      allow read, write: if false;
+    }
+
+    // --- Telegram webhook DUBLIKAT tekshiruvi uchun ichki hisoblagich
+    // (4-BOT EKOTIZIM AUDITI, P1 — `functions/lib/webhookDedup.js`) ---
+    // Faqat Cloud Function'lar (Admin SDK) ishlatadi — mijoz SDK'i
+    // orqali HECH QACHON o'qilmaydi/yozilmaydi, `rateLimits`/`visits`
+    // bilan bir xil naqsh.
+    match /processedTelegramUpdates/{document} {
+      allow read, write: if false;
+    }
+
+    // --- Bildirishnoma "o'lik xat" (dead-letter) qayta urinish navbati
+    // (4-BOT EKOTIZIM AUDITI, P2 — `functions/lib/notificationRetryQueue.js`) ---
+    // Faqat Cloud Function'lar (Admin SDK) ishlatadi — mijoz/sotuvchi
+    // SDK'i orqali HECH QACHON o'qilmaydi/yozilmaydi. Diqqat: bu yerda
+    // xom bot tokeni SAQLANMAYDI (faqat qayta urinish uchun kontekst -
+    // sellerId/clientId/matn), shuning uchun bu qoida "faqat ehtiyot
+    // chorasi" — hujjatlarning o'zi sezgir emas.
+    match /notificationRetryQueue/{document} {
+      allow read, write: if false;
+    }
+
+    // --- Tashriflar (visits) — konversiya statistikasi uchun ---
+    // Faqat Cloud Function'lar (Admin SDK) yozadi/o'qiydi. Mijoz
+    // SDK'i orqali HECH QACHON to'g'ridan-to'g'ri o'qilmaydi —
+    // tegishli sotuvchining o'zi ham buni faqat `getVisitorCount`
+    // Cloud Function orqali (o'z ma'lumotini tekshirib) oladi.
+    match /visits/{document} {
+      allow read, write: if false;
+    }
+
+    // --- Savatlar (carts/{sellerId}_{clientId}) - "tashlab ketilgan
+    // savat" eslatmasi uchun. Mijoz o'z savatini FAQAT yozishi (savat
+    // o'zgarganda sinxronlash) va o'chirishi (bo'shatilganda) mumkin -
+    // O'QISH esa hech kimga (hatto egasiga ham) kerak emas, chunki
+    // savat holati doim Redux/localStorage'da, mahalliy ravishda
+    // ko'rsatiladi. Eslatmani yuboradigan vaqt bo'yicha funksiya
+    // (Admin SDK) bu qoidalardan mustasno.
+    match /carts/{cartId} {
+      allow read: if false;
+      allow create, update: if request.auth != null && request.resource.data.clientId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.clientId == request.auth.uid;
+    }
+
+    // Sevimlilar (favorites/{sellerId}_{clientId}) - "like bosilgan
+    // mahsulotga eslatma" uchun. `carts` bilan AYNAN BIR XIL
+    // xavfsizlik naqshi - mijoz FAQAT o'zinikini yozadi/o'chiradi,
+    // O'QISH esa hech kimga kerak emas (mahalliy holat Redux/
+    // localStorage'da ko'rsatiladi, vaqt bo'yicha funksiya esa
+    // Admin SDK orqali, bu qoidalardan mustasno).
+    match /favorites/{favId} {
+      allow read: if false;
+      allow create, update: if request.auth != null && request.resource.data.clientId == request.auth.uid;
+      allow delete: if request.auth != null && resource.data.clientId == request.auth.uid;
+    }
+
+    // --- Kuryerlar (couriers/{courierId}) (v39) ---
+    // Hujjat ID'si = kuryerning O'Z Telegram foydalanuvchi ID'si
+    // (xuddi `sellers/{sellerId}` sotuvchining o'z tgID'sidan
+    // foydalanadigani kabi). O'QISH: kuryerning O'ZI (Mini App'da o'z
+    // profilini ko'rishi uchun) YOKI shu kuryerni yollagan sotuvchi
+    // (o'z kuryerlar ro'yxatini ko'rishi uchun) YOKI admin. YOZISH:
+    // HAR DOIM yopiq — kuryer qo'shish/o'chirish/faollashtirish
+    // FAQAT tegishli Cloud Function'lar (`createCourierInvite`ning
+    // bot orqali qabul qilinishi, `setCourierActive`, `removeCourier`)
+    // orqali, Admin SDK bilan amalga oshiriladi — bu, sotuvchining
+    // o'zga sotuvchi kuryerini "o'g'irlab olishi" yoki soxta faol
+    // kuryer yaratishi kabi holatlarning oldini oladi.
+    match /couriers/{courierId} {
+      // XODIMLAR QO'SHILDI (2026-09, 3/10-bandlar): `permissions.
+      // manageCouriers` huquqiga ega FAOL xodim ham, o'zi ishlaydigan
+      // do'konning kuryerlar ro'yxatini o'qiy oladi (xodim ilovasidagi
+      // "Kuryerga topshirish" dispetcherlik oynasi uchun kerak).
+      allow read: if isOwner(courierId) ||
+        (isSignedIn() && request.auth.uid == resource.data.sellerId) ||
+        isAdmin() ||
+        staffPermission(resource.data.sellerId, "manageCouriers");
+      allow write: if false;
+    }
+
+    // --- Kuryer taklif kodlari (sellers/{sellerId}/courierInvites/{token}) ---
+    // Sotuvchi "Kuryerlar" sahifasida yangi kuryer qo'shganda
+    // yaratiladi (`createCourierInvite` Cloud Function), kuryer botga
+    // "/start <token>" bilan kirganda REDEMPTSIYA qilinadi
+    // (`courierBot.js`, Admin SDK). Ikkalasi ham FAQAT Cloud
+    // Function'lar orqali — mijoz/sotuvchi SDK'i bu yerga HECH QACHON
+    // to'g'ridan-to'g'ri murojaat qilmaydi (taklif havolasi
+    // yaratilgan zahoti, Cloud Function javobining O'ZIDA sotuvchiga
+    // qaytariladi — alohida o'qish shart emas).
+    match /sellers/{sellerId}/courierInvites/{token} {
+      allow read, write: if false;
+    }
+
+    // --- Xodimlar (staff/{staffId}) ---
+    // Hujjat ID'si = xodimning O'Z Telegram foydalanuvchi ID'si (xuddi
+    // `couriers/{courierId}` bilan bir xil naqsh — sabab: xodim boti
+    // "/start"da "bu Telegram ID QAYSI sotuvchiga tegishli?" degan
+        // savolga, sellerId'ni OLDINDAN bilmasdan turib javob topishi
+    // kerak). O'QISH: xodimning O'ZI (Mini App'da o'z profilini
+    // ko'rishi uchun) YOKI shu xodimni yollagan sotuvchi (o'z xodimlar
+    // ro'yxatini ko'rishi uchun) YOKI admin YOKI (2026-09 punkt-
+    // royxati, 2-band "Advanced Team & RBAC") shu SOTUVCHIga tegishli,
+    // `manageStaff` ruxsatiga ega BOSHQA FAOL xodim ("Admin" roli) —
+    // Xodim Mini App'idagi "Jamoa" bo'limida butun jamoa ro'yxatini
+    // ko'rishi uchun. YOZISH: HAR DOIM yopiq — xodim qo'shish/
+    // o'chirish/faollashtirish/ruxsat berish FAQAT tegishli Cloud
+    // Function'lar (`createStaffInvite`ning bot orqali qabul
+    // qilinishi, `setStaffPermissions`, `setStaffActive`,
+    // `removeStaff`) orqali, Admin SDK bilan amalga oshiriladi — bu
+    // funksiyalarning O'ZIDA (`functions/lib/staffRoles.js`) "teng
+    // darajadagi administrator boshqa administratorni tahrirlay
+    // olmaydi" eskalatsiya himoyasi bor.
+    match /staff/{staffId} {
+      allow read: if isOwner(staffId) ||
+        (isSignedIn() && request.auth.uid == resource.data.sellerId) ||
+        isAdmin() ||
+        staffPermission(resource.data.sellerId, "manageStaff");
+      allow write: if false;
+    }
+
+    // --- Xodim taklif kodlari (sellers/{sellerId}/staffInvites/{token}) ---
+    // Sotuvchi "Xodimlar" sahifasida yangi xodim qo'shganda yaratiladi
+    // (`createStaffInvite` Cloud Function, tanlangan ruxsatlar bilan
+    // birga), xodim botga "/start <token>" bilan kirganda REDEMPTSIYA
+    // qilinadi (`staffBot.js`, Admin SDK). Ikkalasi ham FAQAT Cloud
+    // Function'lar orqali — mijoz/sotuvchi SDK'i bu yerga HECH QACHON
+    // to'g'ridan-to'g'ri murojaat qilmaydi.
+    match /sellers/{sellerId}/staffInvites/{token} {
+      allow read, write: if false;
     }
   }
 }

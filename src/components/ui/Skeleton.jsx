@@ -43,7 +43,7 @@ export const ListSkeleton = ({ count = 3, cardClassName }) => (
 export const GridSkeleton = ({ count = 6 }) => (
   <div className="grid grid-cols-2 gap-3">
     {Array.from({ length: count }).map((_, i) => (
-      <div key={i} className={`w-full aspect-[3/4] ${pulse}`} />
+      <div key={i} className={`w-full aspect-[5/4] rounded-2xl ${pulse}`} />
     ))}
   </div>
 );

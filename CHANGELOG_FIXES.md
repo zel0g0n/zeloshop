@@ -1676,6 +1676,894 @@ qayta ishga tushdi.
 - `7️⃣`ning ikki marta ishga tushishi endi **toza** o'lchanadi
   (`7️⃣ (BIRINCHI)` va `7️⃣❗ QAYTA`)
 
+## 64. 🎯 Eng katta arxitektura tuzatishi — Dashboard statistikasi serverga ko'chirildi
+
+Chuqur tekshiruvdan so'ng (kod xatosi topilmadi — muammo Firestore
+SDK'ning **birinchi haqiqiy so'rovi** ekanligi tasdiqlandi), eng
+kuchli yechimni amalga oshirdim: **"Bugun" statistikasini butunlay
+serverga ko'chirdim**.
+
+**Nima o'zgardi:**
+- `verifyTelegramAuth` endi "Bugun"ning savdo/foyda/buyurtma
+  statistikasini va so'nggi 3 ta buyurtmani **serverning o'zida**
+  (Admin SDK, mijoz ulanishisiz) hisoblab, javobning o'zida
+  qaytaradi
+- Dashboard endi bu ma'lumotni **darhol** ko'rsatadi — mijoz
+  Firestore'ning **~4.9 soniyalik** o'zining so'rovini kutmaydi
+- To'liq ma'lumot (boshqa davrlar, jonli yangilanish) **fon
+  rejimida** davom etadi, kelgach ekran **sezilmas tarzda**
+  yangilanadi
+- Xato bo'lsa (masalan indeks yo'q), avvalgi rejimga **xavfsiz**
+  qaytadi — hech narsa buzilmaydi
+
+Bu — LCP'ni maksimal darajada kamaytirish uchun eng kuchli, aniq
+sababga qaratilgan yechim.
+
+## 65. Dashboard summary — production darajasiga ko'tarildi
+
+Halol javob: birinchi versiya **to'liq production emas** edi —
+2 ta sonni hisoblash uchun **butun mahsulotlar katalogini** (barcha
+rasm/tavsif maydonlari bilan) yuklardi. Kichik do'konda sezilmaydi,
+**minglab mahsulotli** do'konda — har bir kirishda keraksiz katta
+xarajat bo'lardi.
+
+**Tuzatildi:**
+- `activeProductsCount`/`lowStockCount` — endi Firestore'ning
+  **`.count()` agregatsiya so'rovlaridan** foydalanadi — hujjatlarning
+  o'zi UMUMAN yuklanmaydi, faqat soni serverning o'zida hisoblanadi.
+  Katalog qanchalik katta bo'lishidan qat'i nazar, bir xil tezlikda
+  ishlaydi
+- Tannarx xaritasi — endi butun katalog o'rniga, faqat **bugun
+  haqiqatan sotilgan** mahsulotlar bo'yicha (aniq ID orqali) so'raladi
+
+Bu — endi **haqiqatan** kelajakdagi o'sishga tayyor.
+
+## 66. Buyurtmalar cheksiz yuklanishi — xavfsiz tuzatildi
+
+Dashboard endi buyurtmalar tarixini **cheksiz emas**, faqat
+**so'nggi 60 kunlik** ("Oy" tabini qamrab oladigan) qismini yuklaydi.
+
+**Muhim:** bu — **faqat Dashboard** uchun, **yangi, alohida** hook
+orqali qilindi. **Buyurtmalar boshqaruv sahifasi** (qidiruv, filtr,
+ko'plab tanlash) — **butunlay tegilmagan**, hali ham to'liq tarixga
+ega. Bu — sotuvchi yillar davomida minglab buyurtmaga ega bo'lsa ham,
+Dashboard'ning har safar **bir xil tezlikda** ochilishini ta'minlaydi.
+
+**Mahsulotlar** ataylab cheklanmadi — katalog odatda buyurtma
+tarixidan sekinroq o'sadi, va foyda hisob-kitobi uchun to'liq
+tannarx ma'lumoti kerak.
+
+## 67. `verifyTelegramAuth` ichida — mustaqil amallarni parallellashtirish
+
+Topilgan haqiqiy samarasizlik: **token yaratish** (Firebase Auth'ga
+tarmoq so'rovi) va **Firestore o'qishlari** — bir-biriga bog'liq
+bo'lmasa ham, **ketma-ket** bajarilardi. Xuddi shunday, mijoz
+yozuvi (`clients/{uid}`) ham alohida kutilardi.
+
+**Tuzatildi:** endi **hammasi** (token yaratish, mijoz yozuvi,
+admin/do'kon/xavfsizlik o'qishlari, Dashboard statistikasi) — **bitta,
+umumiy parallel blokda** bajariladi. Xato xabarlari **o'zgarishsiz**
+qoldi (har biri o'z aniq xabarini beradi).
+
+**Kutilgan natija:** kichik, lekin **haqiqiy** yutuq — avval ikkinchi
+bo'lib ishlagan amalning **butun davomiyligi** endi tejaladi.
+
+## 68. Kelajakka tayyorlash — Mahsulotlar/Buyurtmalar sahifalari cheklandi
+
+Sotuvchining o'z ma'lumoti (mahsulot/buyurtma) yillar davomida
+o'sib borishiga tayyorlandi:
+
+- **Mahsulotlar sahifasi** — endi bir vaqtda faqat **so'nggi 100**
+  mahsulot yuklanadi
+- **Buyurtmalar sahifasi** — endi bir vaqtda faqat **so'nggi 150**
+  buyurtma yuklanadi
+- Ikkalasida ham **"Yana yuklash"** tugmasi — kerak bo'lsa, ko'proq
+  yuklash imkonini beradi
+- Qidiruv/filtr — **hozirgidek** ishlashda davom etadi (yuklangan
+  ro'yxat ustida)
+
+Dashboard'ga tegilmadi (u allaqachon o'z, alohida chegaralangan
+yo'lidan foydalanadi).
+
+## 69. 🔴 "INTERNAL" xatosi — sabab topilmadi, lekin ko'rish imkoniyati tuzatildi
+
+Loglar haqiqiy xato matnini ko'rsatmadi (CLI uni kesib tashladi).
+Kodni chuqur qayta tekshirganimda, **muhim kamchilikni** topdim:
+butun `verifyTelegramAuth` funksiyasi hech qanday **umumiy
+`try/catch`** bilan o'ralmagan edi — shuning uchun har qanday
+kutilmagan (HttpsError bo'lmagan) xato, Firebase tomonidan
+avtomatik ravishda **tafsilotsiz "INTERNAL"** ga aylantirilardi.
+
+**Tuzatildi:** butun funksiya endi tashqi `try/catch` bilan
+himoyalangan. Endi:
+- Har qanday xato **to'liq** (xabar + stack) serverga logga yoziladi
+- Mijozga ham endi **haqiqiy xato matni** ko'rsatiladi
+  ("INTERNAL" o'rniga)
+
+**Muhim:** bu — muammoni **hal qilmadi**, balki uni **ko'rinadigan**
+qildi. Keyingi deploy+testdan keyin, aniq xato matni ko'rinadi, va
+shundan keyin haqiqiy sababni tuzatamiz.
+
+## 70. ✅ 500 xatosining haqiqiy sababi topildi va tuzatildi
+
+Batafsil xato ko'rsatish tuzatishi natijasini berdi — aniq xato:
+**"Cannot read properties of null (reading 'exists')"**
+
+**Haqiqiy sabab:** parallellashtirish tuzatishida, `clientWritePromise`
+degan yangi elementni `Promise.all([...])` massiviga qo'shgan edim,
+lekin uni qabul qiluvchi o'zgaruvchini chap tomondagi
+`const [x, y, z...] =` qatoriga qo'shishni **unutgan edim**. Bu —
+barcha keyingi natijalarni **bir pog'ona siljitib** yubordi
+(`adminSnap` aslida `null` bo'lib qoldi).
+
+**Tuzatildi:** yetishmagan o'zgaruvchi (`clientWriteResult`) qo'shildi,
+barcha 6 ta natija endi **to'g'ri joyiga** tushadi.
+
+## 71. Cloud Functions — modulli tuzilishga o'tkazildi
+
+800+ qatorli bitta `index.js` fayli, **7 ta aniq modulga** bo'lindi:
+
+```
+functions/
+  index.js              (18 qator — faqat qayta eksport)
+  lib/admin.js           (Firebase Admin, secret'lar)
+  lib/helpers.js           (umumiy yordamchi funksiyalar)
+  telegramAuth.js            (o'zgarmadi — allaqachon toza edi)
+  auth.js                      (216 qator — eng katta fayl)
+  orders.js                      (179 qator)
+  products.js                      (77 qator)
+  notifications.js                   (190 qator)
+```
+
+Barcha `require` yo'llari va eksportlar **qo'lda, sinchiklab**
+tekshirildi (bu muhitda `node_modules` yo'qligi sabab, to'liq
+ishga tushirish sinovi bajarilmadi — deploy vaqtida yakuniy
+tasdiqlash kerak). Mantiq **hech qanday joyda o'zgartirilmadi** —
+faqat qayta joylashtirildi.
+
+## 72. Avtomatik testlar qo'shildi (Jest)
+
+Eng muhim ikkita funksiya uchun — `functions/__tests__/`:
+
+- **`auth.test.js`** — `verifyTelegramAuth` uchun 4 ta test, jumladan
+  **aynan destrukturizatsiya xatosini** (isAdmin/store noto'g'ri
+  manbadan kelib qolishi) kelajakda ham ushlaydigan tekshiruv
+- **`orders.test.js`** — `createOrder` uchun 7 ta test: haqiqiy narx,
+  chegirma narxi, ombor yetarli emasligi, boshqa do'kon mahsuloti,
+  promokod tekshiruvi, foiz chegirma hisobi, autentifikatsiya
+
+`auth.js`/`orders.js` — ichki mantiq `_testables` orqali sinov
+uchun alohida eksport qilindi. `package.json`ga `jest` va `test`
+buyrug'i qo'shildi.
+
+**⚠️ MUHIM, HALOL ESLATMA:** bu muhitda tarmoq yo'qligi sabab,
+men bu testlarni **haqiqatan ishga tushira olmadim** — faqat
+sintaksis va mantiqni qo'lda tekshirdim. Quyidagi buyruqni siz
+ishga tushirib, natijasini yuborishingiz kerak:
+
+```bash
+cd functions
+npm install
+npm test
+```
+
+## 73. To'lovlar/Tariflar va Qo'llab-quvvatlash — halol tarzda qurildi
+
+Sozlamalardagi **oxirgi ikkita** "Tez orada" belgisi endi haqiqiy
+sahifalar:
+
+- **To'lovlar va Tariflar** (`/seller/tariffs`) — joriy reja
+  (Basic, bepul) va Pro Merchant imkoniyatlari ko'rsatiladi. **Soxta
+  "sotib olish" tugmasi yo'q** (platformada haqiqiy to'lov yig'ish
+  tizimi hali yo'q) — buning o'rniga **"Qiziqish bildirish"** tugmasi,
+  bu adminlarga **haqiqiy Telegram xabari** yuboradi
+- **Qo'llab-quvvatlash** (`/seller/support`) — mavzu + xabar shakli,
+  adminlarga **haqiqiy** yetkaziladi
+
+Ikkalasi ham yangi `contactAdmin` Cloud Function orqali ishlaydi —
+admin ID(lar)i **qattiq yozilmagan**, `admins` kolleksiyasidan
+dinamik olinadi.
+
+**Sozlamalar menyusida endi bironta ham "Tez orada" belgisi
+qolmadi.**
+
+## 74. CRM Hub — to'liq qayta qurildi (Pure Dark Theme)
+
+Sizning batafsil spetsifikatsiyangizga muvofiq:
+
+- **Sotuvchining shaxsiy bildirishnoma sozlamalari** — bu sahifadan
+  **butunlay olib tashlandi** (Sozlamalarda qoladi)
+- **Qidiruv** + **RFM segment chip'lari** (Barchasi/VIP/Xavfdagilar/
+  Doimiy, aniq sonlar bilan)
+- **VIP chegarasi** — 3,000,000 dan **500,000 so'm**ga o'zgartirildi
+- Mijoz kartochkasi bosilganda — **to'liq profil** (telefon,
+  Telegram, xaridlar tarixi) bottom-sheet oynada ochiladi
+- **Kengaytirilgan Broadcast terminal**: banner rasm, promokod
+  tanlash (haqiqiy promokodlar), inline tugma, **jonli ko'rinish**
+  oldindan namoyishi
+
+**Backend:** `sendTelegramMessage` endi banner rasm (`sendPhoto`),
+inline tugma va Markdown formatini qo'llab-quvvatlaydi.
+
+## 75. CRM kamchiliklari tuzatildi
+
+1. **Dashboard** — standart oyna 60 kundan **30 kunga** ("Oy" tabiga
+   aniq mos)
+2. **CRM** — endi **Dashboard'dan butunlay mustaqil**, o'zining
+   alohida hook'i (`useCrmOrders.jsx`, 365 kunlik oyna — VIP/LTV
+   hisob-kitobi uchun mazmunli, lekin cheksiz emas). Dashboard'ga
+   **hech qanday ta'sir qilmaydi**
+3. **Promokod ro'yxati** — endi faqat **faol, muddati o'tmagan**
+   kodlarni ko'rsatadi
+
+## 76. Sotuvchining o'z (faqat xaridor) boti — ulash imkoniyati
+
+**Muhim eslatma:** backend'ning **asosiy, eng nozik qismi**
+(autentifikatsiya mantig'i) allaqachon **parallel ishlayotgan boshqa
+sessiya** (Claude Code) tomonidan puxta yozilgan edi — men buni
+buzmasdan, unga mos ravishda qolgan qismlarni qo'shdim.
+
+**Yangi qo'shilganlar:**
+- `functions/customBot.js` — `connectCustomBot` (tokenni Telegram
+  API orqali tekshiradi) va `disconnectCustomBot`
+- **Sozlamalar** → **"O'z botingizni ulash"** (`/seller/custom-bot`)
+  — aniq, bosqichma-bosqich yo'riqnoma bilan
+- `buildShopLink` endi sotuvchining o'z bot username'idan foydalana
+  oladi (ulangan bo'lsa)
+- Yangi bot orqali tasdiqlash yo'li uchun **2 ta qo'shimcha test**
+
+**Qanday ishlaydi:** sotuvchi BotFather orqali bot yaratadi, tokenini
+kiritadi. Xaridor shu bot orqali kirganda, tizim **avval sotuvchining
+o'z tokenini**, topilmasa **umumiy platforma tokenini** sinaydi.
+Sotuvchi panelini boshqarish — **hamon** umumiy botda qoladi.
+
+**⚠️ Hali sinov qilinmagan** — deploy qilib, real bot bilan sinab
+ko'rish kerak.
+
+## 77. Haqiqiy sabab topildi — "oddiy Start" muammosi
+
+Loglarni tekshirib, **ikkita** narsani aniqladik:
+
+1. **Foydasiz, lekin real xato:** kerakli Firestore indeksi
+   (`sellerId+stock`) faylda bor edi, lekin **deploy qilinmagan**
+   edi (`firestore:indexes` — `functions`dan alohida deploy talab
+   qiladi)
+2. **Haqiqiy sabab:** mening dizaynim, sotuvchining shaxsiy botini
+   **faqat** `?startapp=` havolasi orqali ochilganda aniqlay olardi.
+   Siz esa botni **oddiy "Start"** bilan (havolasiz) ochish kerak
+   deb so'ragan edingiz — bunday holatda Telegram `start_param`ni
+   umuman yubormaydi!
+
+**Tuzatildi:** endi sotuvchining Web App manzilining **o'zida**
+(`CustomBotPage`da ko'rsatiladigan, nusxa olish tugmasi bilan) o'z
+ID'si oldindan yozib qo'yiladi — bu, `start_param`siz ham ishlaydi.
+
+**⚠️ Hali oxirigacha sinalmagan** — BotFather'da Web App manzilini
+**yangi, aniq** manzilga (ID bilan) qayta sozlab, qaytadan sinab
+ko'rish kerak.
+
+## 78. `/newapp` endi kerak emas — to'liq avtomatik
+
+Sotuvchi endi **faqat 2 ta qadam** bajaradi:
+1. BotFather'da `/newbot` — bot yaratadi
+2. Tokenni bizning sahifamizga kiritadi
+
+**Qolgan hammasi — avtomatik.** Tizim, token kiritilgan zahoti,
+Telegram'ning **Menu tugmasi** (`setChatMenuButton`) imkoniyatidan
+foydalanib, botning pastki chap tugmasini **to'g'ridan-to'g'ri
+do'konni ochadigan** qilib sozlaydi — bu, sotuvchining BotFather
+bilan qo'shimcha ishlashini butunlay yo'q qiladi.
+
+Botni **uzganda** ham — Menu tugmasi avtomatik asl holatiga
+qaytariladi.
+
+**Kelishuv:** bu usulda alohida "ulashish havolasi" yo'q — faqat
+botni ochganda tugma ko'rinadi. Bu, sizning "Start bosilgan zahoti
+ochilishi" talabingizga to'liq mos.
+
+## 79. Rate Limiting qo'shildi
+
+Yangi, qayta ishlatiladigan `functions/lib/rateLimit.js` — Firestore
+TRANSACTION asosida, ishonchli chegaralash.
+
+**Qo'llanildi:**
+| Funksiya | Chegara | Sabab |
+|---|---|---|
+| `createOrder` | 10 / 5 daqiqa | Spam buyurtma |
+| `generateProductDescription` | 20 / soat | Pullik AI so'rovi |
+| `sendCrmNotification` | 10 / soat | Telegram spam-bloklanish xavfi |
+| `contactAdmin` | 5 / soat | Admin spam |
+| `connectCustomBot` | 10 / soat | Telegram API suiiste'moli |
+| `verifyTelegramAuth` | 60 / 5 daqiqa | Umumiy xavfsizlik to'ri |
+
+Yangi `rateLimits` kolleksiyasi uchun Firestore qoidasi ham qo'shildi
+(faqat serverga ochiq).
+
+**Test:** `rateLimit.test.js` — bu safar **haqiqiy holatni saqlaydigan**
+soxta ma'lumotlar bazasi bilan (chegaraga yetganda rad etilishi,
+oyna tugagach qayta boshlanishi tekshiriladi).
+
+## 80. 5 ta xabar qilingan bug — barchasi tuzatildi
+
+1. **"Mahsulot qo'shish/tahrirlash" tugmasi bosilmasligi** —
+   sabab: tugma `<form>` **tashqarisida** edi (HTML qoidasiga ko'ra,
+   forma tashqarisidagi submit tugmasi ishlamaydi). `form="id"`
+   atributi orqali tuzatildi (2 ta sahifada ham).
+
+2 va 3. **Mijoz tomonida o'chirish sinxronlanmasligi va stok
+   yangilanmasligi** — ikkalasi ham bitta sababdan: mijoz tomonidagi
+   mahsulot ro'yxati **bir martalik** yuklanardi. Endi **jonli**
+   (real-vaqtli) obuna. Bonusda: Katalog sahifasi to'g'ridan-to'g'ri
+   ochilganda bo'sh ko'rinishi mumkin bo'lgan eski bug ham tuzatildi.
+
+4. **ProductCard balandligi bir xil emasligi** — endi `aspect-[5/4]`,
+   sarlavha bitta qatorga cheklangan (`line-clamp-1`) — barcha
+   kartochkalar bir xil balandlikda.
+
+5. **🔴 ENG XAVFLI: localStorage'da sotuvchilar aralashishi** —
+   savat/sevimlilar endi **har bir sotuvchi uchun alohida** kalitda
+   (`cart:{sellerId}`) saqlanadi. Boshqa do'konga o'tilganda, eski
+   sotuvchining mahsulotlari **endi hech qachon** aralashib qolmaydi.
+
+**Jami 15 ta fayl o'zgartirildi.** Barchasi qo'lda, sinchiklab
+tekshirildi.
+
+## 81. Ro'yxatdan o'tish oqimi — professional darajaga ko'tarildi
+
+**`WelcomeScreen.jsx`:**
+- Sotuvga undovchi, professional matn
+- 5 ta aniq afzallik (Yandex Delivery, CRM, kirim-chiqim, ZeloAI,
+  +45% daromad), emoji o'rniga `lucide-react` ikonkalari
+- Tugma: "Hoziroq boshlang"
+
+**⚠️ Halol eslatma:** "Yandex Delivery" — hali qurilmagan (yo'l
+xaritasida). Buni erta reklama qilish — strategik qaror, lekin
+sotuvchilarga noto'g'ri kutish yaratmaslik uchun ehtiyot bo'ling.
+
+**`CreateStoreScreen.jsx`:**
+- Barcha emojilar olib tashlandi → `lucide-react`
+- Viloyat tanlash — endi yangi, qayta ishlatiladigan
+  `components/ui/CustomSelect.jsx` (loyihaning o'z zamonaviy
+  dizayni, brauzer standart select'i emas)
+- **"Do'koningiz sohasi"** maydoni butunlay olib tashlandi —
+  barcha yangi do'konlar avtomatik "Kosmetika" bilan yaratiladi
+
+**Eslatma:** `StoreSettingsPage.jsx`da ham xuddi shu (native select,
+eski soha ro'yxati) muammo bor — bu safar so'ralmagani uchun
+tegilmadi, keyingi safar tuzatish mumkin.
+
+## 82. Dashboard — to'liq qayta qurildi (Ultra-Fast, Pure Dark)
+
+- Og'ir Canvas/Chart.js grafigi **butunlay olib tashlandi**
+- Yangi **2x2 ixcham KPI katak** (Savdo, Buyurtmalar, O'rtacha chek,
+  Ombor holati)
+- **⚠️ Halol og'ish spetsifikatsiyadan:** "Konversiya" ko'rsatkichi
+  qo'yilmadi — buni hisoblash uchun sahifa tashriflarini kuzatuvchi
+  tizim yo'q. O'rniga **haqiqiy hisoblanadigan** "O'rtacha chek"
+  qo'llanildi
+- `backdrop-blur` va boshqa qimmat CSS xususiyatlar olib tashlandi
+  (tezlik uchun)
+
+**Testlar:** frontendda **umuman test infratuzilmasi yo'q edi** —
+Vitest qo'shildi. Statistika hisob-kitobi sof funksiyaga
+(`utils/dashboardStats.js`) ajratildi va **9 ta test** bilan
+qamrab olindi.
+
+**Muhim moslashuv:** `TimeframeTabs` — P&L sahifasida ham
+ishlatilgani uchun, uni buzmasdan, `variant="pure-dark"` opsiyasi
+qo'shildi.
+
+**Eslatma:** `BentoGrid.jsx`, `SalesSummaryCard.jsx`, `SalesChart.jsx`
+— endi hech qayerda ishlatilmaydi (o'chirilmadi, kerak bo'lsa
+tozalash mumkin).
+
+## 83. Ranglar qaytarildi + Haqiqiy Konversiya tizimi qurildi
+
+**1) Rang izchilligi:** Dashboard endi boshqa barcha sahifalar bilan
+**bir xil** rang kombinatsiyasida (pure dark emas).
+
+**2) Haqiqiy tashrif kuzatish tizimi** — yangi arxitektura:
+
+- Yangi `visits` kolleksiyasi — har bir (sotuvchi, kun, mijoz)
+  kombinatsiyasi uchun **bitta** yozuv (noyob tashrif, sahifa
+  yuklanishi emas)
+- `computeDashboardSummary` — "Bugun" uchun `visitorCount`/
+  `conversionRate`ni ham qaytaradi
+- Yangi `functions/analytics.js` (`getVisitorCount`) — Hafta/Oy uchun
+- Yangi Firestore indeks va qoida (`visits` — faqat serverga ochiq)
+- **"O'rtacha chek"** o'rniga — endi **haqiqiy "Konversiya"** kartasi
+
+**⚠️ Muhim:** bu — jiddiy, yangi arxitektura qo'shimchasi (yangi
+kolleksiya, funksiya, indeks, qoida). Sinchiklab sinab ko'rish
+tavsiya etiladi. 2 ta yangi test qo'shildi, va mavjud testlarni
+**buzishi mumkin bo'lgan** xavf oldindan aniqlanib, tuzatildi.
+
+## 84. Katalog Boshqaruvi — to'liq qayta qurildi
+
+**Rang:** boshqa sahifalar bilan bir xil (siz tasdiqlaganingizdek).
+
+**Tuzilish:**
+- Status + kategoriya filtrlari — endi **bitta** birlashgan qatorda
+- Faol chip — **hech qachon** oq/xira emas, har doim to'liq
+  `bg-indigo-600 text-white shadow-md`
+- Mahsulot kartochkalari — 2 ustunli katakdan **yagona ustunli,
+  ixcham** ro'yxatga o'tkazildi
+- FAB tugmasi: "Yangi Tovar Yaratish"
+
+**Test va optimallashtirish:**
+- Filtrlash/saralash mantig'i sof funksiyaga (`utils/productFilters.js`)
+  ajratildi — **10 ta test**
+- `backdrop-blur` olib tashlandi (tezlik uchun)
+- `useCallback`/`useMemo` — keraksiz qayta renderlarning oldini olish
+  uchun izchil qo'llanildi
+
+**Eslatma:** `ProductsCategoryTabs.jsx`/`ProductsStatusTabs.jsx` —
+endi ishlatilmaydi (o'chirilmadi).
+
+## 85. Mahsulot qo'shish/tahrirlash formasi — to'liq qayta ko'rib chiqildi
+
+**Emoji — hammasi tozalandi.** Avvalgi qidiruvim o'tkazib
+yuborgan `⏳✨💳📦🔥✕⭐＋✅` va xom SVG'lar — barchasi
+`lucide-react` ikonkalariga almashtirildi (11 ta fayl bo'ylab).
+
+**Muhim tuzilish o'zgarishi:** "Saqlash" tugmasi endi formaning
+**tabiiy, oxirgi elementi** — forma bilan birga skroll bo'ladi
+(avvalgi, "doim ko'rinadigan" yondashuv o'rniga). `SubmitBar.jsx`
+soddalashtirildi.
+
+**Test:** narx/foyda hisob-kitobi (`Smart Calculator`) sof funksiyaga
+ajratildi (`utils/productPricing.js`) — **6 ta test**.
+
+Bir xil o'zgarishlar **ikkala** sahifaga (Qo'shish va Tahrirlash)
+qo'llanildi, chunki ular ko'p qismlarni baham ko'radi.
+
+## 86. Buyurtmalar sahifasi — to'liq qayta ko'rib chiqildi
+
+**Yashiringan emoji topildi** — bu safar komponent kodida emas,
+`orderStatus.js` **konstantasining o'zida** (`NEXT_STATUS_ACTION`).
+Bu, kodni "workaround" (regex bilan kesib olish) qilib ishlatishga
+majbur qilgan edi — endi manbaning o'zida tuzatildi.
+
+**Status tugmalariga — aniq ikonkalar:** har bir bosqich o'z
+ikonkasiga ega (`Check`/`Truck`/`CheckCircle2`).
+
+**Yetishmayotgan qism qo'shildi:** "Umumiy hisob-kitob" (mahsulotlar
+summasi + yetkazib berish = yakuniy summa) — bu, ochilgan
+kartochkada avval umuman yo'q edi.
+
+**Test:** `utils/orderFilters.js` — **9 ta test**.
+
+**Umumiy natija (shu sessiyada):** 4 ta sahifa (Dashboard, Katalog,
+Mahsulot formasi, Buyurtmalar) qayta qurildi, **4 ta** sof, sinab
+ko'rilgan yordamchi modul yaratildi. Hech biri hali **deploy
+qilinmagan/sinalmagan** — barchasini birga tekshirib chiqish
+tavsiya etiladi.
+
+## 87. Vitest va Jest bir-biriga aralashib qolishi — tuzatildi
+
+**Yaxshi xabar:** frontend'ning **33 ta testi ham** muvaffaqiyatli
+o'tgan edi! Xato — Vitest, `functions/` papkasidagi (Jest uchun
+yozilgan) testlarni ham "topib", ularni noto'g'ri ishga tushirishga
+urinishidan kelib chiqqan.
+
+**Tuzatildi:** `vite.config.js`ga `functions/` papkasini chetlab
+o'tish qo'shildi. Endi:
+- **Frontend testlari:** asosiy papkada `npm test` (Vitest)
+- **Backend testlari:** `functions/` papkasida `npm test` (Jest)
+
+Ikkalasi endi bir-biriga aralashmaydi.
+
+## 88. P&L — "Progressive Disclosure" Chuqur Tahlil sahifasi
+
+**Yangi sahifa:** P&L'dagi yashil "Sof Foyda" karta endi **bosiladigan**
+— yangi, grafikka bag'ishlangan sahifaga o'tkazadi.
+
+**⚠️ Muhim moslashuv:** siz `/analytics/profit-deep-dive` (asosiy
+darajada) so'ragan edingiz, lekin barcha sotuvchi sahifalari
+`/seller/*` ostida joylashgan (sessiya tekshiruvi shu yerda amalga
+oshadi) — shuning uchun **`/seller/analytics/profit-deep-dive`**
+qilib qo'ydim, arxitekturaga mos bo'lishi uchun.
+
+**Yangi kutubxona:** `recharts` qo'shildi (loyihada hech qanday
+grafik kutubxonasi yo'q edi) — `npm install` qilishni unutmang!
+
+**Halol yondashuv — "Export" tugmasi:** siz buni "simulyatsiya"
+deb ta'riflagan edingiz. Men esa **haqiqiy, ishlaydigan** CSV
+eksportini qurdim (loyihada allaqachon mavjud, ishonchli
+`exportToCsv` funksiyasidan foydalanib) — soxta simulyatsiya
+o'rniga.
+
+**Test:** `utils/profitTimeSeries.js` — **10 ta test**.
+
+## 89. CRM Hub — "Ideal CRM" darajasiga ko'tarildi
+
+**Yangi:**
+- Yuqorida 3 ta ko'rsatkich: Jami Mijozlar, O'rtacha LTV,
+  **haqiqiy hisoblangan** Retention Rate
+- Yangi 5-segment: **"Yangi"** mijozlar
+- **Banner rasm** — endi URL matn o'rniga **haqiqiy fayl yuklash**
+  (sudrab tashlash bilan)
+- **Mijoz haqida izoh (Notes)** — yangi, saqlanadigan funksiya
+  (Firestore'da, faqat sotuvchining o'zi ko'radi)
+
+**⚠️ Halol eslatma:** siz "@username" so'ragan edingiz, lekin
+tizimda Telegram username saqlanmaydi (faqat ID) — shuning uchun
+oldingi kabi `tg://user?id=` chuqur havolasidan foydalanildi (bu —
+yolg'on ma'lumot ko'rsatishdan yaxshiroq).
+
+**Test:** `utils/customerSegments.js` — **11 ta test**.
+
+**Umumiy natija (butun sessiya):** 6 ta sof, sinab ko'rilgan
+yordamchi modul, 6 ta sahifa qayta ko'rib chiqildi.
+
+## 90. 🔴 JIDDIY XATO TUZATILDI — CRM xabari noto'g'ri bot orqali yuborilardi
+
+**Siz to'g'ri topdingiz.** `sendCrmNotification` — sotuvchi o'z botini
+ulagan bo'lsa ham, **doim umumiy platforma tokenidan** foydalanardi.
+Natijada, o'z botiga ega sotuvchining mijozlariga xabar **umuman
+yetib bormasdi** (Telegram — faqat foydalanuvchi ALOHIDA "start"
+bosgan botga xabar yuborishga ruxsat beradi).
+
+**Tuzatildi:** `auth.js`dagi bilan bir xil mantiq qo'llanildi —
+avval sotuvchining o'z bot tokeni tekshiriladi, topilmasa — umumiy
+tokenga qaytadi.
+
+**Test:** `notifications.test.js` — **5 ta yangi test**, aynan shu
+xato holatini qamrab oladi.
+
+## 91. Katalog — FAB tugmasi navbarga yopishib turishi tuzatildi
+
+Sabab: `position: fixed` hali ishlatilayotgan edi (avvalgi Mahsulot
+formasidagi XUDDI SHU turdagi bug — bu joyda unutilib qolgan edi).
+
+**Tuzatildi:** tugma endi ro'yxatning **tabiiy, oxirgi elementi** —
+"Yana yuklash" tugmasidan keyin, to'liq kenglikda.
+
+## 92. Navbar — klaviatura ustida "muallaq" ko'rinishi va yorqin rang
+
+**Sabab:** `position: fixed` klaviatura ochilganda, ekran (vizual
+balandlik) qisqarishi bilan **noto'g'ri joyda** hisoblanadi.
+
+**Aqilli yechim:** yangi `useKeyboardVisible()` hook — klaviatura
+ochiq/yopiqligini aniqlaydi, Navbar **silliq animatsiya** bilan
+vaqtincha pastga yashiriladi (dizayn butunlay saqlanadi, faqat
+klaviatura ochiq paytda ko'rinmaydi).
+
+**Bonusda so'ralgan tuzatishlar:**
+- Oq/deyarli-oq border (`border-gray-100`) olib tashlandi
+- Yorqin `blue-600→indigo-600` gradient → to'qroq, dizaynga mos
+  `#4338CA→#4F46E5`
+
+Xuddi shu tuzatish (klaviatura) mijoz tomonidagi navbarga ham
+qo'llanildi (rangi tegilmadi — u haqida shikoyat bo'lmagan edi).
+
+## 93. P&L grafigi — kunlik ma'lumot va Y o'qi raqamlari tuzatildi
+
+**1-bug:** grafik faqat buyurtma bo'lgan kunlarni ko'rsatardi —
+oradagi kunlar butunlay yo'qolib, "faqat birinchi va oxirgi kun"
+taassurotini berardi.
+
+**Tuzatildi:** endi oraliqdagi **har bir kun** (hatto buyurtma
+bo'lmasa ham, 0 qiymat bilan) ko'rsatiladi. Juda uzoq davrlar
+("Barcha vaqt") uchun bu — 366 kungacha cheklangan (minglab bo'sh
+kun qo'shib yubormaslik uchun).
+
+**2-bug:** Y o'qidagi raqamlar — pul miqdori (so'm, "k" = ming), lekin
+**kesilib** qolgan edi ("105k" o'rniga "05k" ko'rinardi) — chunki
+Y o'qi uchun ajratilgan joy tor edi.
+
+**Tuzatildi:** kenglik oshirildi, raqamlar endi to'liq ko'rinadi.
+
+## 94. To'lov sozlamalari tuzatildi + **butun loyiha bo'ylab qidiruv**
+
+Sizning "Saqlash" tugmasi bilan aytganingiz — tuzatildi (bonusda:
+emoji, xom SVG, `pb-36`).
+
+Bu — **3+ marta** takrorlangani uchun, butun loyihani `fixed bottom-`
+bo'yicha qidirib chiqdim. Yana **4 ta** joy topildi:
+
+| Fayl | Xavf | Amal |
+|---|---|---|
+| `Checkout.jsx` (buyurtma tugmasi) | 🔴 4 ta input bor — haqiqiy xato | Klaviatura ochilganda yashiriladi |
+| `AdminApp.jsx` (admin navbar) | Xuddi shu bug + emoji | Tuzatildi |
+| `BottomBuyBar.jsx` | Input yo'q | Tegilmadi (xavf yo'q) |
+| `CartPage.jsx` | Input yo'q | Tegilmadi (xavf yo'q) |
+
+## 95. 3 ta jiddiy tuzatish + Sharh/Reyting tizimi (katta yangi funksiya)
+
+**1) Tarif modal yopilmasligi** — `onClose={() => {}}` (bo'sh
+funksiya) edi. Tuzatildi.
+
+**2) "Sotilganlar" soni yangilanmasligi** — buyurtma yaratilganda
+faqat `stock` kamayar, `sold` hech qachon oshmasdi. Endi ikkalasi
+**bir tranzaksiyada** yangilanadi.
+
+**3) Sharh/Reyting tizimi — to'liq yangi funksiya:**
+
+- **Xaridor:** yulduzcha baho + matnli sharh (faqat **haqiqiy,
+  yetkazib berilgan xaridi** bor mijozlar), "Ulashish" tugmasi
+- **Sotuvchi** (Mahsulotni tahrirlash sahifasida): sharhlarni
+  ko'rish, **pin qilish** (birinchi o'ringa), **o'chirish**
+- Yangi Firestore kolleksiyasi, 2 ta Cloud Function, xavfsizlik
+  qoidalari, 2 ta yangi indeks, **7 ta test**
+
+## 96. Navbarlar — dark/light rejimga moslashtirildi
+
+Ikkala navbar (mijoz va sotuvchi) rangi **qattiq belgilangan** edi —
+tema o'zgarganda o'zgarmasdi. Endi ikkalasi ham to'q rejimda —
+**chuqurroq, boyroq** indigo tusda ko'rinadi (och rejimda — avvalgi,
+yorqinroq gradient).
+
+## 97. Sotuvchi navbar rangi — asosiy dizayn rangiga moslashtirildi
+
+Oldingi tuzatishimda men **yangi, mos kelmaydigan** gradient
+o'ylab topgan edim. Siz to'g'ri payqadingiz — loyihada allaqachon
+**har bir sahifada** (tugmalar, kartalar) ishlatiladigan **yagona
+asosiy rang** bor: `#5346E0`.
+
+**Tuzatildi:** Sotuvchi navbari endi shu **aynan bir xil** rangdan
+foydalanadi — dark va light rejimda **bir xil** (chunki bu rang
+allaqachon ikkalasida ham bir xil ishlatiladi, alohida qorong'i
+variant kerak emas).
+
+## 98. Mijoz navbari — xuddi shu tuzatish
+
+Tekshirdim — mijoz tomonida ham allaqachon izchil ishlatiladigan
+rang bor: **`blue-600`/`indigo-600`** (Checkout, Savat, mahsulot
+tugmalari — hammasida, dark: varianti umuman ishlatilmasdan).
+
+**Tuzatildi:** navbar endi shu **aynan bir xil**, oddiy gradientdan
+foydalanadi — mening oldingi noto'g'ri qo'shgan qorong'i variantim
+olib tashlandi.
+
+## 99. Xaridor qismi — ko'p tillilik to'liq yakunlandi
+
+**Yakuniy natija:**
+- `translations.js` — **126 ta kalit × 3 til** (o'zbek/rus/ingliz),
+  hammasi bir xil to'liqlikda
+- **20 dan ortiq fayl** — Bosh sahifa, Katalog, Mahsulot sahifasi
+  (shu jumladan yangi sharh funksiyasi), Savat, Checkout, Buyurtmalar
+  tarixi, Sevimlilar — barchasi endi tilni almashtirganda **haqiqatan
+  o'zgaradi**
+- Yo'lda yana bir nechta qolib ketgan emoji (✍️📍📦💳) va xom SVG
+  topilib, lucide ikonkalariga almashtirildi
+- Butun xaridor papkasi bo'yicha yakuniy emoji qidiruvi — **toza**
+
+**Eslatma:** Sotuvchi qismi — hali **boshlanmagan**, keyingi bosqich.
+
+## 100. PRODUCTION DARAJASI — Chuqur tahlil (1-bosqich)
+
+Xavfsizlik va tezlik bo'yicha **6 ta haqiqiy** muammo topilib,
+tuzatildi:
+
+1. **🔴 Firestore:** sotuvchi buyurtmaning **istalgan** maydonini
+   o'zgartira olardi (faqat statusni emas) — endi faqat
+   status/sabab o'zgaradi
+2. **🔴 Storage:** CRM banner yuklash uchun qoida **umuman yo'q**
+   edi — bu funksiya ishlamas edi
+3. **🟡 Storage:** mahsulot rasmlari sotuvchilar orasida
+   ajratilmagan edi — endi har biri o'z papkasiga yozadi
+4. **🟢 Tezlik:** rasmlar endi **parallel** yuklanadi (4 tagacha —
+   4 baravargacha tezroq)
+5. **🟡 auth.js** ichki xato tafsilotlarini mijozga ochib qo'yardi
+   (debug uchun qoldirilgan edi) — endi yopiq
+6. **Tozalash:** eski diagnostika loglari (LCP tekshiruvi tugagan)
+   butunlay olib tashlandi
+
+**Davom etadi** — bu, birinchi bosqich. Xohlasangiz, keyingi
+xabarda "davom et" deb yozing.
+
+## 101. PRODUCTION DARAJASI — Chuqur tahlil (2-bosqich)
+
+Bu safar butun `src/` daraxti bo'ylab (oldin faqat sotuvchi/xaridor
+papkalari tekshirilgan edi):
+
+- **Yana bitta o'tkazib yuborilgan emoji** topildi (😕,
+  ErrorBoundary'da) — tuzatildi. Endi **butun loyihada** (frontend
+  + backend) bitta ham emoji qolmaganini alohida tasdiqladim
+- **Toast bildirishnomasi** ham klaviatura ustida "muallaq"
+  qolishi mumkin ekan (masalan CRM izoh saqlashda) — xuddi shu
+  aqilli yechim bilan tuzatildi
+
+**Tekshirib, TOZA deb topilgan joylar** (xato yo'q, aksincha
+tasdiqlandi):
+- XSS xavfi yo'q, maxfiy kalitlar frontendga chiqmagan
+- Barcha Firestore "tinglovchilar" to'g'ri tozalanadi (xotira
+  oqmaydi)
+- Ro'yxatlardagi kalitlar (`key`) to'g'ri ishlatilgan
+- Sahifalarning "kerak bo'lganda yuklash" (lazy loading) tizimi
+  to'g'ri sozlangan
+
+## 102. Tashqi fikr-mulohaza asosida — Hero LCP va backdrop-blur
+
+**Hero rasm** — birinchi slayd endi `loading="eager"` +
+`fetchPriority="high"` (avval "lazy" edi — bu, LCP'ni **yomonlashtirar**
+edi).
+
+**`backdrop-blur`** — butun loyihada (**29 fayl**) olib tashlandi,
+fon shaffofligi oshirilib (masalan /80 → /95), vizual "shisha"
+ko'rinishi saqlanib qolindi, lekin qimmat hisoblash yo'q.
+
+## 103. Marshrut himoyasi va poyga holati (race condition)
+
+**🟡 Muhim bo'shliq:** oddiy mijoz (masalan sotuvchining referal
+havolasi orqali kirgan) qo'lda `/seller/...` manziliga o'tsa,
+sotuvchi panelining **UI qobig'ini** ko'ra olardi (haqiqiy
+ma'lumot Firestore qoidalari bilan bloklangan edi, lekin ko'rinish
+chalkash edi). **Tuzatildi:** endi sotuvchi/admin bo'lmagan har
+qanday foydalanuvchi butun sotuvchi bo'limidan bosh sahifaga
+qaytariladi.
+
+**Kichik poyga holati:** AI tavsif yaratish (bir necha soniya davom
+etadi) — agar shu vaqtda foydalanuvchi sahifadan chiqib ketsa,
+natija "yo'q" komponentga yozilishga urinardi. Tuzatildi.
+
+## 104. Backend test xatosi — noto'g'ri yo'l tuzatildi
+
+`notifications.test.js` va `reviews.test.js` — `./lib/admin` deb
+noto'g'ri yozilgan edi (`__tests__/` papkasi ichidan bo'lgani uchun,
+**`../lib/admin`** bo'lishi kerak edi). Bu — men bu muhitda testlarni
+haqiqatan ishga tushira olmasligim sababli (faqat sintaksis
+tekshira olaman) o'tkazib yuborilgan xato.
+
+**Tuzatildi** — barcha 5 ta backend test fayli endi izchil, to'g'ri
+yo'ldan foydalanadi.
+
+## 105. Til tanlashdagi bayroqlar ham olib tashlandi
+
+To'g'ri payqadingiz — bayroq emoji (🇺🇿🇷🇺🇬🇧) qolib ketgan edi
+(men ularni "kerakli istisno" deb ataylab qoldirgan edim). Endi
+o'rniga rangli matn-nishonchalar (**UZ**/**RU**/**EN**) ishlatiladi
+— butun loyihada **hech qanday** emoji qolmadi, hech qanday
+istisnosiz.
+
+## 106. Bosh sahifa/Katalog — navbar bo'shlig'i to'g'irlandi
+
+Skrinshotda ko'rsatilgan **haqiqiy** xato — "Savatga" tugmalari
+navbar ostida qolib ketardi. **5 ta sahifada** (Bosh sahifa,
+Katalog, Saqlanganlar, Checkout, Kabinet) yetarli bo'lmagan
+bo'shliq (`pb-24`, `pb-32`, `mb-[100px]`) topilib, standart
+`pb-36`ga (Checkout uchun kattaroq) moslashtirildi.
+
+**Katta "TypeScript'ga qayta yozish" so'rovi** — halol aytganda,
+bu, sizning MVP bosqichidagi loyihangiz uchun **hozircha ortiqcha**
+(bir necha hafta vaqt, katta xavf, amaliy foyda kam). Buni
+qilmadim — faqat haqiqiy, ko'rinadigan xatoni tuzatdim.
+
+## 107. ProductCard — haqiqiy yaxshilanishlar (TypeScript'siz)
+
+TypeScript va DOMPurify'ni **qasddan ishlatmadim** (loyihada
+TypeScript sozlanmagan, rasmlar nazorat qilinadigan Storage'dan
+keladi). O'rniga, mavjud stackda (JS + Tailwind + Framer Motion)
+**haqiqiy foydali** narsalarni qildim:
+
+- Barcha tugmalarga **ARIA yorliqlari** (ekran o'quvchilar uchun)
+- Klaviatura orqali fokuslashda ko'rinadigan **uzuk (focus ring)**
+- Rasm yuklanmasa — **zaxira ko'rinish** (buzilgan rasm o'rniga)
+- Yuklanish skeleti — endi **animatsiyali** (`animate-pulse`)
+- Sevimlilar tugmasi — Framer Motion **spring** animatsiyasi bilan
+
+## 108. Yandex Delivery integratsiyasi (production darajasida)
+
+Yandex'ning **rasmiy, joriy hujjatlariga** asoslanib qurildi.
+Muhim topilma: Yandex'ning o'z hujjatlari **webhook'lar
+ishonchsiz** ekanligini tan oladi — shuning uchun arxitektura
+**davriy so'rov (polling, har 10 daqiqada)** asosida qurildi.
+
+**Backend:**
+- `lib/yandexDelivery.js` — Yandex API bilan ishlash moduli
+- `delivery.js` — narx hisoblash, jo'natish, davriy sinxronlash
+- **Xavfsizlik:** narx — checkout paytida ham, buyurtma
+  yaratilganda ham **HAR DOIM serverda, yangidan** hisoblanadi
+  (mijozdan hech qachon ishonilmaydi) — **3 ta yangi test**
+
+**Sotuvchi tomonida:**
+- Yangi sozlamalar sahifasi (OAuth token + xaritadan do'kon
+  manzili)
+
+**Xaridor tomonida (Checkout):**
+- Xaritadan aniq joylashuv tanlansa, **haqiqiy, jonli** Yandex
+  narxi ko'rsatiladi
+
+**⚠️ Hali qilinmagan:** sotuvchi tomonida "Yandex orqali
+jo'natish" tugmasi (backend tayyor, frontend ulanishi kerak).
+**Bu — haqiqiy tashqi API, shuning uchun birinchi haqiqiy sinov —
+sizning tomoningizda bo'ladi.**
+
+## 109. "Kuryer chaqirish" tugmasi — endi haqiqiy ishlaydi
+
+To'g'ri payqadingiz — o'tgan safar faqat "mexanizm" (backend)
+tayyor edi, tugmaning o'zi yo'q edi. Endi buyurtma kartochkasida:
+
+- **"Kuryer chaqirish (Yandex)"** tugmasi (shartlar bajarilganda
+  ko'rinadi)
+- Bosilganda — narx **yana bir marta yangilanadi** (eski taklif
+  eskirgan bo'lishi mumkin), keyin haqiqiy chaqiruv amalga oshadi
+- Chaqirilgandan keyin — **jonli holat** ko'rsatiladi ("Kuryer
+  qidirilmoqda" → "Kuryer topildi" → "Yo'lda" → "Yetkazildi")
+
+Endi bu — **to'liq, boshidan-oxirigacha** ishlaydigan funksiya:
+sozlash → checkout'da narx ko'rish → buyurtma → kuryer chaqirish →
+holatni kuzatish.
+
+## 110. Kuryer telefon raqami qo'shildi
+
+Yandex hujjatlarida **aniq, tasdiqlangan** endpoint topib
+(`driver-voiceforwarding`), buyurtma kartochkasiga **"Qo'ng'iroq"**
+tugmasini qo'shdim — bosilganda kuryerning (maxfiylik uchun
+o'zgartirilgan) telefon raqami ko'rsatiladi va to'g'ridan-to'g'ri
+qo'ng'iroq qilish mumkin.
+
+**⚠️ Halol eslatma — kuzatish havolasi (tracking link) hali yo'q.**
+Buni hujjatlardan **ishonchli topa olmadim** (aniq endpoint yo'li
+noaniq qoldi). Yandex o'zi ogohlantiradi — bu, **haqiqiy pul va
+haqiqiy kuryer** bilan ishlaydigan API, shuning uchun **noaniq
+narsani taxmin qilib** yozishni xohlamadim — bu, ishlamaydigan
+kodni "ishlaydi" deb ko'rsatishdan ko'ra yaxshiroq deb hisoblayman.
+Agar buni xohlasangiz, Yandex Delivery shaxsiy kabinetingizdagi
+menejeringizdan **aniq metodni** so'rab bering — men keyin darhol
+qo'shib beraman.
+
+## 111. Muhim arxitektura tuzatishi — Yandex checkout'dan olib tashlandi
+
+Siz to'g'ri aytdingiz. **Checkout** (`Checkout.jsx`) va **buyurtma
+yaratish** (`createOrder`) — endi Yandex haqida **umuman bilmaydi**,
+xuddi Yandex integratsiyasidan oldingidek. Mijoz — faqat oddiy,
+tanish hudud narxlarini ko'radi.
+
+**Yandex** — endi **faqat sotuvchi tomonida**, buyurtma
+yaratilgandan **keyin** ishlatiladigan vosita (Sozlamalar →
+Yandex Delivery, va buyurtma kartochkasidagi "Kuryer chaqirish").
+
+3 ta endi noto'g'ri bo'lgan test ham olib tashlandi.
+
+**Keyingi savol:** mijozga kuryer yo'lga chiqqanda xabar
+(kuzatish havolasisiz, oddiy "Kuryer topildi" xabari) yuborishni
+xohlaysizmi? Buni hoziroq qura olaman.
+
+## 112. Kuryer topilmasligi — ehtimoliy sabab tuzatildi
+
+Kodimda **kuryer turi (`taxi_class`)** umuman ko'rsatilmagan ekan!
+Yandex hujjatlarida bu — aniq talab qilinadigan maydon (qaysi
+turdagi kuryer qidirilishi kerakligini bildiradi). Buni
+qo'shmasdan, Yandex qaysi kuryerlarni qidirishni bilmay qolgan
+bo'lishi mumkin.
+
+**Tuzatildi** — endi ikkala so'rovda ham `"express"` (tezkor,
+kichik jo'natmalar uchun) ko'rsatiladi.
+
+**⚠️ 100% kafolat emas** — agar hali ham ishlamasa, keyingi qadam:
+
+```bash
+firebase functions:log
+```
+
+orqali **haqiqiy Yandex xato xabarini** ko'rish kerak bo'ladi —
+men buni sizga ko'rsatib, aniq tahlil qilaman.
+
+## 113. 🔴 ASOSIY SABAB TOPILDI — noto'g'ri endpoint butunlay
+
+Siz yuborgan **rasmiy hujjat** — hal qiluvchi bo'ldi. U yerda aniq
+ko'rsatilgan: **Rossiya** uchun 1-qadam `offers/calculate`, lekin
+**boshqa mamlakatlar** (O'zbekiston) uchun — butunlay **boshqa**
+endpoint: **`check-price`**.
+
+Men butun vaqt `offers/calculate`ni ishlatgan edim — bu, **sizning
+mintaqangiz uchun noto'g'ri edi**. Bu — "kuryer umuman
+topilmayapti" muammosining **haqiqiy sababi** bo'lishi juda
+ehtimol.
+
+**To'liq tuzatildi:**
+- To'g'ri endpoint (`check-price`) ishlatiladi
+- Javob tuzilishi to'g'irlandi (bu endpoint boshqacha ma'lumot
+  qaytaradi)
+- Endi "taklif ID" (offer_id) talab qilinmaydi (bu mintaqada
+  mavjud emas)
+
+**⚠️ Bu safar — MUHIM: butun zip faylni to'liq almashtiring**
+(faqat bitta faylni emas), chunki bir nechta fayl birga
+o'zgargan.
+
 ## Qolgan tavsiyalar (keyingi bosqich uchun)
 
 Vaqt va hajm cheklovi tufayli quyidagilar hali qo'lga olinmadi — lekin

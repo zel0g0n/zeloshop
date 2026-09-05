@@ -7,8 +7,11 @@ import {
   ProductInfo,
   ProductPrice,
   RelatedProducts,
-  BottomBuyBar
+  BottomBuyBar,
+  BundleOffer
 } from "@/features/shop/components/productDetail/indexProductDetail";
+import ProductReviews from "@/features/shop/components/productDetail/ProductReviews";
+import ProductAssistant from "@/features/shop/components/productDetail/ProductAssistant";
 
 const ProductDetailPage = () => {
   const { id } = useParams();
@@ -27,16 +30,18 @@ const ProductDetailPage = () => {
   }
 
   return (
-    <div className="pb-[260px] bg-white dark:bg-slate-950 min-h-screen animate-fadeIn">
+    <div className="pb-36 bg-white dark:bg-slate-950 min-h-screen animate-fadeIn">
       <ProductGallery product={product} />
 
       <div className="max-w-[440px] mx-auto px-4 space-y-6 mt-6">
         <ProductInfo info={product} />
         <ProductPrice priceData={product} />
+        <BundleOffer product={product} />
+        <BottomBuyBar price={product.price} product={product} />
+        <ProductAssistant product={product} />
+        <ProductReviews product={product} />
         <RelatedProducts />
       </div>
-
-      <BottomBuyBar price={product.price} product={product} />
     </div>
   );
 };

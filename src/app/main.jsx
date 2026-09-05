@@ -4,6 +4,9 @@ import {BrowserRouter} from 'react-router-dom'
 import '../styles/index.css'
 import App from './App'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import { initSentry } from '@/lib/sentry'
+
+initSentry();
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

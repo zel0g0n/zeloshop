@@ -8,6 +8,7 @@ const useSendOrder = () => {
   const error = useSelector(state => state.orders?.error);
   const success = useSelector(state => state.orders?.success);
   const carts = useSelector(state => state.carts?.items || []);
+  const activeBundle = useSelector(state => state.carts?.activeBundle || null);
 
   const sendOrder = useCallback(async (customerData, cartData, sellerId, userID) => {
     try {
@@ -18,16 +19,27 @@ const useSendOrder = () => {
         userID 
       })).unwrap();
       
-      localStorage.removeItem('cart'); 
+      // MUHIM: `clearCart()` (pastda) endi JORIY sotuvchiga tegishli
+      // (to'g'ri, sellerId bilan chegaralangan) kalitni o'zi
+      // tozalaydi — shu sababli bu yerda alohida, ESKI (umumiy,
+      // xato) `'cart'` kalitini qo'lda o'chirishga hojat yo'q.
       dispatch(clearCart());
       return result;
     } catch (err) {
       console.error("Hook order error:", err);
-      throw err;
+      // MUHIM TUZATISH: Redux Toolkit'ning `.unwrap()` funksiyasi
+      // `rejectWithValue(string)` orqali rad etilgan thunk'larda
+      // xato matnini ODDIY STRING sifatida "throw" qiladi (Error
+      // obyekti emas). Bu, chaqiruvchi joyda `error.message` doim
+      // `undefined` bo'lib, HAQIQIY server xatosi (masalan "omborda
+      // yetarli emas") o'rniga umumiy "Buyurtma jo'natilmadi"
+      // matni ko'rsatilishiga olib kelardi. Bu yerda har doim
+      // to'g'ri `.message`ga ega Error obyektiga aylantiramiz.
+      throw err instanceof Error ? err : new Error(typeof err === "string" ? err : "Buyurtma jo'natishda noma'lum xatolik yuz berdi.");
     }
   }, [dispatch]);
 
-  return { sendOrder, loading, error, success, carts };
+  return { sendOrder, loading, error, success, carts, activeBundle };
 };
 
 export default useSendOrder;

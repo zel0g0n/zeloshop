@@ -41,4 +41,20 @@ export default defineConfig({
       },
     },
   },
+  // Vitest — sof (React'siz) yordamchi funksiyalarni sinash uchun
+  // (masalan `src/utils/dashboardStats.js`). Hozircha `jsdom` kerak
+  // emas (bu testlar DOM'ga tegmaydi) — kerak bo'lsa keyinroq
+  // `environment: "jsdom"` qo'shish kifoya.
+  // MUHIM: standart bo'yicha Vitest LOYIHADAGI BARCHA "*.test.js"
+  // fayllarni qidiradi — shu jumladan `functions/__tests__/*`ni ham!
+  // Lekin o'sha testlar — Jest uchun yozilgan (`jest.doMock` kabi,
+  // Vitest'da mavjud bo'lmagan API'lardan foydalanadi) va backend'ning
+  // O'Z, alohida `npm test` (Jest) buyrug'i orqali ishga tushirilishi
+  // kerak. Shuning uchun `functions/` papkasi bu yerda ATAYLAB
+  // chetlab o'tiladi.
+  test: {
+    globals: false,
+    environment: "node",
+    exclude: ["**/node_modules/**", "**/functions/**"],
+  },
 })

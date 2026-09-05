@@ -1,33 +1,40 @@
 import React from "react";
+import { Check, Loader2 } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
-// `floating=true` (standart) — eski, `position: fixed` rejim.
-// `floating=false` — yangi flex-layout rejimi: tugma oddiy flex
-// elementi sifatida, forma tagida, hech qanday `fixed` bo'lmasdan
-// joylashadi (mobil klaviatura muammosini tub sababidan hal qiladi).
-const SubmitBar = ({ isGlobalLoading, uploadLoading, uploadProgress, floating = true, idleLabel = "Yaratish va Saqlash ✨", savingLabel = "Firestore-ga yozilmoqda..." }) => (
-  <div className={floating ? "fixed bottom-24 left-0 right-0 px-4 z-40" : ""}>
-    <button
-      type="submit"
-      disabled={isGlobalLoading}
-      className={`w-full h-11 text-white font-black text-xs rounded-xl shadow-lg flex items-center justify-center gap-1.5 active:scale-98 transition-all ${
-        isGlobalLoading
-          ? "bg-slate-400 cursor-not-allowed shadow-none"
-          : "bg-[#5346E0] shadow-indigo-600/20 hover:bg-[#4336c7]"
-      }`}
-    >
-      {isGlobalLoading ? (
-        <div className="flex items-center gap-2">
-          <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-          </svg>
-          <span>{uploadLoading ? `Rasm yuklanmoqda (${uploadProgress}%)` : savingLabel}</span>
-        </div>
-      ) : (
-        <span>{idleLabel}</span>
-      )}
-    </button>
-  </div>
-);
+// OLDIN: bu tugma yoki `position: fixed` orqali ekranga sun'iy
+// yopishtirilgan, yoki alohida (`floating=false`) holatda formaning
+// TASHQARISIDA, lekin baribir doim ko'rinadigan pastki panelda edi.
+//
+// ENDI: bu — formaning ODDIY, TABIIY oxirgi elementi. Forma bilan
+// birga skroll bo'ladi, hech qanday sun'iy joylashuv yo'q — sahifa
+// pastigacha o'qib borgan foydalanuvchi uni ko'radi, xolos.
+const SubmitBar = ({ isGlobalLoading, uploadLoading, uploadProgress, idleLabel, savingLabel, formId }) => {
+  const { t } = useLanguage();
+  return (
+  <button
+    type="submit"
+    form={formId}
+    disabled={isGlobalLoading}
+    className={`w-full h-12 text-white font-semibold text-sm rounded-xl shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-transform ${
+      isGlobalLoading
+        ? "bg-slate-400 dark:bg-slate-700 cursor-not-allowed shadow-none"
+        : "bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30"
+    }`}
+  >
+    {isGlobalLoading ? (
+      <>
+        <Loader2 size={16} className="animate-spin" />
+        <span>{uploadLoading ? t("sellerProductForm.uploadingImage", { percent: uploadProgress }) : (savingLabel || t("sellerProductForm.saving"))}</span>
+      </>
+    ) : (
+      <>
+        <Check size={16} strokeWidth={2.5} />
+        <span>{idleLabel || t("sellerProductForm.createAndSave")}</span>
+      </>
+    )}
+  </button>
+  );
+};
 
 export default React.memo(SubmitBar);

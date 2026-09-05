@@ -1,17 +1,4 @@
-import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
-import getProducts from "@/services/products/getProducts";
-
-export const getProductAsyncThunk = createAsyncThunk(
-  'products/fetchProducts',
-  async (sellerId, { rejectWithValue }) => {
-    try {
-      const data = await getProducts(sellerId)
-      return { products: data, sellerId }
-    } catch (error) {
-      return (rejectWithValue(error.message || `Xatolik yuz berdi`))
-    }
-  }
-)
+import { createSlice } from "@reduxjs/toolkit";
 
 // OLDIN: qidiruv/filtr holati (`queryKey`, `activeCategory`, `activeType`)
 // shu yerda, Redux'da (butun ilova uchun umumiy) saqlanardi. Bu Bosh
@@ -31,24 +18,28 @@ const initialState = {
 
 const getProductSlice = createSlice({
   name: 'products',
-  reducers: {},
+  reducers: {
+    // Obuna boshlanganda (birinchi ma'lumot hali kelmagan bo'lsa).
+    productsLoading: (state) => {
+      state.loading = true;
+      state.error = null;
+    },
+    // Jonli (real-vaqtli) obuna orqali kelgan yangilanish — bu,
+    // BIRINCHI yuklashdan KEYIN, istalgan vaqtda (masalan sotuvchi
+    // mahsulotni o'chirganda) qayta-qayta chaqirilishi mumkin.
+    productsLiveUpdated: (state, action) => {
+      state.products = action.payload.products;
+      state.loadedForSellerId = action.payload.sellerId;
+      state.loading = false;
+      state.error = null;
+    },
+    productsLoadError: (state, action) => {
+      state.error = action.payload;
+      state.loading = false;
+    },
+  },
   initialState,
-  extraReducers: (builder) => {
-    builder
-      .addCase(getProductAsyncThunk.pending, (state) => {
-        state.loading = true;
-        state.error = null;
-      })
-      .addCase(getProductAsyncThunk.fulfilled, (state, action) => {
-        state.products = action.payload.products
-        state.loadedForSellerId = action.payload.sellerId
-        state.loading = false
-      })
-      .addCase(getProductAsyncThunk.rejected, (state, action) => {
-        state.error = action.payload
-        state.loading = false
-      })
-  }
 })
 
+export const { productsLoading, productsLiveUpdated, productsLoadError } = getProductSlice.actions;
 export default getProductSlice.reducer

@@ -1,5 +1,6 @@
 import { memo, useEffect } from "react";
-import { FiCheckCircle, FiAlertCircle, FiInfo } from "react-icons/fi";
+import { CheckCircle, AlertCircle, Info } from "lucide-react";
+import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 // OLDIN: muvaffaqiyat/xato/ma'lumot xabarlari brauzerning standart
 // `alert()` oynasi orqali ko'rsatilardi — bu ilova dizayniga mos
@@ -9,9 +10,9 @@ import { FiCheckCircle, FiAlertCircle, FiInfo } from "react-icons/fi";
 // ishlatiladi — xuddi profil tahrirlashdagi "Muvaffaqiyatli saqlandi"
 // oynasi kabi.
 const VARIANTS = {
-  success: { Icon: FiCheckCircle, color: "text-green-500" },
-  error: { Icon: FiAlertCircle, color: "text-rose-500" },
-  info: { Icon: FiInfo, color: "text-blue-500" },
+  success: { Icon: CheckCircle, color: "text-green-500" },
+  error: { Icon: AlertCircle, color: "text-rose-500" },
+  info: { Icon: Info, color: "text-blue-500" },
 };
 
 const StatusModal = ({ variant = "info", title, message, onClose, autoCloseMs }) => {
@@ -23,8 +24,10 @@ const StatusModal = ({ variant = "info", title, message, onClose, autoCloseMs })
     return () => clearTimeout(timer);
   }, [autoCloseMs, onClose]);
 
+  useEscapeToClose(onClose);
+
   return (
-    <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-[100] flex items-center justify-center p-4 transition-all duration-200 animate-fade-in">
+    <div className="fixed inset-0 bg-black/40 z-[100] flex items-center justify-center p-4 transition-all duration-200 animate-fade-in" role="alertdialog" aria-modal="true" aria-live="assertive">
       <div className="bg-white dark:bg-slate-900 p-6 rounded-3xl shadow-xl flex flex-col items-center max-w-xs text-center">
         <Icon size={44} className={`${color} mb-3`} />
         {title && <h3 className="text-base font-bold text-gray-800 dark:text-white mb-1">{title}</h3>}

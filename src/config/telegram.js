@@ -61,7 +61,7 @@ export const waitForInitData = async (maxAttempts = 20, delayMs = 100) => {
 
 /**
  * DEV / LOKAL TEST rejimi uchun zaxira ID'lar.
- * ⚠️ Bular faqat Telegram tashqarisida (masalan localhost'da) ishlaganda
+ * MUHIM: bular faqat Telegram tashqarisida (masalan localhost'da) ishlaganda
  * ishlatiladi. Productionda WebApp.initData mavjud bo'lgani uchun ular
  * hech qachon ishlatilmaydi. Haqiqiy Firestore'dagi mavjud test
  * hujjatlariga mos keladi — shuning uchun loyihani localhost'da ochib
@@ -73,7 +73,7 @@ export const DEV_FALLBACK_CLIENT_ID = "QdPK91xipZh6c6JHaupV";
 /**
  * Botning Telegram username'i (@ belgisisiz). Do'kon havolasini
  * yasash uchun kerak.
- * ⚠️ Bot nomini o'zgartirsangiz, shu joyni ham yangilang.
+ * MUHIM: bot nomini o'zgartirsangiz, shu joyni ham yangilang.
  */
 export const BOT_USERNAME = "zeloshop_bot";
 
@@ -85,3 +85,26 @@ export const BOT_USERNAME = "zeloshop_bot";
  * Havola shakli: t.me/BOT_USERNAME/APP_SHORT_NAME?startapp=qiymat
  */
 export const APP_SHORT_NAME = "shop";
+
+/**
+ * Telegram haptic (tebranish) signalini XAVFSIZ chaqiradi — kuryer
+ * ilovasidagi "kichik qulayliklar" so'rovi bilan qo'shildi.
+ *
+ * MUHIM: bu — SOF QULAYLIK xususiyati. Eski Telegram mijozlarida
+ * (yoki ilova oddiy brauzerda ochilganda) `HapticFeedback` obyekti
+ * umuman mavjud bo'lmasligi mumkin — shuning uchun har doim optional
+ * chaining + try/catch bilan o'raladi va xato chiqsa ham JIM
+ * yutiladi (asosiy funksionallikka — masalan buyurtma holatini
+ * yangilashga — HECH QANDAY ta'sir qilmasligi SHART).
+ */
+export const triggerHaptic = (kind = "impact", style) => {
+  try {
+    const haptic = getTelegramWebApp()?.HapticFeedback;
+    if (!haptic) return;
+    if (kind === "notification") haptic.notificationOccurred(style || "success");
+    else if (kind === "selection") haptic.selectionChanged();
+    else haptic.impactOccurred(style || "light");
+  } catch {
+    // sekundar (ikkinchi darajali) xususiyat — xato yutiladi
+  }
+};

@@ -7,7 +7,14 @@ import { doc, setDoc, deleteDoc, getDoc, collection, query, orderBy, serverTimes
  * ishlatiladi — bu checkout paytida bitta so'rov bilan tez
  * qidirish imkonini beradi.
  */
-export const createCoupon = async (sellerId, { code, discountType, discountValue, expiresAt, usageLimit }) => {
+// YANGI (#117, "hamkor/blogger kodi"): agar `partnerName` berilsa, bu
+// promokod ANIQ bir hamkorga (masalan blogerga) bog'langan deb
+// hisoblanadi - `functions/orders.js` shu kod ishlatilgan HAR bir
+// buyurtmada `sellers/{id}/partnerCodeStats/{code}`ga (buyurtmalar
+// soni + umumiy sof savdo) avtomatik yozadi, shuning uchun bu YERDA
+// hech qanday qo'shimcha hisoblash SHART emas - faqat nomni saqlash
+// kifoya, qolganini server o'zi kuzatadi.
+export const createCoupon = async (sellerId, { code, discountType, discountValue, expiresAt, usageLimit, partnerName }) => {
   if (!sellerId) throw new Error("Sotuvchi ID topilmadi.");
   const normalizedCode = code?.trim().toUpperCase();
   if (!normalizedCode) throw new Error("Promokod kiritilishi shart.");
@@ -27,6 +34,7 @@ export const createCoupon = async (sellerId, { code, discountType, discountValue
       usageLimit: usageLimit ? Number(usageLimit) : null,
       usedCount: 0,
       isActive: true,
+      partnerName: partnerName?.trim() || null,
       createdAt: serverTimestamp(),
       createdAtMs: Date.now(),
     });
@@ -73,7 +81,7 @@ export const validateCoupon = async (sellerId, code) => {
     }
 
     return { valid: true, coupon };
-  } catch (error) {
+  } catch {
     return { valid: false, error: "Promokodni tekshirishda xatolik yuz berdi." };
   }
 };

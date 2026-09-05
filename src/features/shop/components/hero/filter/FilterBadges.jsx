@@ -1,39 +1,48 @@
 import { memo } from 'react'
-import { BsGrid, AiOutlineDollarCircle, MdOutlineNewReleases, AiFillStar, MdLocalFireDepartment} from "@/constants/icons";
+import { LayoutGrid, Flame, Wallet, Sparkles, Star } from 'lucide-react'
 import useChangeCategory from '@/hooks/useChangeCategory';
+import { useLanguage } from '@/context/LanguageContext';
 
-const quickBadges = [
-  { id: "all", title: "Barchasi", icon: <BsGrid /> },
-  { id: "aksiya", title: "Aksiya", icon: <MdLocalFireDepartment /> },
-  { id: "arzon", title: "Arzon", icon: <AiOutlineDollarCircle /> },
-  { id: "new", title: "Yangilar", icon: <MdOutlineNewReleases /> },
-  { id: "top", title: "Top", icon: <AiFillStar /> },
-];
-
-// OLDIN: bu komponent o'zining lokal `activeBadge` state'iga ega edi —
-// bu esa Redux'dagi haqiqiy `activeCategory` bilan mos kelmay qolishi
-// mumkin edi (masalan boshqa joydan filtr tozalansa, bu tugmalar buni
-// bilmasdi). Endi Redux — yagona manba.
+/**
+ * MUHIM QAYTA DIZAYN: OLDIN bu tezkor-filtrlar KATTA (48px) doira
+ * ikonkalar + PASTDA alohida yorliq shaklida edi (react-icons,
+ * 24px) - bu, ekranning katta qismini egallardi va zamonaviy UI
+ * standartlariga mos kelmasdi ("qo'pol" ko'rinish). Endi - ixcham,
+ * bitta qatorli PILL tugmalar (ikonka + matn YONMA-YON, bitta
+ * chiziqda) - kamroq joy egallaydi, tozaroq ko'rinadi, va
+ * sotuvchi panelidagi (`ProductAnalytics.jsx` va h.k.) bilan BIR
+ * XIL vizual naqsh (faqat mijoz uchun belgilangan `blue-600` rangi
+ * bilan).
+ */
 const FilterBadges = () => {
   const { changeCategory, activeCategory } = useChangeCategory()
+  const { t } = useLanguage();
+
+  const quickBadges = [
+    { id: "all", title: t("catalog.filterAll"), Icon: LayoutGrid },
+    { id: "aksiya", title: t("catalog.filterSale"), Icon: Flame },
+    { id: "arzon", title: t("catalog.filterCheap"), Icon: Wallet },
+    { id: "new", title: t("catalog.filterNew"), Icon: Sparkles },
+    { id: "top", title: t("catalog.filterTop"), Icon: Star },
+  ];
 
   return (
-    <div className='sticky top-0 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md z-30 border-b border-gray-100 dark:border-slate-800 p-4 space-y-3'>
-      <div className="flex gap-2 justify-between overflow-x-auto no-scrollbar py-0.5 scrollbar-hide">
-        {quickBadges.map((badge) => (
-          <div key={badge.id} className="flex flex-col items-center gap-1">
-            <button
-              onClick={() => changeCategory(badge.id)}
-              className={`flex items-center justify-center w-12 h-12 text-[11px] font-medium rounded-full whitespace-nowrap transition-all duration-200 gap-1.5
-                  ${activeCategory === badge.id 
-                    ? "bg-blue-600 text-white shadow-sm" 
-                    : "bg-gray-100 dark:bg-slate-800 text-blue-600/55 dark:text-blue-400/70"
-                  }`}
-            >
-                      {badge.icon && <span className="text-2xl">{badge.icon}</span>}
-            </button>
-            <span className="text-gray-600 dark:text-slate-400">{badge.title}</span>
-          </div>
+    <div className='sticky top-0 bg-white/95 dark:bg-slate-950/95 z-30 border-b border-gray-100 dark:border-slate-800 px-4 py-3'>
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        {quickBadges.map(({ id, title, Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => changeCategory(id)}
+            className={`shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-colors duration-200
+                ${activeCategory === id
+                  ? "bg-blue-600 text-white shadow-sm shadow-blue-600/30"
+                  : "bg-gray-100 dark:bg-slate-800 text-gray-500 dark:text-slate-400"
+                }`}
+          >
+            <Icon size={14} />
+            {title}
+          </button>
         ))}
       </div>
     </div>

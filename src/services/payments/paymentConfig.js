@@ -30,6 +30,19 @@ export const savePaymentConfig = async (sellerId, config) => {
         paymeMerchantId: config.paymeMerchantId || null,
         paymeKey: config.paymeKey || null,
         paymeEnabled: Boolean(config.paymeEnabled && config.paymeMerchantId && config.paymeKey),
+        // "Jismoniy shaxs" (individual) - ATMOS ulanmagunicha, mijozdan
+        // kartaga qo'lda to'lov qabul qilish uchun (2026-09
+        // punkt-royxati, 2/14-band). `individualCardNumber` bu yerda
+        // TOZALANGAN (faqat raqamlar) holda saqlanadi - formatlash
+        // (bo'shliqlar bilan) faqat UI qatlamida.
+        individualCardNumber: config.individualCardNumber ? String(config.individualCardNumber).replace(/\D/g, "") : null,
+        individualCardHolderName: config.individualCardHolderName || null,
+        individualPaymentEnabled: Boolean(
+          config.individualPaymentEnabled &&
+          config.individualCardNumber &&
+          String(config.individualCardNumber).replace(/\D/g, "").length === 16 &&
+          config.individualCardHolderName
+        ),
         updatedAt: new Date().toISOString(),
       },
       { merge: true }

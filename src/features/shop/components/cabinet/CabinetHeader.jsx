@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { MdOutlineModeEditOutline } from "react-icons/md";
+import { Pencil } from "lucide-react";
 import useGetClientData from "@/hooks/useGetClientData";
 import { useNavigate } from "react-router";
 import { ProfileHeaderSkeleton } from "@/components/ui/Skeleton";
@@ -39,7 +39,7 @@ const CabinetHeader = () => {
       </div>
       
       <div onClick={() => navigate('/cabinet/edit')} className="border border-blue-500/50 rounded-[10px] px-3 py-2 flex items-center gap-2 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors">
-        <span className="text-[20px] text-blue-500"><MdOutlineModeEditOutline /></span>
+        <span className="text-blue-500"><Pencil size={20} /></span>
       </div>
     </div>
   );

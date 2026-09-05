@@ -1,4 +1,4 @@
-import React, { memo } from "react";
+import { memo } from "react";
 import { AlertTriangle } from "lucide-react";
 
 const ProductsStatusTabs = ({ activeTab, onChangeTab, allCount, activeCount, inactiveCount, lowStockCount }) => (

@@ -1,16 +1,14 @@
 import { useMemo, useState } from "react";
-import { signOut } from 'firebase/auth';
-import { auth } from '@/firebase/config';
-import { 
-  FiShoppingBag, FiGlobe, FiLogOut,
-  FiHeart, FiMoon, FiSun, FiShield, FiInfo 
-} from "react-icons/fi";
+import { getTelegramWebApp } from "@/config/telegram";
+import {
+  ShoppingBag, Globe, LogOut, TrendingUp,
+  Heart, Moon, Sun, Shield, Info, Gift
+} from "lucide-react";
 import CabinetMenu from "@/features/shop/components/cabinet/CabinetMenu";
 import CabinetHeader from "@/features/shop/components/cabinet/CabinetHeader";
 import ActiveOrder from "@/features/shop/components/order/ActiveOrder";
 import LanguageModal from "@/components/ui/LanguageModal";
 import ThemeModal from "@/components/ui/ThemeModal";
-import StatusModal from "@/components/ui/StatusModal";
 import { useFavoritesList } from "@/hooks/useAddFavourite";
 import { useLanguage } from "@/context/LanguageContext";
 import { useTheme } from "@/context/ThemeContext";
@@ -21,52 +19,61 @@ const ProfilePage = () => {
   const { t, language } = useLanguage();
   const { isDark } = useTheme();
   const [openModal, setOpenModal] = useState(null); // 'language' | 'theme' | null
-  const [comingSoonName, setComingSoonName] = useState(null);
-  const [logoutError, setLogoutError] = useState(null);
-  const [signingOut, setSigningOut] = useState(false);
 
-  // OLDIN: "Maxfiylik siyosati" va "Biz haqimizda" `/privacy` va
-  // `/about` marshrutlariga havola qilardi — bunday sahifalar ilovada
-  // UMUMAN yo'q edi, bosilganda bo'sh sahifa chiqardi. Endi seller
-  // panelidagi bilan bir xil "Tez orada" naqshi ishlatiladi.
   const menuSections = useMemo(() => [
     {
       title: t("cabinet.personalInfo"),
       items: [
-        { id: "wishlist", title: t("cabinet.wishlist"), icon: <FiHeart size={18} />, badge: `${favorites.length}`, path: `/saved` },
-        { id: "orders", title: t("cabinet.orders"), icon: <FiShoppingBag size={18} />, path: `/orders` },
+        { id: "wishlist", title: t("cabinet.wishlist"), icon: <Heart size={18} />, badge: `${favorites.length}`, path: `/saved` },
+        { id: "orders", title: t("cabinet.orders"), icon: <ShoppingBag size={18} />, path: `/orders` },
+        { id: "spending", title: t("cabinet.mySpending"), icon: <TrendingUp size={18} />, path: `/my-spending` },
+        { id: "referral", title: t("cabinet.referral"), icon: <Gift size={18} />, path: `/referral` },
       ]
     },
     {
       title: t("cabinet.accountSettings"),
       items: [
-        { id: "language", title: t("cabinet.language"), icon: <FiGlobe size={18} />, textBadge: translations[language].language_name, onClick: () => setOpenModal("language") },
-        { id: "theme", title: t("cabinet.theme"), icon: isDark ? <FiMoon size={18} /> : <FiSun size={18} />, textBadge: isDark ? t("cabinet.themeDark") : t("cabinet.themeLight"), onClick: () => setOpenModal("theme") },
+        { id: "language", title: t("cabinet.language"), icon: <Globe size={18} />, textBadge: translations[language].language_name, onClick: () => setOpenModal("language") },
+        { id: "theme", title: t("cabinet.theme"), icon: isDark ? <Moon size={18} /> : <Sun size={18} />, textBadge: isDark ? t("cabinet.themeDark") : t("cabinet.themeLight"), onClick: () => setOpenModal("theme") },
       ]
     },
     {
       title: t("cabinet.appSupport"),
       items: [
-        { id: "privacy", title: t("cabinet.privacy"), icon: <FiShield size={18} />, onClick: () => setComingSoonName(t("cabinet.privacy")) },
-        { id: "about", title: t("cabinet.about"), icon: <FiInfo size={18} />, onClick: () => setComingSoonName(t("cabinet.about")) },
+        { id: "store-info", title: t("cabinet.storeInfo"), icon: <Info size={18} />, path: `/store-info` },
+        { id: "privacy", title: t("cabinet.privacy"), icon: <Shield size={18} />, path: `/privacy` },
       ]
     }
   ], [favorites.length, t, language, isDark]);
 
-  const handleLogout = async () => {
-    if (signingOut) return;
-    setSigningOut(true);
-    try {
-      await signOut(auth);
-      window.location.reload();
-    } catch (err) {
-      setLogoutError(err.message);
-      setSigningOut(false);
+  // MUHIM TUZATISH (haqiqiy, sezilmagan xato): OLDIN bu tugma
+  // Firebase `signOut()` + sahifani qayta yuklashni bajarardi. LEKIN
+  // bu ilova — Telegram orqali AVTOMATIK autentifikatsiya qilinadi
+  // (`SessionContext.jsx`, `signInWithCustomToken`) - sahifa qayta
+  // yuklanganda, Telegram YANA o'sha foydalanuvchi sifatida DARHOL
+  // qayta kirgizib qo'yardi! Ya'ni foydalanuvchi "chiqaman" deb
+  // bossa ham, ILOVA ICHIDA turib "chiqish" IMKONSIZ edi - u faqat
+  // bir lahzalik "yonib-o'chish" ko'rar, keyin darhol yana o'zi
+  // sifatida ekanini ko'rardi.
+  //
+  // TO'G'RI YECHIM: Telegram Mini App kontekstida "chiqish"ning
+  // yagona mazmunli ekvivalenti - ILOVANI YOPISH (`WebApp.close()`).
+  // Foydalanuvchi hisobidan "chiqmaydi" (bu texnik jihatdan imkonsiz),
+  // balki ilovani yopib chiqadi - "Chiqish" tugmasining aslida
+  // anglatgan narsasi ham shu edi.
+  const handleLogout = () => {
+    const webApp = getTelegramWebApp();
+    if (webApp?.close) {
+      webApp.close();
+    } else {
+      // Telegram tashqarisida (lokal test) - shunchaki bosh sahifaga
+      // qaytaramiz, chunki `WebApp.close()` mavjud emas.
+      window.location.href = "/";
     }
   };
 
   return (
-    <div className="bg-gray-50/50 dark:bg-slate-950 min-h-screen pb-32 transition-colors duration-300">
+    <div className="bg-gray-50/50 dark:bg-slate-950 min-h-screen pb-36 transition-colors duration-300">
       <CabinetHeader/>
       <ActiveOrder />
       <div className="p-4 space-y-5">
@@ -76,11 +83,10 @@ const ProfilePage = () => {
 
         <button
           onClick={handleLogout}
-          disabled={signingOut}
-          className="w-full mt-2 bg-red-50/40 dark:bg-red-500/10 hover:bg-red-50 dark:hover:bg-red-500/20 border border-red-100/50 dark:border-red-500/20 text-red-500 font-bold h-12 rounded-[20px] flex items-center justify-center gap-2 text-xs active:scale-95 transition-all duration-200 shadow-2xs disabled:opacity-60"
+          className="w-full mt-2 bg-red-50/40 dark:bg-red-500/10 hover:bg-red-50 dark:hover:bg-red-500/20 border border-red-100/50 dark:border-red-500/20 text-red-500 font-bold h-12 rounded-[20px] flex items-center justify-center gap-2 text-xs active:scale-95 transition-all duration-200 shadow-2xs"
         >
-          <FiLogOut size={14} />
-          <span>{signingOut ? "Chiqilmoqda..." : t("common.logout")}</span>
+          <LogOut size={14} />
+          <span>{t("common.logout")}</span>
         </button>
 
         <p className="text-center text-[10px] text-gray-300 dark:text-slate-600 font-medium pt-2">
@@ -90,24 +96,6 @@ const ProfilePage = () => {
 
       {openModal === "language" && <LanguageModal onClose={() => setOpenModal(null)} />}
       {openModal === "theme" && <ThemeModal onClose={() => setOpenModal(null)} />}
-
-      {comingSoonName && (
-        <StatusModal
-          variant="info"
-          title="Tez orada"
-          message={`"${comingSoonName}" bo'limi hali ishlab chiqilmoqda.`}
-          onClose={() => setComingSoonName(null)}
-        />
-      )}
-
-      {logoutError && (
-        <StatusModal
-          variant="error"
-          title="Tizimdan chiqishda xatolik"
-          message={logoutError}
-          onClose={() => setLogoutError(null)}
-        />
-      )}
     </div>
   );
 };
