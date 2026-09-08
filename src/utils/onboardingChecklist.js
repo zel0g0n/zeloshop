@@ -25,7 +25,18 @@ export function buildOnboardingSteps(store, dashboardSummary) {
   // bosqichi doim "bajarilmagan" bo'lib ko'rinardi, hatto sotuvchi
   // narxlarni to'liq sozlagan bo'lsa ham.
   const hasDeliveryZone = Boolean(store?.deliveryTiers && Object.keys(store.deliveryTiers).length > 0);
-  const hasOrder = Boolean(dashboardSummary?.hasEverOrdered);
+  // MUHIM O'ZGARISH (2026-09): "Birinchi buyurtmangizni qabul qiling"
+  // bosqichi olib tashlandi — bu, sotuvchining o'zi emas, MIJOZning
+  // harakatiga bog'liq edi (`routeTo: null` — bosilganda hech qayerga
+  // olib bormasdi), shuning uchun checklist mazmuniga mos kelmasdi
+  // (qolgan hammasi — sotuvchi o'zi bajaradigan sozlash qadamlari).
+  // O'rniga "To'lov ma'lumotlari" qo'yildi — sotuvchi Checkout'da
+  // qanday to'lov usul(lar)i ishlashini sozlashi kerak
+  // (`sellers/{id}.paymentTypes`, `PaymentSettingsPage.jsx`da
+  // saqlanadi). Bu maydon do'kon yaratilganda YOZILMAYDI — faqat
+  // sotuvchi shu sahifada birinchi marta saqlaganda paydo bo'ladi,
+  // shuning uchun ishonchli "bajarilgan" signali.
+  const hasPaymentInfo = Array.isArray(store?.paymentTypes) && store.paymentTypes.length > 0;
   const hasShared = Boolean(store?.onboardingSharedAt);
 
   return [
@@ -41,7 +52,7 @@ export function buildOnboardingSteps(store, dashboardSummary) {
     // ulashish bosilganda qo'yiladi (`ConnectionsPage.jsx`dagi
     // `markShared`), oynani ochish paytida EMAS.
     { key: "shareStore", done: hasShared, routeTo: "/seller/connections", action: null },
-    { key: "firstOrder", done: hasOrder, routeTo: null, action: null },
+    { key: "paymentInfo", done: hasPaymentInfo, routeTo: "/seller/payment-settings", action: null },
   ];
 }
 

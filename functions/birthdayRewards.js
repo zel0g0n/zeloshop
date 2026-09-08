@@ -3,6 +3,7 @@ const { admin, db, BOT_TOKEN } = require("./lib/admin");
 const { getSellerCustomBotToken, sendCustomerNotification } = require("./lib/customerNotify");
 const { incrementDailyStat, logNotification } = require("./lib/dailyStats");
 const { processBatched } = require("./lib/batchProcess");
+const { getEffectiveTariffPlan } = require("./lib/tariffs");
 const { withSentry, SENTRY_DSN } = require("./lib/sentry");
 
 /**
@@ -35,9 +36,23 @@ const { withSentry, SENTRY_DSN } = require("./lib/sentry");
  * o'zi ta'minlaydi (`isBirthdayReward: true` + `birthdayYear`
  * maydonlari bilan qidiriladi) - xuddi referal/savat mukofotlari
  * qanday kuzatilishi bilan bir xil naqsh.
+ *
+ * VIP TUG'ILGAN KUN BONUSI (2026-09, "katta bizneslar uchun"
+ * ro'yxati, 2-guruh): standart tug'ilgan kun chegirmasi BARCHA tarifda
+ * bepul ishlaydi (yuqorida). Z-Biznes sotuvchisi ESA, alohida
+ * yoqilsa (`vipBirthdayBonusEnabled`), VIP mijozlar (`ltv >=
+ * VIP_THRESHOLD` — `sellers/{id}/customers/{clientId}.ltv`dan, xuddi
+ * `automationRules.js`/`lib/customerIntelligence.js`dagi bilan BIR
+ * XIL chegara) uchun ODATDAGIDAN KATTAROQ, alohida foiz
+ * (`vipBirthdayDiscountPercent`) bera oladi — bitta xarid tarixi
+ * bo'lgan mijoz ikkalasini BIRDAN olmaydi (bitta kupon, kattaroq
+ * foiz bilan). Qo'shimcha `customers` o'qishi FAQAT sotuvchi buni
+ * ONGLI yoqqanda amalga oshadi (samaradorlik uchun).
  */
 const TASHKENT_TZ = "Asia/Tashkent";
 const DEFAULT_BIRTHDAY_DISCOUNT_PERCENT = 10;
+const DEFAULT_VIP_BIRTHDAY_DISCOUNT_PERCENT = 20;
+const VIP_THRESHOLD = 500_000;
 const BIRTHDAY_COUPON_VALID_DAYS = 7;
 
 /** "Bugun" (Toshkent vaqti bo'yicha) oy-kunini "MM-DD" formatida qaytaradi. */
@@ -72,9 +87,26 @@ async function hasBirthdayRewardThisYear(sellerId, clientId, year) {
   return snap.docs.some((d) => Number(d.data().birthdayYear) === year);
 }
 
+/**
+ * Shu (sotuvchi, mijoz) juftligi uchun QO'LLANILADIGAN foizni
+ * hisoblaydi — VIP bonus sharti bajarilsa (Biznes tarif + sotuvchi
+ * ONGLI yoqqan + mijoz haqiqatan VIP), kattaroq VIP foizi, aks holda
+ * sotuvchining oddiy tug'ilgan kun foizi (yoki standart 10%).
+ */
+async function resolveBirthdayDiscountPercent(sellerId, clientId, seller) {
+  const standardPercent = Number(seller.birthdayDiscountPercent) > 0 ? Number(seller.birthdayDiscountPercent) : DEFAULT_BIRTHDAY_DISCOUNT_PERCENT;
+  if (seller.vipBirthdayBonusEnabled !== true || getEffectiveTariffPlan(seller) !== "biznes") {
+    return standardPercent;
+  }
+  const customerSnap = await db.collection("sellers").doc(sellerId).collection("customers").doc(clientId).get();
+  const ltv = customerSnap.exists ? Number(customerSnap.data().ltv) || 0 : 0;
+  if (ltv < VIP_THRESHOLD) return standardPercent;
+  return Number(seller.vipBirthdayDiscountPercent) > 0 ? Number(seller.vipBirthdayDiscountPercent) : DEFAULT_VIP_BIRTHDAY_DISCOUNT_PERCENT;
+}
+
 /** Bitta (sotuvchi, mijoz) juftligiga mukofot promokodini yaratadi va tabrik xabarini yuboradi. */
 async function grantBirthdayReward(sellerId, clientId, seller, customBotToken, year) {
-  const percent = Number(seller.birthdayDiscountPercent) > 0 ? Number(seller.birthdayDiscountPercent) : DEFAULT_BIRTHDAY_DISCOUNT_PERCENT;
+  const percent = await resolveBirthdayDiscountPercent(sellerId, clientId, seller);
   const couponCode = generateBirthdayCouponCode();
 
   await db.collection("sellers").doc(sellerId).collection("coupons").doc(couponCode).set({
@@ -171,5 +203,6 @@ exports._testables = {
   computeCurrentYear,
   generateBirthdayCouponCode,
   hasBirthdayRewardThisYear,
+  resolveBirthdayDiscountPercent,
   grantBirthdayReward,
 };

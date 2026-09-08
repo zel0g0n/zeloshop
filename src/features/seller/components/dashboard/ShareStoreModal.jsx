@@ -1,14 +1,19 @@
 import { memo, useState } from "react";
 import { X, Check, Send } from "lucide-react";
-import { buildShopLink } from "@/utils/shareLink";
+import { buildShopLink, buildSellerBotDeepLink } from "@/utils/shareLink";
 import { getTelegramWebApp } from "@/config/telegram";
 import { useLanguage } from "@/context/LanguageContext";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
-const ShareStoreModal = ({ sellerId, storeName, onClose }) => {
+// FOYDALANUVCHI SO'ROVI BILAN QO'SHILDI (2026-09): "Do'konni ulashish"
+// havolasi ENDI, agar sotuvchi shaxsiy botini ulagan bo'lsa
+// (`customBotUsername`), O'SHA botga ochiladi — ZeloShop umumiy boti
+// EMAS, sellerning O'Z brendi (bot nomi/rasmi) ko'rinadi. Ulanmagan
+// bo'lsa avvalgidek ZeloShop umumiy botiga (`buildShopLink`) tushiladi.
+const ShareStoreModal = ({ sellerId, storeName, customBotUsername, onClose }) => {
   const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
-  const shopLink = buildShopLink(sellerId);
+  const shopLink = buildSellerBotDeepLink(customBotUsername) || buildShopLink(sellerId);
 
   useEscapeToClose(onClose);
 

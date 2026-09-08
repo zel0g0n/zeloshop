@@ -1,20 +1,18 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Bot, TrendingUp, TrendingDown, Package, Instagram, Users, Check, Clock,
-  Info, X, Tag, RotateCcw, ShoppingCart, Heart, Send, Loader2, RefreshCw,
-  ChevronRight, ChevronDown, Star, MessageCircle, Zap, Sparkles, HelpCircle, Target,
+  Info, Settings, X, Tag, RotateCcw, ShoppingCart, Heart, Send, Loader2, RefreshCw,
+  ChevronRight, Star, MessageCircle, Zap, Sparkles, HelpCircle, Target,
   FileWarning, ImageOff, Crown, Megaphone, Flame,
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
-import updateSeller from "@/services/sellers/updateSeller";
 import { formatTimeSaved } from "@/utils/formatTimeSaved";
 import { generateDailyAiCeoReport, askAiCeo } from "@/services/ai/aiCeoInsights";
-import CustomSelect from "@/components/ui/CustomSelect";
 import { useLanguage } from "@/context/LanguageContext";
 import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
-import AutopilotStatusCard from "./AutopilotStatusCard";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import BiznesBadge from "@/components/ui/BiznesBadge";
 
 /**
  * AI CEO sahifasi kunlik hisobotni asosiy kontent sifatida ko'rsatadi:
@@ -250,85 +248,14 @@ const ActionPlanItem = ({ item, t, onNavigate }) => {
 const AiCeoInfoPage = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { sellerId, store } = useSession();
+  const { store } = useSession();
   // "AI Business Manager" (Z-Biznes) tavsiya etilgan savol tugmalari
   // FAQAT samarali tarifi "biznes" bo'lgan sotuvchiga ko'rsatiladi -
   // gatelashning HAQIQIY joyi backend'da (`handleAskAiCeo`dagi
   // `getEffectiveTariffPlan`), bu yerdagi tekshiruv faqat UI'ni mos
   // ravishda ko'rsatish/yashirish uchun.
   const isBiznes = getEffectiveTariffPlan(store) === "biznes";
-  const [enabled, setEnabled] = useState(store?.aiCeoDigestEnabled !== false);
-  const [saving, setSaving] = useState(false);
-  const [draftHour, setDraftHour] = useState(
-    Number.isInteger(store?.aiCeoDraftProcessHour) ? String(store.aiCeoDraftProcessHour) : "21"
-  );
-  const [savingHour, setSavingHour] = useState(false);
   const [showCapabilities, setShowCapabilities] = useState(false);
-  // AI CEO avtonom ijrosi: standart holatda o'chiq (opt-in, opt-out
-  // emas) — yoqilsa, 30 kun xarid qilmagan mijozlarga AI CEO matnni o'zi
-  // yozadi va sotuvchi tasdiqisiz avtomatik yuboradi (batafsil izoh:
-  // `functions/engagementReminders.js`).
-  const [autoWinBackEnabled, setAutoWinBackEnabled] = useState(store?.aiCeoAutoWinBackEnabled === true);
-  const [savingAutoWinBack, setSavingAutoWinBack] = useState(false);
-  // Xuddi shu avtonom ijro mantig'i sevimlilar eslatmasiga ham
-  // qo'llaniladi (standart holatda o'chiq, batafsil izoh:
-  // `functions/engagementReminders.js`).
-  const [autoFavoriteEnabled, setAutoFavoriteEnabled] = useState(store?.aiCeoAutoFavoriteEnabled === true);
-  const [savingAutoFavorite, setSavingAutoFavorite] = useState(false);
-  // Yuqoridagi kabi avtonom ijro, lekin bu safar haqiqiy moliyaviy
-  // oqibatga ega: yoqilsa (va `autoWinBackEnabled` ham yoqilgan bo'lsa,
-  // va AI CEO'ning matni yetarlicha ishlamayotgan bo'lsa), qaytarish
-  // xabariga haqiqiy, bir martalik chegirma promokodi ham avtomatik
-  // qo'shiladi (standart holatda o'chiq, batafsil izoh:
-  // `functions/aiCeoAutoDiscount.js`).
-  const [autoDiscountEnabled, setAutoDiscountEnabled] = useState(store?.aiCeoAutoDiscountEnabled === true);
-  const [savingAutoDiscount, setSavingAutoDiscount] = useState(false);
-  const [discountPercent, setDiscountPercent] = useState(
-    Number.isInteger(store?.aiCeoAutoDiscountPercent) ? String(store.aiCeoAutoDiscountPercent) : "10"
-  );
-  const [savingDiscountPercent, setSavingDiscountPercent] = useState(false);
-  // Joriy 5+ ta mayda sozlama standart holatda "Kengaytirilgan
-  // sozlamalar" ostiga yopiq holda yig'iladi — hech biri olib
-  // tashlanmagan, faqat asosiy ko'rinishdan yashirilgan.
-  const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [savingMaster, setSavingMaster] = useState(false);
-  // "AI Sales Autopilot" kartochkasidagi "Sozlash" havolasi shu bo'limni
-  // ochadi (`advancedOpen`) - lekin bu bo'lim sahifaning ANCHA pastida,
-  // havola esa eng yuqorida. OLDIN faqat `setAdvancedOpen(true)`
-  // chaqirilardi - bo'lim ochilardi, lekin ko'rinadigan joydan uzoqda
-  // bo'lgani uchun sotuvchiga "hech narsa bo'lmadi" bo'lib tuyulardi.
-  // ENDI shu bo'limga avtomatik skroll ham qilinadi.
-  const advancedSectionRef = useRef(null);
-  const handleOpenAdvanced = useCallback(() => {
-    setAdvancedOpen(true);
-    requestAnimationFrame(() => {
-      advancedSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    });
-  }, []);
-  // Telegram orqali "1-tugmali tasdiqlash": Mini App'ni ochmasdan,
-  // to'g'ridan-to'g'ri Telegram chatida AI CEO tavsiyasini ko'rib, bitta
-  // tugma bilan tasdiqlash mumkin (standart holatda o'chiq, batafsil
-  // izoh: `functions/telegramApproval.js`).
-  const [telegramApprovalEnabled, setTelegramApprovalEnabled] = useState(store?.aiCeoTelegramApprovalEnabled === true);
-  const [savingTelegramApproval, setSavingTelegramApproval] = useState(false);
-  // YANGI (#116): mahsulot QO'SHILGANDA avtomatik 9:16 "Story" reklama
-  // surati ham generatsiya qilinadi (standart holatda o'CHIQ, opt-in -
-  // batafsil izoh: `functions/productAutomation.js`dagi
-  // `maybeGenerateStoryImage`). Sotuvchi buni yoqmasa ham, story rasmni
-  // istalgan mahsulot sahifasida QO'LDA (`StoryAdImageCard.jsx`) baribir
-  // yaratishi mumkin - bu sozlama faqat AVTOMATLASHTIRISHNI boshqaradi.
-  const [autoStoryImageEnabled, setAutoStoryImageEnabled] = useState(store?.aiAutoStoryImageEnabled === true);
-  const [savingAutoStoryImage, setSavingAutoStoryImage] = useState(false);
-  // MENEJERGA PROAKTIV OGOHLANTIRISHLAR (2026-09 punkt-royxati,
-  // "Advanced Automation", 5-band) - standart holatda o'chiq, batafsil
-  // izoh: `functions/managerAlerts.js`. Ikkalasi ham SOTUVCHINING
-  // O'ZIGA yuboriladi (xaridorga emas) - shuning uchun boshqa
-  // kartochkalardan farqli, "konversiya" emas, "operatsion nazorat"
-  // haqida.
-  const [lowStockAlertEnabled, setLowStockAlertEnabled] = useState(store?.aiCeoLowStockAlertEnabled === true);
-  const [savingLowStockAlert, setSavingLowStockAlert] = useState(false);
-  const [staleOrderAlertEnabled, setStaleOrderAlertEnabled] = useState(store?.aiCeoStaleOrderAlertEnabled === true);
-  const [savingStaleOrderAlert, setSavingStaleOrderAlert] = useState(false);
 
   const [report, setReport] = useState(null);
   const [reportLoading, setReportLoading] = useState(true);
@@ -355,26 +282,6 @@ const AiCeoInfoPage = () => {
     [baseActionPlan, report]
   );
 
-  const hourOptions = useMemo(
-    () => Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, "0")}:00` })),
-    []
-  );
-
-  // Moliyaviy xavfni cheklash uchun qat'iy chegaralangan tanlov (backend,
-  // `aiCeoAutoDiscount.js`dagi `MIN_DISCOUNT_PERCENT`/
-  // `MAX_DISCOUNT_PERCENT` bilan mos).
-  const discountPercentOptions = useMemo(
-    () => [5, 10, 15, 20].map((p) => ({ value: String(p), label: `${p}%` })),
-    []
-  );
-
-  // Katta "yoqish" tugmasi faqat uchta moliyaviy xavfsiz sozlama (kunlik
-  // xulosa va ikkala avtomatik xabar turi) hammasi birdaniga yoqilgan
-  // holatdagina "yoqilgan" ko'rinadi — aralash holat (masalan faqat
-  // ikkitasi yoqilgan, kengaytirilgan bo'limdan qo'lda sozlangan) "o'chiq"
-  // deb ko'rsatiladi, chunki to'liq yoqilmagan.
-  const allCoreEnabled = enabled && autoWinBackEnabled && autoFavoriteEnabled;
-
   const loadReport = useCallback(async () => {
     setReportLoading(true);
     setReportError(null);
@@ -391,112 +298,6 @@ const AiCeoInfoPage = () => {
   useEffect(() => {
     loadReport();
   }, [loadReport]);
-
-  const handleHourChange = useCallback(async (value) => {
-    const previous = draftHour;
-    setDraftHour(value);
-    setSavingHour(true);
-    try {
-      await updateSeller(sellerId, { aiCeoDraftProcessHour: Number(value) });
-    } catch {
-      setDraftHour(previous);
-    } finally {
-      setSavingHour(false);
-    }
-  }, [draftHour, sellerId]);
-
-  const handleToggle = useCallback(async () => {
-    const next = !enabled;
-    setEnabled(next);
-    setSaving(true);
-    try {
-      await updateSeller(sellerId, { aiCeoDigestEnabled: next });
-    } catch {
-      setEnabled(!next);
-    } finally {
-      setSaving(false);
-    }
-  }, [enabled, sellerId]);
-
-  const handleAutoWinBackToggle = useCallback(async () => {
-    const next = !autoWinBackEnabled;
-    setAutoWinBackEnabled(next);
-    setSavingAutoWinBack(true);
-    try {
-      await updateSeller(sellerId, { aiCeoAutoWinBackEnabled: next });
-    } catch {
-      setAutoWinBackEnabled(!next);
-    } finally {
-      setSavingAutoWinBack(false);
-    }
-  }, [autoWinBackEnabled, sellerId]);
-
-  const handleAutoFavoriteToggle = useCallback(async () => {
-    const next = !autoFavoriteEnabled;
-    setAutoFavoriteEnabled(next);
-    setSavingAutoFavorite(true);
-    try {
-      await updateSeller(sellerId, { aiCeoAutoFavoriteEnabled: next });
-    } catch {
-      setAutoFavoriteEnabled(!next);
-    } finally {
-      setSavingAutoFavorite(false);
-    }
-  }, [autoFavoriteEnabled, sellerId]);
-
-  const handleAutoDiscountToggle = useCallback(async () => {
-    const next = !autoDiscountEnabled;
-    setAutoDiscountEnabled(next);
-    setSavingAutoDiscount(true);
-    try {
-      await updateSeller(sellerId, { aiCeoAutoDiscountEnabled: next });
-    } catch {
-      setAutoDiscountEnabled(!next);
-    } finally {
-      setSavingAutoDiscount(false);
-    }
-  }, [autoDiscountEnabled, sellerId]);
-
-  const handleDiscountPercentChange = useCallback(async (value) => {
-    const previous = discountPercent;
-    setDiscountPercent(value);
-    setSavingDiscountPercent(true);
-    try {
-      await updateSeller(sellerId, { aiCeoAutoDiscountPercent: Number(value) });
-    } catch {
-      setDiscountPercent(previous);
-    } finally {
-      setSavingDiscountPercent(false);
-    }
-  }, [discountPercent, sellerId]);
-
-  // Bitta bosish bilan uchta sozlamani birdaniga yozadi (kaskad) — bu
-  // faqat tezkor yo'l qo'shadi, har biri "Kengaytirilgan sozlamalar"da
-  // baribir alohida ham sozlanadi. Xatolik bo'lsa, uchalasi ham eski
-  // holatiga qaytariladi, yarim yozilgan holat qolmasligi uchun.
-  const handleMasterToggle = useCallback(async () => {
-    const next = !allCoreEnabled;
-    const prevEnabled = enabled;
-    const prevAutoWinBack = autoWinBackEnabled;
-    const prevAutoFavorite = autoFavoriteEnabled;
-    setEnabled(next);
-    setAutoWinBackEnabled(next);
-    setAutoFavoriteEnabled(next);
-    setSavingMaster(true);
-    try {
-      await updateSeller(sellerId, {
-        aiCeoDigestEnabled: next,
-        aiCeoAutoWinBackEnabled: next,
-        aiCeoAutoFavoriteEnabled: next,
-      });
-    } catch {
-      setEnabled(prevEnabled);
-      setAutoWinBackEnabled(prevAutoWinBack);
-      setAutoFavoriteEnabled(prevAutoFavorite);
-    } finally {
-      setSavingMaster(false);
-    }
-  }, [allCoreEnabled, enabled, autoWinBackEnabled, autoFavoriteEnabled, sellerId]);
 
   // `handleAskSubmit` (qo'lda kiritilgan savol) VA tavsiya etilgan
   // savol tugmalari (`handleSuggestedQuestionClick`) IKKALASI HAM shu
@@ -538,58 +339,6 @@ const AiCeoInfoPage = () => {
     setAskError(null);
   }, []);
 
-  const handleTelegramApprovalToggle = useCallback(async () => {
-    const next = !telegramApprovalEnabled;
-    setTelegramApprovalEnabled(next);
-    setSavingTelegramApproval(true);
-    try {
-      await updateSeller(sellerId, { aiCeoTelegramApprovalEnabled: next });
-    } catch {
-      setTelegramApprovalEnabled(!next);
-    } finally {
-      setSavingTelegramApproval(false);
-    }
-  }, [telegramApprovalEnabled, sellerId]);
-
-  const handleAutoStoryImageToggle = useCallback(async () => {
-    const next = !autoStoryImageEnabled;
-    setAutoStoryImageEnabled(next);
-    setSavingAutoStoryImage(true);
-    try {
-      await updateSeller(sellerId, { aiAutoStoryImageEnabled: next });
-    } catch {
-      setAutoStoryImageEnabled(!next);
-    } finally {
-      setSavingAutoStoryImage(false);
-    }
-  }, [autoStoryImageEnabled, sellerId]);
-
-  const handleLowStockAlertToggle = useCallback(async () => {
-    const next = !lowStockAlertEnabled;
-    setLowStockAlertEnabled(next);
-    setSavingLowStockAlert(true);
-    try {
-      await updateSeller(sellerId, { aiCeoLowStockAlertEnabled: next });
-    } catch {
-      setLowStockAlertEnabled(!next);
-    } finally {
-      setSavingLowStockAlert(false);
-    }
-  }, [lowStockAlertEnabled, sellerId]);
-
-  const handleStaleOrderAlertToggle = useCallback(async () => {
-    const next = !staleOrderAlertEnabled;
-    setStaleOrderAlertEnabled(next);
-    setSavingStaleOrderAlert(true);
-    try {
-      await updateSeller(sellerId, { aiCeoStaleOrderAlertEnabled: next });
-    } catch {
-      setStaleOrderAlertEnabled(!next);
-    } finally {
-      setSavingStaleOrderAlert(false);
-    }
-  }, [staleOrderAlertEnabled, sellerId]);
-
   return (
     <div className="h-screen overflow-y-auto bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
 
@@ -611,12 +360,27 @@ const AiCeoInfoPage = () => {
         >
           <RefreshCw size={14} className={reportLoading ? "animate-spin" : ""} />
         </button>
+        {/* "AI CEO'ni to'liq yoqish" katta tugmasi VA "Kengaytirilgan
+            sozlamalar" (oldin shu sahifaning O'ZIDA, pastda edi) endi
+            ALOHIDA sahifaga (`AiCeoSettingsPage.jsx`) ko'chirilgan -
+            shu tugma o'sha yerga olib boradi. */}
+        <button
+          type="button"
+          onClick={() => navigate("/seller/ai-ceo/settings")}
+          className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 active:scale-95 transition-transform shrink-0"
+          aria-label={t("aiCeo.advancedSettingsTitle")}
+        >
+          <Settings size={15} />
+        </button>
         {/* "AI CEO nima qila oladi" ma'lumoti shu kichik tugma orqali
-            alohida modalda ochiladi. */}
+            alohida modalda ochiladi. Rangi loyihada ishlatilgan
+            YASHIL (emerald) - avval indigo edi, sozlamalar tugmasi
+            qo'shilgach ikkalasi bir xil ko'k rangda "chalkashib"
+            qolmasligi uchun. */}
         <button
           type="button"
           onClick={() => setShowCapabilities(true)}
-          className="w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center active:scale-95 transition-transform shrink-0"
+          className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center active:scale-95 transition-transform shrink-0"
           aria-label={t("aiCeo.infoPageTitle")}
         >
           <Info size={16} />
@@ -624,21 +388,6 @@ const AiCeoInfoPage = () => {
       </div>
 
       <div className="p-4 space-y-4 pb-36">
-
-        {/* "AI Sales Autopilot" (ZeloShop TOP 15, #14) - hisobot
-            yuklanishidan MUSTAQIL, sotuvchi hech qachon "hech narsa
-            ishlamayapti" holatini ko'rmasligi uchun eng tepada. */}
-        <AutopilotStatusCard
-          store={store}
-          sellerId={sellerId}
-          liveAiTier={{
-            aiCeoAutoFavoriteEnabled: autoFavoriteEnabled,
-            aiCeoAutoWinBackEnabled: autoWinBackEnabled,
-            aiCeoAutoDiscountEnabled: autoDiscountEnabled,
-            aiCeoTelegramApprovalEnabled: telegramApprovalEnabled,
-          }}
-          onOpenAdvanced={handleOpenAdvanced}
-        />
 
         {reportLoading && (
           <div className="flex items-center justify-center gap-2 py-16 text-xs text-slate-400 dark:text-slate-500">
@@ -872,9 +621,8 @@ const AiCeoInfoPage = () => {
                   "biznes" bo'lgan sotuvchiga ko'rsatiladi. */}
               {isBiznes && !askAnswer && (
                 <div className="space-y-1.5">
-                  <p className="text-[10px] font-black text-indigo-400 dark:text-indigo-500 uppercase tracking-wide flex items-center gap-1">
-                    <Crown size={10} /> {t("aiCeo.suggestedQuestionsBiznesLabel")}
-                  </p>
+                  <BiznesBadge label={t("aiCeo.suggestedQuestionsBiznesLabel")} />
+
                   {BIZNES_SUGGESTED_QUESTIONS.map(({ key, icon: Icon, textKey }) => (
                     <button
                       key={key}
@@ -950,215 +698,6 @@ const AiCeoInfoPage = () => {
           </>
         )}
 
-        {/* Bitta katta "yoqish" tugmasi bosilganda, moliyaviy xavfsiz,
-            faqat matn/xabar darajasidagi uchta sozlamani (kunlik xulosa
-            va avtomatik qaytarish/sevimlilar xabari) birdaniga, aqlli
-            standart qiymat bilan yoqadi/o'chiradi — quyidagi
-            "Kengaytirilgan sozlamalar" har bir narsani baribir alohida,
-            nozik sozlash imkonini saqlab qoladi. Pul bilan bog'liq
-            avtomatik chegirma (`aiCeoAutoDiscountEnabled`) qasddan bu
-            tugmaga qo'shilmagan — u har doim alohida, ongli ravishda
-            Kengaytirilgan bo'limda yoqiladi. */}
-        <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-2xl p-4 text-white shadow-sm space-y-3">
-          <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-xl bg-white/15 flex items-center justify-center shrink-0">
-              <Bot size={16} />
-            </span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-black">{t("aiCeo.masterToggleTitle")}</p>
-              <p className="text-[10px] font-medium text-white/70 mt-0.5 leading-relaxed">{t("aiCeo.masterToggleDesc")}</p>
-            </div>
-            <button
-              type="button"
-              onClick={handleMasterToggle}
-              disabled={savingMaster}
-              aria-label={t("aiCeo.masterToggleTitle")}
-              className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${savingMaster ? "opacity-60" : ""} ${allCoreEnabled ? "bg-white/90 justify-end" : "bg-white/20 justify-start"}`}
-            >
-              <span className={`w-5 h-5 rounded-full shadow-sm ${allCoreEnabled ? "bg-indigo-600" : "bg-white"}`} />
-            </button>
-          </div>
-
-          <div className="pt-3 border-t border-white/15 space-y-2">
-            <div className="flex items-center gap-2">
-              <Clock size={13} className="text-white/70" />
-              <p className="text-[11px] font-bold text-white/70">{t("aiCeo.processTimeTitle")}</p>
-            </div>
-            <CustomSelect value={draftHour} onChange={handleHourChange} options={hourOptions} disabled={savingHour} />
-          </div>
-        </div>
-
-        {/* Joriy 5 ta mayda sozlama standart holatda yopiq — sotuvchi
-            ularni ko'rish uchun ataylab ochishi kerak. Hech biri olib
-            tashlanmagan, faqat "sodda" ko'rinishdan chetga surilgan. */}
-        <div ref={advancedSectionRef} className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl overflow-hidden scroll-mt-20">
-          <button
-            type="button"
-            onClick={() => setAdvancedOpen((prev) => !prev)}
-            className="w-full flex items-center justify-between gap-2 p-4"
-          >
-            <div className="text-left">
-              <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{t("aiCeo.advancedSettingsTitle")}</p>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{t("aiCeo.advancedSettingsSubtitle")}</p>
-            </div>
-            <ChevronDown size={16} className={`text-slate-400 dark:text-slate-500 shrink-0 transition-transform ${advancedOpen ? "rotate-180" : ""}`} />
-          </button>
-
-          {advancedOpen && (
-            <div className="px-4 pb-4 space-y-3">
-              <div className="pt-3 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{t("aiCeo.dashboardCardTitle")}</span>
-                <button
-                  type="button"
-                  onClick={handleToggle}
-                  disabled={saving}
-                  aria-label={t("aiCeo.dashboardCardTitle")}
-                  className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${saving ? "opacity-60" : ""} ${enabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
-                >
-                  <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                </button>
-              </div>
-
-              {/* Standart holatda o'chiq (opt-in). Bu, boshqa
-                  sozlamalardan farqli, matnni AI yozadi va sotuvchi
-                  tasdiqisiz yuboradi — shuning uchun tavsif orqali aniq
-                  tushuntiriladi, nima o'zgarishini yashirmasdan. */}
-              <div className="pt-3 border-t border-slate-50 dark:border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{t("aiCeo.autoWinBackTitle")}</span>
-                  <button
-                    type="button"
-                    onClick={handleAutoWinBackToggle}
-                    disabled={savingAutoWinBack}
-                    aria-label={t("aiCeo.autoWinBackTitle")}
-                    className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${savingAutoWinBack ? "opacity-60" : ""} ${autoWinBackEnabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
-                  >
-                    <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("aiCeo.autoWinBackDesc")}</p>
-              </div>
-
-              {/* Xuddi shu avtonom ijro mantig'i, sevimlilar eslatmasi
-                  uchun. */}
-              <div className="pt-3 border-t border-slate-50 dark:border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{t("aiCeo.autoFavoriteTitle")}</span>
-                  <button
-                    type="button"
-                    onClick={handleAutoFavoriteToggle}
-                    disabled={savingAutoFavorite}
-                    aria-label={t("aiCeo.autoFavoriteTitle")}
-                    className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${savingAutoFavorite ? "opacity-60" : ""} ${autoFavoriteEnabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
-                  >
-                    <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("aiCeo.autoFavoriteDesc")}</p>
-              </div>
-
-              {/* "Avtonom qaytarish xabari"ning kuchaytirilgan varianti —
-                  shuning uchun `autoWinBackEnabled` yoqilmagan bo'lsa,
-                  tugma o'chirilgan (kulrang) va bosilmaydi, bog'liqlik
-                  aniq ko'rinadi uchun. */}
-              <div className="pt-3 border-t border-slate-50 dark:border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`text-xs font-bold flex-1 ${autoWinBackEnabled ? "text-slate-700 dark:text-slate-200" : "text-slate-400 dark:text-slate-500"}`}>{t("aiCeo.autoDiscountTitle")}</span>
-                  <button
-                    type="button"
-                    onClick={handleAutoDiscountToggle}
-                    disabled={savingAutoDiscount || !autoWinBackEnabled}
-                    aria-label={t("aiCeo.autoDiscountTitle")}
-                    className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${(savingAutoDiscount || !autoWinBackEnabled) ? "opacity-50" : ""} ${autoDiscountEnabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
-                  >
-                    <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">
-                  {autoWinBackEnabled ? t("aiCeo.autoDiscountDesc") : t("aiCeo.autoDiscountRequiresWinBackNote")}
-                </p>
-                {autoDiscountEnabled && autoWinBackEnabled && (
-                  <div className="pt-1.5">
-                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">{t("aiCeo.autoDiscountPercentLabel")}</p>
-                    <CustomSelect value={discountPercent} onChange={handleDiscountPercentChange} options={discountPercentOptions} disabled={savingDiscountPercent} />
-                  </div>
-                )}
-              </div>
-
-              {/* Telegram orqali "1-tugmali tasdiqlash": Mini App'ni
-                  ochmasdan, AI CEO tavsiyasini to'g'ridan-to'g'ri
-                  Telegram chatida bitta tugma bilan tasdiqlash mumkin. */}
-              <div className="pt-3 border-t border-slate-50 dark:border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{t("aiCeo.telegramApprovalTitle")}</span>
-                  <button
-                    type="button"
-                    onClick={handleTelegramApprovalToggle}
-                    disabled={savingTelegramApproval}
-                    aria-label={t("aiCeo.telegramApprovalTitle")}
-                    className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${savingTelegramApproval ? "opacity-60" : ""} ${telegramApprovalEnabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
-                  >
-                    <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("aiCeo.telegramApprovalDesc")}</p>
-              </div>
-
-              {/* YANGI (#116): mahsulot qo'shilganda avtomatik story
-                  rasm generatsiyasi - standart holatda o'chiq. */}
-              <div className="pt-3 border-t border-slate-50 dark:border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{t("aiCeo.autoStoryImageTitle")}</span>
-                  <button
-                    type="button"
-                    onClick={handleAutoStoryImageToggle}
-                    disabled={savingAutoStoryImage}
-                    aria-label={t("aiCeo.autoStoryImageTitle")}
-                    className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${savingAutoStoryImage ? "opacity-60" : ""} ${autoStoryImageEnabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
-                  >
-                    <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("aiCeo.autoStoryImageDesc")}</p>
-              </div>
-
-              {/* MENEJERGA ogohlantirishlar (2026-09 punkt-royxati, 5-band)
-                  - ikkalasi ham xaridorga emas, SOTUVCHINING O'ZIGA
-                  yuboriladi, standart holatda o'chiq. */}
-              <div className="pt-3 border-t border-slate-50 dark:border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{t("aiCeo.lowStockAlertTitle")}</span>
-                  <button
-                    type="button"
-                    onClick={handleLowStockAlertToggle}
-                    disabled={savingLowStockAlert}
-                    aria-label={t("aiCeo.lowStockAlertTitle")}
-                    className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${savingLowStockAlert ? "opacity-60" : ""} ${lowStockAlertEnabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
-                  >
-                    <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("aiCeo.lowStockAlertDesc")}</p>
-              </div>
-
-              <div className="pt-3 border-t border-slate-50 dark:border-slate-800 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{t("aiCeo.staleOrderAlertTitle")}</span>
-                  <button
-                    type="button"
-                    onClick={handleStaleOrderAlertToggle}
-                    disabled={savingStaleOrderAlert}
-                    aria-label={t("aiCeo.staleOrderAlertTitle")}
-                    className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors shrink-0 ${savingStaleOrderAlert ? "opacity-60" : ""} ${staleOrderAlertEnabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
-                  >
-                    <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
-                  </button>
-                </div>
-                <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("aiCeo.staleOrderAlertDesc")}</p>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
 
       {showCapabilities && <CapabilitiesModal onClose={() => setShowCapabilities(false)} t={t} />}

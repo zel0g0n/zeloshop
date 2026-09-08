@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, ShieldAlert, Lightbulb, TrendingUp, TrendingDown, Wallet,
   ShoppingCart, Percent, Users, Target, HandCoins, Trophy, AlertTriangle, UserRoundCog,
-  Megaphone, UserPlus, Repeat, Loader2, ImageOff,
+  Megaphone, UserPlus, Repeat, Loader2, ImageOff, Send,
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
+import updateSeller from "@/services/sellers/updateSeller";
 import KpiCard from "./KpiCard";
 import { useOrderRollups } from "@/hooks/seller/useOrderRollups";
 import { useAnalyticsOrders } from "@/hooks/seller/useAnalyticsOrders";
@@ -17,6 +18,7 @@ import { useCampaigns } from "@/hooks/seller/useCampaigns";
 import { getStaffList } from "@/services/staff/getStaffList";
 import { getVisitorCount } from "@/services/analytics/getVisitorCount";
 import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
+import BiznesBadge from "@/components/ui/BiznesBadge";
 import { filterOrdersInRange, computeOrderSummary } from "@/utils/orderAnalytics";
 import { buildProductPeriodStats, getTopProducts } from "@/utils/productAnalytics";
 import { computeCustomerSegments } from "@/utils/customerSegments";
@@ -67,9 +69,33 @@ const PERIODS = [
 const BusinessCommandCenterPage = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { sellerId, store } = useSession();
+  const { sellerId, store, patchStore } = useSession();
 
   const isBiznes = getEffectiveTariffPlan(store) === "biznes";
+
+  // HAFTALIK HISOBOT (2026-09, "katta bizneslar uchun" ro'yxati,
+  // 2-guruh: "Buyruq Markazi hisobotlarini jadval bo'yicha avtomatik
+  // yuborish") — haqiqiy ijro `functions/weeklyBusinessReport.js`dagi
+  // haftalik cron'da, bu yerda FAQAT yoqish/o'chirish tugmasi.
+  // Standart bo'yicha YOQILGAN (`weeklyReportEnabled !== false`) —
+  // pul/chegirma bilan bog'liq emas, faqat ma'lumot xabari.
+  const [weeklyReportEnabled, setWeeklyReportEnabled] = useState(store?.weeklyReportEnabled !== false);
+  useEffect(() => {
+    if (!store) return;
+    setWeeklyReportEnabled(store.weeklyReportEnabled !== false);
+  }, [store]);
+  const handleWeeklyReportToggle = useCallback(async () => {
+    const next = !weeklyReportEnabled;
+    setWeeklyReportEnabled(next);
+    if (sellerId) {
+      try {
+        await updateSeller(sellerId, { weeklyReportEnabled: next });
+        patchStore({ weeklyReportEnabled: next });
+      } catch {
+        setWeeklyReportEnabled(!next); // Yozish muvaffaqiyatsiz bo'lsa - eski holatga qaytaramiz.
+      }
+    }
+  }, [weeklyReportEnabled, sellerId, patchStore]);
 
   const [periodKey, setPeriodKey] = useState("month");
   const period = PERIODS.find((p) => p.key === periodKey) || PERIODS[1];
@@ -261,7 +287,9 @@ const BusinessCommandCenterPage = () => {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-base font-black text-slate-800 dark:text-white">{t("commandCenter.title")}</h1>
+          <h1 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+            {t("commandCenter.title")} <BiznesBadge size="xs" />
+          </h1>
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t("commandCenter.subtitle")}</p>
         </div>
       </div>
@@ -278,6 +306,25 @@ const BusinessCommandCenterPage = () => {
               {t(`commandCenter.${p.labelKey}`)}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="px-4 pt-3">
+        <div className="bg-white dark:bg-slate-900 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center gap-3">
+          <div className="w-9 h-9 shrink-0 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
+            <Send size={15} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h4 className="text-xs font-black text-slate-700 dark:text-white">{t("commandCenter.weeklyReportTitle")}</h4>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("commandCenter.weeklyReportDesc")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleWeeklyReportToggle}
+            className={`shrink-0 w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${weeklyReportEnabled ? "bg-indigo-600 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
+          >
+            <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
+          </button>
         </div>
       </div>
 

@@ -22,7 +22,7 @@ function makeQueryable(docs) {
   };
 }
 
-function buildMockDb({ sellerData = null, customers = [], carts = [], favorites = [] } = {}) {
+function buildMockDb({ sellerData = null, customers = [], carts = [], favorites = [], staffDocs = {} } = {}) {
   return {
     collection: (name) => {
       if (name === "sellers") {
@@ -38,6 +38,17 @@ function buildMockDb({ sellerData = null, customers = [], carts = [], favorites 
       }
       if (name === "carts") return makeQueryable(carts);
       if (name === "favorites") return makeQueryable(favorites);
+      // `resolveActingSellerContext` (`lib/staffAccess.js`) xodim
+      // huquqlarini shu yerdan (`staff/{actorUid}`) tekshiradi - staff
+      // huquqi bo'yicha testlar uchun `staffDocs` orqali beriladi.
+      if (name === "staff") {
+        return {
+          doc: (id) => ({
+            get: async () =>
+              staffDocs[id] ? { exists: true, data: () => staffDocs[id] } : { exists: false },
+          }),
+        };
+      }
       // `checkRateLimit` (`lib/rateLimit.js`) `rateLimits/{key}`ni
       // ishlatadi - bu test uchun ahamiyatsiz, shuning uchun umumiy
       // zaxira (har doim "hali mavjud emas") yetarli.
@@ -108,5 +119,55 @@ describe("handleGetCustomerIntelligence", () => {
     const { _testables } = loadModule(db);
     const result = await _testables.handleGetCustomerIntelligence({ auth: { uid: "seller-1" }, data: {} });
     expect(result.counts.all).toBe(0);
+  });
+
+  // MUHIM TUZATISH TEKSHIRUVI (2026-09, Advanced Team & RBAC): OLDIN bu
+  // funksiya to'g'ridan-to'g'ri `request.auth.uid`ni sotuvchi deb
+  // hisoblardi - `manageCustomers` ruxsatiga ega xodim ham har doim
+  // "permission-denied" olardi. Endi `resolveActingSellerContext`
+  // orqali ishlaydi - quyidagi ikkita test aynan shu holatni tekshiradi.
+  test("manageCustomers ruxsatiga ega FAOL xodim - do'kon egasining tasnifini muvaffaqiyatli oladi", async () => {
+    const customers = [
+      { clientId: "c1", fullName: "Vip Ali", ltv: 600_000, orderCount: 5, lastOrderAtMs: Date.now() },
+    ];
+    const db = buildMockDb({
+      sellerData: { tariffPlan: "biznes" },
+      customers,
+      staffDocs: {
+        "staff-marketing-1": { sellerId: "seller-1", status: "active", permissions: { manageCustomers: true } },
+      },
+    });
+    const { _testables } = loadModule(db);
+    const result = await _testables.handleGetCustomerIntelligence({ auth: { uid: "staff-marketing-1" }, data: {} });
+    expect(result.counts.all).toBe(1);
+    expect(result.counts.vip).toBe(1);
+  });
+
+  test("manageCustomers ruxsati YO'Q xodimni rad etadi", async () => {
+    const db = buildMockDb({
+      sellerData: { tariffPlan: "biznes" },
+      customers: [{ clientId: "c1", fullName: "Vip Ali", ltv: 600_000, orderCount: 5, lastOrderAtMs: Date.now() }],
+      staffDocs: {
+        "staff-warehouse-1": { sellerId: "seller-1", status: "active", permissions: { manageProducts: true, manageCustomers: false } },
+      },
+    });
+    const { _testables } = loadModule(db);
+    await expect(
+      _testables.handleGetCustomerIntelligence({ auth: { uid: "staff-warehouse-1" }, data: {} })
+    ).rejects.toThrow("Bu amal uchun ruxsatingiz yo'q.");
+  });
+
+  test("NOFAOL (status !== active) xodimni, ruxsati bo'lsa ham, rad etadi", async () => {
+    const db = buildMockDb({
+      sellerData: { tariffPlan: "biznes" },
+      customers: [],
+      staffDocs: {
+        "staff-suspended-1": { sellerId: "seller-1", status: "suspended", permissions: { manageCustomers: true } },
+      },
+    });
+    const { _testables } = loadModule(db);
+    await expect(
+      _testables.handleGetCustomerIntelligence({ auth: { uid: "staff-suspended-1" }, data: {} })
+    ).rejects.toThrow("Bu amal uchun ruxsatingiz yo'q.");
   });
 });

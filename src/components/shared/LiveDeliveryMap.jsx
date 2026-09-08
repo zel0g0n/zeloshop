@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Maximize2, Minimize2 } from "lucide-react";
-import { loadLeaflet } from "@/utils/loadLeaflet";
+import { loadLeaflet, applyMapTileLayer } from "@/utils/loadLeaflet";
+import { useTheme } from "@/context/ThemeContext";
 
 /**
  * QAYTA ISHLATILADIGAN jonli yetkazma xaritasi — `YandexDeliveryPage.jsx`
@@ -50,8 +51,10 @@ const BIKE_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" st
 const PIN_SVG = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></svg>`;
 
 const LiveDeliveryMap = ({ destination, courierPosition, accentColor = "#0d9488", height = 240, expandLabel = "Kattalashtirish", collapseLabel = "Kichraytirish" }) => {
+  const { isDark } = useTheme();
   const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const tileLayerRef = useRef(null);
   const destMarkerRef = useRef(null);
   const courierMarkerRef = useRef(null);
   const lineRef = useRef(null);
@@ -65,10 +68,7 @@ const LiveDeliveryMap = ({ destination, courierPosition, accentColor = "#0d9488"
     loadLeaflet().then((L) => {
       if (cancelled || !containerRef.current || mapRef.current) return;
       const map = L.map(containerRef.current).setView([destination.lat, destination.lng], 14);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap",
-        maxZoom: 19,
-      }).addTo(map);
+      applyMapTileLayer(L, map, tileLayerRef, isDark);
       mapRef.current = map;
       destMarkerRef.current = L.marker([destination.lat, destination.lng], {
         icon: makeDivIcon(L, "#10b981", PIN_SVG),
@@ -80,12 +80,23 @@ const LiveDeliveryMap = ({ destination, courierPosition, accentColor = "#0d9488"
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
+        tileLayerRef.current = null;
         destMarkerRef.current = null;
         courierMarkerRef.current = null;
         lineRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destination?.lat, destination?.lng]);
+
+  // TEMA (dark/light) foydalanuvchi tomonidan almashtirilsa — xarita
+  // ALLAQACHON ochiq bo'lsa ham, plitka qatlamini mos ravishda
+  // yangilaymiz (xaritani qaytadan yaratmasdan, faqat vizual uslub
+  // almashadi — markerlar/hudud saqlanib qoladi).
+  useEffect(() => {
+    if (!mapRef.current || !window.L) return;
+    applyMapTileLayer(window.L, mapRef.current, tileLayerRef, isDark);
+  }, [isDark]);
 
   // KURYER BELGISINI yangilash — xarita allaqachon mavjud bo'lganda,
   // har safar yangi joylashuv kelganda ishga tushadi.

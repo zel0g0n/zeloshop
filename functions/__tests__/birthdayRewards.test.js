@@ -13,6 +13,7 @@ function buildMockDb({
   sellersData = {},
   existingCouponsBySeller = {},
   customBotTokensBySeller = {},
+  customersBySeller = {},
 } = {}) {
   const couponSetCalls = [];
   const dailyStatSetCalls = [];
@@ -69,6 +70,16 @@ function buildMockDb({
                 return {
                   doc: () => ({
                     set: async (data) => dailyStatSetCalls.push({ sellerId, data }),
+                  }),
+                };
+              }
+              if (subName === "customers") {
+                return {
+                  doc: (clientId) => ({
+                    get: async () => {
+                      const customer = (customersBySeller[sellerId] || {})[clientId];
+                      return customer ? { exists: true, data: () => customer } : { exists: false };
+                    },
                   }),
                 };
               }
@@ -206,6 +217,79 @@ describe("sendBirthdayRewards", () => {
     const { sendBirthdayRewards } = loadModule(db);
     await sendBirthdayRewards();
     expect(db.__couponSetCalls.length).toBe(2);
+  });
+
+  test("VIP BONUS: Biznes tarifida yoqilgan VA mijoz haqiqatan VIP bo'lsa - kattaroq VIP foizi ishlatiladi", async () => {
+    const db = buildMockDb({
+      clientDocs: [{ id: "client-1", data: { birthdayMonthDay: "05-20", linkedSellerIds: ["seller-1"] } }],
+      sellersData: {
+        "seller-1": {
+          tariffPlan: "biznes",
+          birthdayDiscountEnabled: true,
+          birthdayDiscountPercent: 10,
+          vipBirthdayBonusEnabled: true,
+          vipBirthdayDiscountPercent: 30,
+          storeName: "Test Do'kon",
+        },
+      },
+      customersBySeller: { "seller-1": { "client-1": { ltv: 600_000 } } },
+    });
+    const { sendBirthdayRewards } = loadModule(db);
+    await sendBirthdayRewards();
+    expect(db.__couponSetCalls[0].data.discountValue).toBe(30);
+  });
+
+  test("VIP BONUS yoqilgan, lekin mijoz VIP EMAS (ltv chegaradan past) - oddiy foiz ishlatiladi", async () => {
+    const db = buildMockDb({
+      clientDocs: [{ id: "client-1", data: { birthdayMonthDay: "05-20", linkedSellerIds: ["seller-1"] } }],
+      sellersData: {
+        "seller-1": {
+          tariffPlan: "biznes",
+          birthdayDiscountEnabled: true,
+          birthdayDiscountPercent: 10,
+          vipBirthdayBonusEnabled: true,
+          vipBirthdayDiscountPercent: 30,
+          storeName: "Test Do'kon",
+        },
+      },
+      customersBySeller: { "seller-1": { "client-1": { ltv: 50_000 } } },
+    });
+    const { sendBirthdayRewards } = loadModule(db);
+    await sendBirthdayRewards();
+    expect(db.__couponSetCalls[0].data.discountValue).toBe(10);
+  });
+
+  test("VIP BONUS yoqilgan, lekin sotuvchi Z-Biznes tarifida EMAS (masalan pasaytirilgan) - VIP foizi qo'llanilmaydi", async () => {
+    const db = buildMockDb({
+      clientDocs: [{ id: "client-1", data: { birthdayMonthDay: "05-20", linkedSellerIds: ["seller-1"] } }],
+      sellersData: {
+        "seller-1": {
+          tariffPlan: "pro",
+          birthdayDiscountEnabled: true,
+          birthdayDiscountPercent: 10,
+          vipBirthdayBonusEnabled: true,
+          vipBirthdayDiscountPercent: 30,
+          storeName: "Test Do'kon",
+        },
+      },
+      customersBySeller: { "seller-1": { "client-1": { ltv: 600_000 } } },
+    });
+    const { sendBirthdayRewards } = loadModule(db);
+    await sendBirthdayRewards();
+    expect(db.__couponSetCalls[0].data.discountValue).toBe(10);
+  });
+
+  test("VIP BONUS o'chirilgan bo'lsa - mijoz VIP bo'lsa ham oddiy foiz ishlatiladi (qo'shimcha o'qish ham qilinmaydi)", async () => {
+    const db = buildMockDb({
+      clientDocs: [{ id: "client-1", data: { birthdayMonthDay: "05-20", linkedSellerIds: ["seller-1"] } }],
+      sellersData: {
+        "seller-1": { tariffPlan: "biznes", birthdayDiscountEnabled: true, birthdayDiscountPercent: 12, storeName: "Test Do'kon" },
+      },
+      customersBySeller: { "seller-1": { "client-1": { ltv: 600_000 } } },
+    });
+    const { sendBirthdayRewards } = loadModule(db);
+    await sendBirthdayRewards();
+    expect(db.__couponSetCalls[0].data.discountValue).toBe(12);
   });
 
   test("sotuvchida shaxsiy bot ULANGAN bo'lsa - tabrik xabari O'SHA bot orqali yuboriladi", async () => {

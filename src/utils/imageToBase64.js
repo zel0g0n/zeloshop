@@ -27,6 +27,25 @@ import { compressImage } from "@/utils/compress/compressImage";
  * quvvatlanmaydigan format) — xatoni yutib, ASL faylni yuboramiz: resize
  * shunchaki optimallashtirish, uning ishlamasligi AI xususiyatini
  * BUTUNLAY to'xtatib qo'ymasligi kerak.
+ *
+ * MUHIM TUZATISH (2026-09, "Avto-to'ldirish ishlamayabdi / Failed to
+ * fetch" xatoligi): rasm ALLAQACHON Storage'da bo'lsa (`image.url` bor,
+ * `image.file` yo'q — mahsulotni TAHRIRLASH sahifasida bo'lgani kabi),
+ * OLDIN bu yerda brauzerning O'ZI `fetch(image.url)` orqali Storage'dan
+ * rasmni yuklab olardi. Bu Storage bucket CORS siyosatiga bog'liq edi
+ * (`fetch()` CORS tekshiruvidan o'tadi, oddiy `<img>` tegi esa YO'Q —
+ * shuning uchun rasm ekranda muammosiz ko'rinib turishi CORS
+ * ishlayotganining DALILI EMAS). Agar bucket'ning CORS ro'yxati mos
+ * kelmasa (yoki `cors.json` haqiqiy bucket'ga hali qo'llanilmagan
+ * bo'lsa), brauzer so'rovni jim rad etadi va aynan sirli "Failed to
+ * fetch" xatosini tashlaydi.
+ *
+ * YECHIM: bu holatda endi HECH QANDAY client-side `fetch()` qilinmaydi
+ * — shunchaki `{ url }` qaytariladi, chaqiruvchi xizmat (`generateDescription.js`/
+ * `generateSocialPost.js`) buni backend'ga yuboradi, backend esa
+ * rasmni SERVERDAN SERVERGA (`functions/lib/safeFetch.js`dagi
+ * `resolveImageBase64`/`fetchTrustedImage` orqali, CORS'ga UMUMAN
+ * bog'liq emas) yuklab oladi.
  */
 export const imageToBase64Payload = async (image) => {
   if (!image) return null;
@@ -61,9 +80,7 @@ export const imageToBase64Payload = async (image) => {
   }
 
   if (image.url) {
-    const response = await fetch(image.url);
-    const blob = await response.blob();
-    return toResizedPayload(blob, blob.type || "image/jpeg");
+    return { url: image.url };
   }
 
   return null;

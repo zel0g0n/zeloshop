@@ -94,6 +94,53 @@ describe("generateSocialPost", () => {
     expect(result.postText).toBe("Ajoyib krem! #toshkent #onlayndokon");
   });
 
+  // "AVTO-TO'LDIRISH ISHLAMAYABDI / Failed to fetch" TUZATISHI
+  // (2026-09): mijoz endi rasm URL'ini (`imageUrl`) yuboradi (rasm
+  // ALLAQACHON Storage'da bo'lganda - CORS'ga bog'liq client-side
+  // `fetch()` o'rniga), backend esa `resolveImageBase64` orqali uni
+  // SERVERDAN yuklab, Gemini'ga rasm bilan birga yuboradi.
+  test("imageUrl berilsa (imageBase64 EMAS) - backend rasmni o'zi yuklab, Gemini'ga rasm bilan birga yuboradi", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      arrayBuffer: async () => Buffer.from("fake-image-bytes"),
+      headers: { get: () => "image/png" },
+    });
+    try {
+      const genContent = jest.fn().mockResolvedValue({ text: "Ajoyib krem! #toshkent" });
+      const db = buildMockDb({ sellerData: { aiCeoEnabled: true } });
+      const { _testables } = loadModule(db, genContent);
+
+      const result = await _testables.handleGenerateSocialPost(
+        baseRequest({ imageUrl: "https://firebasestorage.googleapis.com/v0/b/commerce-zelo.appspot.com/o/products%2Fimg.png?alt=media" })
+      );
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(result.postText).toBe("Ajoyib krem! #toshkent");
+      const sentParts = genContent.mock.calls[0][0].contents[0].parts;
+      expect(sentParts[1].inlineData).toEqual({ mimeType: "image/png", data: Buffer.from("fake-image-bytes").toString("base64") });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  test("imageUrl ishonchsiz (Storage bo'lmagan) domendan bo'lsa - rasm e'tiborsiz qoldiriladi, lekin post baribir yaratiladi", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn();
+    try {
+      const genContent = jest.fn().mockResolvedValue({ text: "Post matni (rasmsiz)" });
+      const db = buildMockDb({ sellerData: { aiCeoEnabled: true } });
+      const { _testables } = loadModule(db, genContent);
+
+      const result = await _testables.handleGenerateSocialPost(baseRequest({ imageUrl: "https://evil.com/x.png" }));
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(result.postText).toBe("Post matni (rasmsiz)");
+      expect(genContent.mock.calls[0][0].contents).not.toEqual(expect.any(Array));
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   test("mahsulot nomi bo'lmasa, premium bo'lsa ham rad etiladi", async () => {
     const genContent = jest.fn();
     const db = buildMockDb({ sellerData: { aiCeoEnabled: true } });
@@ -273,6 +320,34 @@ describe("handleGenerateProductDescription", () => {
 
     const sentPrompt = genContent.mock.calls[0][0].contents;
     expect(sentPrompt).toContain("avto ehtiyot qismlari");
+  });
+
+  // "AVTO-TO'LDIRISH ISHLAMAYABDI / Failed to fetch" TUZATISHI
+  // (2026-09) - `generateSocialPost`dagi bilan bir xil tuzatish, bu
+  // yerda ham (mahsulotni TAHRIRLASH sahifasida "Avto-to'ldirish"
+  // tugmasi aynan shu funksiyani chaqiradi).
+  test("imageUrl berilsa (imageBase64 EMAS) - backend rasmni o'zi yuklab, Gemini'ga rasm bilan birga yuboradi", async () => {
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn().mockResolvedValue({
+      arrayBuffer: async () => Buffer.from("fake-image-bytes"),
+      headers: { get: () => "image/png" },
+    });
+    try {
+      const genContent = jest.fn().mockResolvedValue({ text: "Yumshoq krem." });
+      const { _testables } = loadModule(buildMockDb(), genContent);
+
+      const result = await _testables.handleGenerateProductDescription({
+        auth: { uid: "seller-1" },
+        data: { productName: "Krem", imageUrl: "https://firebasestorage.googleapis.com/v0/b/commerce-zelo.appspot.com/o/products%2Fimg.png?alt=media" },
+      });
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(result.description).toBe("Yumshoq krem.");
+      const sentParts = genContent.mock.calls[0][0].contents[0].parts;
+      expect(sentParts[1].inlineData).toEqual({ mimeType: "image/png", data: Buffer.from("fake-image-bytes").toString("base64") });
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 
   test("15-NICHE: sotuvchi hujjati topilmasa ham, xatosiz ishlaydi ('Boshqa' zaxirasi bilan)", async () => {

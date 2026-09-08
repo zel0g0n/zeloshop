@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, Lightbulb, CreditCard, Landmark, Package, Check, AlertTriangle, Layers } from "lucide-react";
+import { ChevronLeft, Lightbulb, CreditCard, Landmark, Package, Check, AlertTriangle } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import FullScreenSpinner from "@/components/ui/FullScreenSpinner";
 import { usePaymentConfig } from "@/hooks/seller/usePaymentConfig";
@@ -47,16 +47,6 @@ const PaymentSettingsPage = () => {
   const [checkoutTypesError, setCheckoutTypesError] = useState(null);
   const [checkoutTypesSaved, setCheckoutTypesSaved] = useState(false);
 
-  // "Bo'lib to'lash" — faqat "Prepay" (karta orqali oldindan to'lov)
-  // yoqilgan bo'lsa mazmunli, shuning uchun shu yerda, xuddi shu
-  // kartada, BIR TUGMA bilan birga saqlanadi. Qismlar soni (2 yoki 3)
-  // sotuvchi tomonidan BELGILANADI — mijoz checkout'da faqat shu
-  // aniq songa "rozi" bo'ladi (batafsil: `functions/orders.js`da
-  // server bu qiymatni QAYTA tekshiradi, mos kelmasa jimgina to'liq
-  // to'lovga qaytadi).
-  const [installmentEnabled, setInstallmentEnabled] = useState(Boolean(store?.installmentPaymentEnabled));
-  const [installmentParts, setInstallmentParts] = useState(Number(store?.installmentParts) >= 2 ? Number(store.installmentParts) : 2);
-
   const toggleCheckoutType = (type) => {
     setCheckoutTypesSaved(false);
     setCheckoutTypesError(null);
@@ -71,13 +61,18 @@ const PaymentSettingsPage = () => {
     setCheckoutTypesSaving(true);
     setCheckoutTypesError(null);
     try {
-      const installmentEnabledToSave = installmentEnabled && checkoutTypes.includes("prepay");
+      // "Bo'lib to'lash" (installment) imkoniyati platformada haqiqiy
+      // qo'llab-quvvatlanmaydi (2026-09: sotuvchiga ko'rsatilgan, lekin
+      // "bizda bu imkoniyat yo'q" deb ataylab olib tashlangan) — shu
+      // sabab bu yerda doim `false` sifatida saqlanadi, hatto ilgari
+      // yoqilgan bo'lsa ham (checkout'dagi mijozga ko'rinishi ham shu
+      // orqali o'chadi, chunki `Checkout.jsx` faqat shu maydonga qarab
+      // ko'rsatadi).
       await updateSeller(sellerId, {
         paymentTypes: checkoutTypes,
-        installmentPaymentEnabled: installmentEnabledToSave,
-        installmentParts,
+        installmentPaymentEnabled: false,
       });
-      patchStore({ paymentTypes: checkoutTypes, installmentPaymentEnabled: installmentEnabledToSave, installmentParts });
+      patchStore({ paymentTypes: checkoutTypes, installmentPaymentEnabled: false });
       setCheckoutTypesSaved(true);
     } catch (err) {
       setCheckoutTypesError(err.message || t("paymentSettings.checkoutMethodsRequired"));
@@ -230,47 +225,6 @@ const PaymentSettingsPage = () => {
             <div className="flex items-start gap-2 p-2.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
               <AlertTriangle size={13} className="shrink-0 mt-0.5" />
               <span>{t("paymentSettings.individualNotConfiguredWarning")}</span>
-            </div>
-          )}
-
-          {checkoutTypes.includes("prepay") && (
-            <div className="p-3 bg-[#F4F5F9] dark:bg-slate-800 rounded-2xl space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-8 h-8 rounded-xl bg-white dark:bg-slate-900 text-violet-500 flex items-center justify-center shrink-0">
-                    <Layers size={14} />
-                  </span>
-                  <div>
-                    <p className="text-xs font-black text-slate-700 dark:text-slate-200">{t("paymentSettings.installmentTitle")}</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{t("paymentSettings.installmentDesc")}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => { setInstallmentEnabled((v) => !v); setCheckoutTypesSaved(false); }}
-                  className={`w-11 h-6 rounded-full p-0.5 shrink-0 transition-colors ${installmentEnabled ? "bg-emerald-500" : "bg-slate-200 dark:bg-slate-700"}`}
-                >
-                  <span className={`w-5 h-5 rounded-full bg-white block transition-transform ${installmentEnabled ? "translate-x-5" : ""}`} />
-                </button>
-              </div>
-
-              {installmentEnabled && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{t("paymentSettings.installmentPartsLabel")}</span>
-                  {[2, 3].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => { setInstallmentParts(n); setCheckoutTypesSaved(false); }}
-                      className={`h-8 px-3.5 rounded-full text-xs font-black transition-colors ${
-                        installmentParts === n ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400"
-                      }`}
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           )}
 

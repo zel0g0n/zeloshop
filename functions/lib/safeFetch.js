@@ -55,4 +55,46 @@ async function fetchTrustedImage(url) {
   return fetch(url);
 }
 
-module.exports = { fetchTrustedImage, ALLOWED_IMAGE_HOSTS };
+/**
+ * "AVTO-TO'LDIRISH ISHLAMAYABDI" XATOLIGI TUZATISHI (2026-09):
+ * `generateProductDescription`/`generateSocialPost` avval FAQAT
+ * mijoz (brauzer) tomonidan oldindan base64'ga aylantirilgan rasmni
+ * qabul qilardi (`imageBase64`+`imageMimeType`). Mahsulotni
+ * QO'SHISHDA bu muammosiz ishlaydi (rasm hali local `File`, brauzer
+ * o'zi o'qiydi) — lekin mahsulotni TAHRIRLASHDA, rasm ALLAQACHON
+ * Storage'da (`image.url` bor, `image.file` yo'q) bo'lganda, mijoz
+ * `fetch(image.url)` orqali Storage'dan rasmni yuklab olishga
+ * urinardi (`src/utils/imageToBase64.js`) — bu Storage bucket CORS
+ * siyosatiga (`cors.json`, brauzerdan `fetch()` chaqirilganda talab
+ * qilinadi, oddiy `<img>` tegida talab qilinmaydi) bog'liq edi va
+ * ko'p hollarda tushunarsiz "Failed to fetch" xatosi bilan
+ * muvaffaqiyatsiz tugardi — rasmning o'zi ekranda muammosiz
+ * ko'rinib turishiga qaramasdan.
+ *
+ * YECHIM: endi mijoz bunday holatda faqat URL'ni yuboradi
+ * (`imageUrl`), backend esa uni SERVERDAN SERVERGA (`fetchTrustedImage`
+ * orqali, CORS'ga UMUMAN bog'liq emas) yuklab, base64'ga aylantiradi
+ * — `productDrafts.js`/`productAutomation.js`/`storyImage.js`da
+ * ALLAQACHON ishlatiladigan xavfsiz naqshning O'ZI.
+ *
+ * @param {{imageBase64?: string|null, imageMimeType?: string|null, imageUrl?: string|null}} params
+ * @returns {Promise<{base64: string, mimeType: string}|null>}
+ */
+async function resolveImageBase64({ imageBase64, imageMimeType, imageUrl }) {
+  if (imageBase64 && imageMimeType) {
+    return { base64: imageBase64, mimeType: imageMimeType };
+  }
+  if (!imageUrl) return null;
+  try {
+    const res = await fetchTrustedImage(imageUrl);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    return { base64: buffer.toString("base64"), mimeType: res.headers.get("content-type") || "image/jpeg" };
+  } catch (err) {
+    // Rasm IXTIYORIY - URL yaroqsiz/yuklanmasa ham, AI so'rovi
+    // faqat matn asosida davom etadi (butun xususiyat to'xtamaydi).
+    console.error("Rasmni URL orqali yuklab olishda xatolik:", err);
+    return null;
+  }
+}
+
+module.exports = { fetchTrustedImage, ALLOWED_IMAGE_HOSTS, resolveImageBase64 };

@@ -1,7 +1,41 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
-const { db } = require("./lib/admin");
+const { db, CUSTOM_BOT_WEBHOOK_SECRET } = require("./lib/admin");
 const { checkRateLimit } = require("./lib/rateLimit");
 const { withSentry, SENTRY_DSN } = require("./lib/sentry");
+
+/**
+ * Sotuvchi botini shu YAGONA webhook manziliga ulaydi — `sellerId`
+ * URL yo'lida ko'rsatiladi, shu orqali `customBotWebhook.js` qaysi
+ * sotuvchiga tegishli ekanini biladi (batafsil izoh: shu fayl,
+ * `customBotWebhook.js`ning boshidagi izoh). Xato bo'lsa ham (masalan
+ * Telegram vaqtincha ishlamasa) ULASH JARAYONINI TO'XTATMAYDI — bot
+ * baribir "Menu tugmasi" orqali ISHLAYDI, faqat kanal postidagi
+ * "Sotib olish" tugmasi bosilganda javob bermasligi mumkin (bu —
+ * ikkinchi darajali qulaylik, asosiy ulash muvaffaqiyatini
+ * to'xtatmasligi kerak).
+ */
+async function registerCustomBotWebhook(token, sellerId) {
+  const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT;
+  if (!projectId) return;
+  const webhookUrl = `https://asia-south1-${projectId}.cloudfunctions.net/customBotWebhook/${sellerId}`;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: webhookUrl,
+        secret_token: CUSTOM_BOT_WEBHOOK_SECRET.value(),
+        allowed_updates: ["message"],
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      console.error("Sotuvchi boti uchun webhook o'rnatilmadi:", data.description);
+    }
+  } catch (err) {
+    console.error("Sotuvchi boti uchun webhook o'rnatishda xatolik:", err);
+  }
+}
 
 /**
  * SOTUVCHINING O'Z BOTINI ULASH.
@@ -20,7 +54,7 @@ const { withSentry, SENTRY_DSN } = require("./lib/sentry");
  * qarang) — shuning uchun sotuvchi mustaqil, hech kimning yordamisiz
  * ulay oladi.
  */
-exports.connectCustomBot = onCall({ region: "asia-south1", secrets: [SENTRY_DSN] }, withSentry(async (request) => {
+exports.connectCustomBot = onCall({ region: "asia-south1", secrets: [SENTRY_DSN, CUSTOM_BOT_WEBHOOK_SECRET] }, withSentry(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Tizimga kirgan bo'lishingiz kerak.");
   }
@@ -146,6 +180,12 @@ exports.connectCustomBot = onCall({ region: "asia-south1", secrets: [SENTRY_DSN]
     { merge: true }
   );
 
+  // Kanal posti/ulashishdagi "Sotib olish" tugmasi ENDI sellerning
+  // shaxsiy botiga (`?start=...`) ishora qiladi — bosilganda bot shu
+  // webhookka xabar yuboradi, u esa haqiqiy Mini App tugmasi bilan
+  // javob beradi (batafsil: `customBotWebhook.js`).
+  await registerCustomBotWebhook(token, uid);
+
   return { botUsername: botInfo.username };
 }));
 
@@ -178,6 +218,11 @@ exports.disconnectCustomBot = onCall({ region: "asia-south1", secrets: [SENTRY_D
       // eskicha ko'rinishda qolishi mumkin. Foydalanuvchini
       // to'xtatmaymiz.
       console.error("Menu tugmasini asl holatga qaytarishda xatolik:", err);
+    }
+    try {
+      await fetch(`https://api.telegram.org/bot${storedToken}/deleteWebhook`, { method: "POST" });
+    } catch (err) {
+      console.error("Webhookni o'chirishda xatolik (halokatli emas):", err);
     }
   }
 

@@ -6,11 +6,12 @@ import {
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
+import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
 import useGetOrdersData from "@/hooks/seller/useRecentOrders";
 import useGetProductsData from "@/hooks/seller/useGetSellerProducts";
 import { useOrderRollups } from "@/hooks/seller/useOrderRollups";
 import { usePendingOrdersCount } from "@/hooks/seller/usePendingOrdersCount";
-import { buildShopLink } from "@/utils/shareLink";
+import { buildShopLink, buildSellerBotDeepLink } from "@/utils/shareLink";
 import { getRangeStart, getCalendarMonthRange } from "@/utils/dateRange";
 import { computeDashboardStatsFromRollups } from "@/utils/dashboardStats";
 import { getVisitorCount } from "@/services/analytics/getVisitorCount";
@@ -46,6 +47,9 @@ const Dashboard = () => {
   const navigate = useNavigate();
   const { sellerId, store, dashboardSummary, patchStore } = useSession();
   const { t } = useLanguage();
+  // "Tezkor amallar" qatori Z-Start tarifida ko'rsatilmaydi (2026-09
+  // tarif bo'yicha tozalash — foydalanuvchi so'rovi bilan).
+  const isStart = getEffectiveTariffPlan(store) === "start";
   const [timeframe, setTimeframe] = useState("Bugun");
   // "Oy" tabi bosilganda ochiladigan oy-tanlash paneli — 0 = joriy oy
   // (standart), sotuvchi tanlagan sari o'tgan oylarga o'tadi (2026-09
@@ -202,14 +206,17 @@ const Dashboard = () => {
   const effectiveOrders = canShowServerSummary ? dashboardSummary.recentOrders : orders;
 
   const handleQuickShare = useCallback(async () => {
-    const link = buildShopLink(sellerId);
+    // FOYDALANUVCHI SO'ROVI: nusxalanadigan havola ham sellerning O'Z
+    // shaxsiy boti ulangan bo'lsa O'SHA botga (ZeloShop umumiy boti
+    // EMAS) ishora qiladi (`ShareStoreModal.jsx`dagi bir xil naqsh).
+    const link = buildSellerBotDeepLink(store?.customBotUsername) || buildShopLink(sellerId);
     try {
       await navigator.clipboard.writeText(link);
       setToastMessage(t("sellerDashboard.linkCopied"));
     } catch {
       setShowShareModal(true);
     }
-  }, [sellerId, t]);
+  }, [sellerId, store?.customBotUsername, t]);
 
   const hide = (value) => (isPrivate ? "•••" : value);
 
@@ -231,20 +238,26 @@ const Dashboard = () => {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {/* AI CEO uchun kichik, diqqatni tortuvchi (pulsatsiyalanuvchi
-                nuqta bilan) ikonka ko'rsatiladi, Ko'z/Ulashish tugmalari
-                bilan bir qatorda — katta, to'liq kenglikdagi karta
-                ekranni ortiqcha egallamasligi uchun ataylab
-                ishlatilmagan. */}
+            {/* AI CEO uchun kichik, diqqatni tortuvchi ikonka ko'rsatiladi,
+                Ko'z/Ulashish tugmalari bilan bir qatorda — katta, to'liq
+                kenglikdagi karta ekranni ortiqcha egallamasligi uchun
+                ataylab ishlatilmagan. 2026-09: foydalanuvchi so'rovi bilan
+                nuqta pulsatsiyasi yetarli e'tibor tortmadi — endi
+                tugmaning o'zi davriy ravishda "chayqaladi"
+                (`animate-attention-wiggle`, `index.css`). 2026-09:
+                foydalanuvchi rangni "juda diqqat tortuvchi" ko'k/indigo
+                deb topdi — tizimda allaqachon ishlatilgan yashil
+                (emerald, "LIVE" belgisidagi bilan bir xil) rangga
+                almashtirildi. */}
             {store?.aiCeoEnabled === true && (
               <button
                 type="button"
                 onClick={() => navigate("/seller/ai-ceo")}
-                className="relative w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center active:scale-90 transition-transform"
+                className="relative w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center active:scale-90 transition-transform animate-attention-wiggle"
                 aria-label={t("aiCeo.dashboardCardTitle")}
               >
                 <Bot size={14} />
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-indigo-500 rounded-full animate-pulse" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
               </button>
             )}
             <button
@@ -335,47 +348,50 @@ const Dashboard = () => {
               />
             </div>
 
-            {/* TEZKOR AMALLAR */}
-            <div className="flex gap-2 overflow-x-auto">
-              {/* OLDIN: bu yerda "Yangi Tovar" (oddiy, qo'lda to'ldiriladigan
-                  forma) tezkor amal sifatida birinchi o'rinda turardi.
-                  Foydalanuvchi so'roviga ko'ra endi shu o'rinda AI yordamida
-                  tezkor qo'shish (`QuickAddAICard.jsx`) urg'ulanadi - manzil
-                  bir xil (`/seller/add-product`), chunki o'sha sahifaning
-                  ENG YUQORISIDA aynan shu AI bloki joylashgan (AI CEO
-                  yoqilgan sotuvchilar uchun); AI CEO yoqilmagan sotuvchi
-                  uchun esa xuddi shu sahifadagi oddiy forma baribir
-                  ishlayveradi - hech narsa yo'qolmaydi, faqat urg'u
-                  o'zgardi. */}
-              <Link
-                to="/seller/add-product"
-                className="shrink-0 bg-[#5346E0] text-white rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <Sparkles size={14} />
-                {t("sellerDashboard.addWithAi")}
-              </Link>
-              <Link
-                to="/seller/orders"
-                className="shrink-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <Package size={14} />
-                {t("sellerDashboard.ordersLink")}
-              </Link>
-              <Link
-                to="/seller/create-promotion"
-                className="shrink-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <Flame size={14} />
-                {t("sellerDashboard.createPromotion")}
-              </Link>
-              <Link
-                to="/seller/marketing"
-                className="shrink-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
-              >
-                <Megaphone size={14} />
-                {t("sellerDashboard.createCoupon")}
-              </Link>
-            </div>
+            {/* TEZKOR AMALLAR — Z-Start tarifida ko'rsatilmaydi
+                (foydalanuvchi so'rovi bilan olib tashlandi). */}
+            {!isStart && (
+              <div className="flex gap-2 overflow-x-auto">
+                {/* OLDIN: bu yerda "Yangi Tovar" (oddiy, qo'lda to'ldiriladigan
+                    forma) tezkor amal sifatida birinchi o'rinda turardi.
+                    Foydalanuvchi so'roviga ko'ra endi shu o'rinda AI yordamida
+                    tezkor qo'shish (`QuickAddAICard.jsx`) urg'ulanadi - manzil
+                    bir xil (`/seller/add-product`), chunki o'sha sahifaning
+                    ENG YUQORISIDA aynan shu AI bloki joylashgan (AI CEO
+                    yoqilgan sotuvchilar uchun); AI CEO yoqilmagan sotuvchi
+                    uchun esa xuddi shu sahifadagi oddiy forma baribir
+                    ishlayveradi - hech narsa yo'qolmaydi, faqat urg'u
+                    o'zgardi. */}
+                <Link
+                  to="/seller/add-product"
+                  className="shrink-0 bg-[#5346E0] text-white rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
+                >
+                  <Sparkles size={14} />
+                  {t("sellerDashboard.addWithAi")}
+                </Link>
+                <Link
+                  to="/seller/orders"
+                  className="shrink-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
+                >
+                  <Package size={14} />
+                  {t("sellerDashboard.ordersLink")}
+                </Link>
+                <Link
+                  to="/seller/create-promotion"
+                  className="shrink-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
+                >
+                  <Flame size={14} />
+                  {t("sellerDashboard.createPromotion")}
+                </Link>
+                <Link
+                  to="/seller/marketing"
+                  className="shrink-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-200 rounded-xl px-3.5 py-2 text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
+                >
+                  <Megaphone size={14} />
+                  {t("sellerDashboard.createCoupon")}
+                </Link>
+              </div>
+            )}
 
             <RecentOrdersList orders={effectiveOrders} />
           </div>
@@ -383,7 +399,7 @@ const Dashboard = () => {
       </div>
 
       {showShareModal && (
-        <ShareStoreModal sellerId={sellerId} storeName={store?.storeName} onClose={() => setShowShareModal(false)} />
+        <ShareStoreModal sellerId={sellerId} storeName={store?.storeName} customBotUsername={store?.customBotUsername} onClose={() => setShowShareModal(false)} />
       )}
 
       {toastMessage && (

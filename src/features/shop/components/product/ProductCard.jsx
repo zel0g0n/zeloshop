@@ -56,7 +56,7 @@ const ProductCard = ({ product }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const [imageError, setImageError] = useState(false);
   const { isFavorite, toggleFavorite } = useAddFavorite(product);
-  const { sellerId } = useSession();
+  const { sellerId, store } = useSession();
 
   const { isInCart, quantity, toggleCart, incrementQuantity, decrementQuantity } = useAddToCart(product);
 
@@ -93,7 +93,7 @@ const ProductCard = ({ product }) => {
     e.stopPropagation();
     // Rasm+matn "post" ko'rinishida ulashiladi (mumkin bo'lganda) -
     // batafsil izoh: `shareProductAsPost.js`.
-    await shareProductAsPost(product, sellerId);
+    await shareProductAsPost(product, sellerId, store?.customBotUsername);
   };
 
 

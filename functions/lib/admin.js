@@ -62,8 +62,32 @@ const STAFF_BOT_TOKEN = defineSecret("STAFF_BOT_TOKEN");
 // STAFF_TELEGRAM_WEBHOOK_SECRET (istalgan uzun, tasodifiy qator).
 const STAFF_TELEGRAM_WEBHOOK_SECRET = defineSecret("STAFF_TELEGRAM_WEBHOOK_SECRET");
 
+// SOTUVCHINING SHAXSIY BOTI UCHUN UMUMIY WEBHOOK MAXFIY KALITI (2026-09,
+// sotuvchi so'roviga ko'ra qo'shildi — "Sotib olish" tugmasi sellerning
+// O'ZINING boti orqali ochilishi uchun).
+//
+// MUHIM FARQ (kuryer/xodim botidan): kuryer va xodim boti — HAR
+// IKKALASI HAM bitta, umumiy, doimiy bot (`COURIER_BOT_TOKEN`/
+// `STAFF_BOT_TOKEN`) — barcha sotuvchilar SHU BITTA botdan
+// foydalanadi. Sotuvchining shaxsiy boti esa HAR BIR SOTUVCHI uchun
+// BOSHQA-BOSHQA, sotuvchining o'zi BotFather orqali yaratgan, token
+// saqlangan bot (`customBot.js`) — shuning uchun bitta doimiy
+// `defineSecret` o'rniga, webhook manzili o'ziga `sellerId`ni URL
+// yo'lida oladi (`/customBotWebhook/{sellerId}`) va HAR BIR
+// sotuvchining boti `connectCustomBot` chaqirilganda AVTOMATIK shu
+// BITTA (umumiy) maxfiy `secret_token` bilan ro'yxatdan o'tkaziladi —
+// bitta qiymatni barcha sotuvchi botlari uchun QAYTA ishlatish
+// xavfsiz (Telegram bu qiymatni HAR bir botga alohida ro'yxatga
+// oladi va har safar o'zi orqali kelgan so'rovda AYNAN shuni
+// qaytaradi — soxta so'rov yubormoqchi bo'lgan har qanday kishi bu
+// qiymatni bilishi SHART, aks holda 401 bilan rad etiladi). Terminalda:
+// firebase functions:secrets:set CUSTOM_BOT_WEBHOOK_SECRET (istalgan
+// uzun, tasodifiy qator).
+const CUSTOM_BOT_WEBHOOK_SECRET = defineSecret("CUSTOM_BOT_WEBHOOK_SECRET");
+
 module.exports = {
   admin, db, BOT_TOKEN, GEMINI_API_KEY, TELEGRAM_WEBHOOK_SECRET,
   COURIER_BOT_TOKEN, COURIER_TELEGRAM_WEBHOOK_SECRET,
   STAFF_BOT_TOKEN, STAFF_TELEGRAM_WEBHOOK_SECRET,
+  CUSTOM_BOT_WEBHOOK_SECRET,
 };

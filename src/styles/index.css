@@ -40,6 +40,24 @@ html.dark, html.dark body {
 .animate-fade-in, .animate-fadeIn {
   animation: fadeIn 0.35s ease-out;
 }
+/* AI CEO tugmasi uchun — "qimirlab turadigan" (e'tibor tortuvchi)
+   effekt. Doim tebranib turmaydi (bu charchatadi/tashqi ko'rinishni
+   buzadi) — timeline'ning katta qismi (0-55%) tinch turadi, so'ng
+   qisqa "chayqalish" burusti bo'ladi va yana tinchlanadi, shu holda
+   davriy ravishda takrorlanaveradi. */
+@keyframes attention-wiggle {
+  0%, 55%, 100% { transform: rotate(0deg) scale(1); }
+  60% { transform: rotate(-12deg) scale(1.08); }
+  65% { transform: rotate(10deg) scale(1.08); }
+  70% { transform: rotate(-8deg) scale(1.05); }
+  75% { transform: rotate(6deg) scale(1.05); }
+  80% { transform: rotate(-3deg) scale(1.02); }
+  85% { transform: rotate(0deg) scale(1); }
+}
+.animate-attention-wiggle {
+  animation: attention-wiggle 3s ease-in-out infinite;
+  transform-origin: center;
+}
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar {
     display: none; /* Chrome, Safari va Opera uchun */

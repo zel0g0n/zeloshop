@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { UserRoundCog, Plus, Check, Loader2, ChevronDown, PhoneCall, Trash2 } from "lucide-react";
+import { UserRoundCog, Plus, Check, Loader2, ChevronDown, PhoneCall, Trash2, ShieldCheck } from "lucide-react";
 import { useStaffSession } from "@/context/StaffSessionContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { getStaffList } from "@/services/staff/getStaffList";
@@ -7,12 +7,13 @@ import { createStaffInvite, setStaffPermissions, setStaffActive, removeStaff } f
 import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import Toast from "@/components/ui/Toast";
 import { formatUzPhone, isValidUzPhone, hasMeaningfulPhoneDigits } from "@/utils/phone";
-import { getTariffLimits } from "@/utils/tariffLimits";
+import { getTariffLimits, getEffectiveTariffPlan } from "@/utils/tariffLimits";
 import {
   PERMISSION_KEYS, STAFF_ROLE_KEYS, normalizeStaffPermissions,
   getRolePermissionPreset, matchRoleFromPermissions,
 } from "@/utils/staffRoles";
 import { PERMISSION_META, ROLE_META } from "@/features/staff/staffPermissionMeta";
+import BiznesBadge from "@/components/ui/BiznesBadge";
 
 const EMPTY_PERMISSIONS = normalizeStaffPermissions(null);
 
@@ -38,6 +39,13 @@ const StaffTeamSection = () => {
   const { t } = useLanguage();
   const { sellerId, staffId, store } = useStaffSession();
   const maxStaff = getTariffLimits(store).maxStaff;
+  // `StaffManagementPage.jsx`dagi (sotuvchi tomoni) BILAN BIR XIL UI
+  // qatlami: to'liq "korporativ rol" katalogi (nomlangan rollar) faqat
+  // Z-Biznesda ko'rsatiladi — Z-Pro'da ham xuddi shu Admin-xodim
+  // qo'lda ruxsat belgilay oladi, faqat rol nomi/katalogi yo'q. Bu
+  // FAQAT UI qatlami — ruxsatlarning o'zi (backend + firestore.rules)
+  // ikkala tarifda ham bir xil, to'liq xavfsiz.
+  const isBiznes = getEffectiveTariffPlan(store) === "biznes";
 
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -221,44 +229,54 @@ const StaffTeamSection = () => {
               className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
             />
 
-            <div className="space-y-1.5 pt-1">
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block pl-1">
-                {t("staffManagement.roleLabel")}
-              </label>
-              <div className="relative">
-                <button
-                  type="button"
-                  disabled={creating}
-                  onClick={() => setRoleMenuOpen((v) => !v)}
-                  className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-between disabled:opacity-60"
-                >
-                  <span>{newRole ? t(`staffManagement.${ROLE_META[newRole].nameKey}`) : t("staffManagement.roleCustomOption")}</span>
-                  <ChevronDown size={14} className={`text-slate-400 transition-transform ${roleMenuOpen ? "rotate-180" : ""}`} />
-                </button>
-                {roleMenuOpen && (
-                  <div className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-lg max-h-64 overflow-y-auto">
-                    <button
-                      type="button"
-                      onClick={() => handleSelectRole(null)}
-                      className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                    >
-                      {t("staffManagement.roleCustomOption")}
-                    </button>
-                    {STAFF_ROLE_KEYS.map((role) => (
+            {isBiznes ? (
+              <div className="space-y-1.5 pt-1">
+                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                  {t("staffManagement.roleLabel")} <BiznesBadge size="xs" />
+                </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    disabled={creating}
+                    onClick={() => setRoleMenuOpen((v) => !v)}
+                    className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-between disabled:opacity-60"
+                  >
+                    <span>{newRole ? t(`staffManagement.${ROLE_META[newRole].nameKey}`) : t("staffManagement.roleCustomOption")}</span>
+                    <ChevronDown size={14} className={`text-slate-400 transition-transform ${roleMenuOpen ? "rotate-180" : ""}`} />
+                  </button>
+                  {roleMenuOpen && (
+                    <div className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-lg max-h-64 overflow-y-auto">
                       <button
-                        key={role}
                         type="button"
-                        onClick={() => handleSelectRole(role)}
-                        className="w-full text-left px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        onClick={() => handleSelectRole(null)}
+                        className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
                       >
-                        <p className="text-xs font-black text-slate-700 dark:text-white">{t(`staffManagement.${ROLE_META[role].nameKey}`)}</p>
-                        <p className="text-[10px] text-slate-400 dark:text-slate-500">{t(`staffManagement.${ROLE_META[role].descKey}`)}</p>
+                        {t("staffManagement.roleCustomOption")}
                       </button>
-                    ))}
-                  </div>
-                )}
+                      {STAFF_ROLE_KEYS.map((role) => (
+                        <button
+                          key={role}
+                          type="button"
+                          onClick={() => handleSelectRole(role)}
+                          className="w-full text-left px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+                        >
+                          <p className="text-xs font-black text-slate-700 dark:text-white">{t(`staffManagement.${ROLE_META[role].nameKey}`)}</p>
+                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{t(`staffManagement.${ROLE_META[role].descKey}`)}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="flex items-start gap-2 p-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-2xl">
+                <ShieldCheck size={14} className="text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-[11px] font-black text-indigo-700 dark:text-indigo-300">{t("staffManagement.roleUpsellTitle")}</p>
+                  <p className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80 leading-relaxed mt-0.5">{t("staffManagement.roleUpsellDesc")}</p>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5 pt-1">
               <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block pl-1">
@@ -360,6 +378,7 @@ const StaffTeamSection = () => {
                     </div>
                   </div>
 
+                  {isBiznes && (
                   <div className="relative pl-11.5">
                     <button
                       type="button"
@@ -397,6 +416,7 @@ const StaffTeamSection = () => {
                       </div>
                     )}
                   </div>
+                  )}
 
                   <div className="flex flex-wrap items-center gap-1.5 pl-11.5">
                     {PERMISSION_KEYS.map((permKey) => {

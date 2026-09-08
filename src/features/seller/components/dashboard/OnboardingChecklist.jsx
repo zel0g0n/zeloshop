@@ -1,6 +1,6 @@
 import { memo, useMemo, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronDown, X, Store, Package, Truck, Share2, ShoppingBag, Sparkles } from "lucide-react";
+import { Check, ChevronDown, X, Store, Package, Truck, Share2, CreditCard, Sparkles } from "lucide-react";
 import { buildOnboardingSteps, computeOnboardingProgress } from "@/utils/onboardingChecklist";
 import updateSeller from "@/services/sellers/updateSeller";
 import { useLanguage } from "@/context/LanguageContext";
@@ -11,7 +11,7 @@ const STEP_ICONS = {
   firstProduct: Package,
   deliveryZone: Truck,
   shareStore: Share2,
-  firstOrder: ShoppingBag,
+  paymentInfo: CreditCard,
 };
 
 // Har bir qator alohida, memo qilingan - shu orqali, faqat BITTA
@@ -113,8 +113,17 @@ const OnboardingChecklist = ({ sellerId, store, dashboardSummary, onOpenShareMod
 
   const handleDismiss = useCallback(() => {
     setDismissed(true);
-    if (sellerId) updateSeller(sellerId, { onboardingDismissed: true }).catch(() => {});
-  }, [sellerId]);
+    if (sellerId) {
+      updateSeller(sellerId, { onboardingDismissed: true }).catch(() => {});
+      // MUHIM TUZATISH (12-band): sessiyadagi nusxa ham DARHOL
+      // yangilanadi - aks holda, sotuvchi shu sahifadan chiqib qayta
+      // kirsa (masalan boshqa tabga o'tib qaytsa), yuqoridagi
+      // `useEffect` `store.onboardingDismissed`ni ESKI (hali
+      // yangilanmagan) qiymatdan qayta o'qib, karta QAYTA paydo bo'lib
+      // qolardi.
+      patchStore({ onboardingDismissed: true });
+    }
+  }, [sellerId, patchStore]);
 
   if (dismissed || progress.isComplete) return null;
 

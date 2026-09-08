@@ -10,7 +10,9 @@ import { formatMoneyInput, parseMoneyInput } from "@/utils/moneyFormat";
 import StatusModal from "@/components/ui/StatusModal";
 import CustomSelect from "@/components/ui/CustomSelect";
 import YandexPickupLocationCard from "@/features/seller/components/delivery/YandexPickupLocationCard";
+import CourierManagementSection from "./CourierManagementSection";
 import { useLanguage } from "@/context/LanguageContext";
+import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
 
 // "HH:00" shaklidagi soat variantlari (00:00...23:00) — do'kon ish
 // vaqtini (2026-09 punkt-royxati, 15-band) FAQAT to'liq soat
@@ -21,14 +23,22 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(
 
 // Yetkazib berish sozlamalari — birlashtirilgan sahifa.
 //
-// "Yetkazib berish va Logistika" (mintaqaviy narxlar) va "Yandex
-// Delivery" (tezkor kuryer ulash) bir mavzuga tegishli bo'lgani uchun
-// bitta sahifada, ichida segment-tab bilan almashtiriladigan ikki bo'lim
-// sifatida, bitta orqaga tugmasi bilan ko'rsatiladi. Har bir bo'lim
-// o'zining mustaqil saqlash tugmasiga ega, chunki ular Firestore'da
-// turli hujjatlarga yoziladi (`sellers/{id}` va `sellers/{id}/private/
-// yandexDelivery`) — shuning uchun ularni bitta formaga birlashtirish
-// noto'g'ri bo'lardi, faqat ko'rinish birlashtirilgan.
+// "Yetkazib berish va Logistika" (mintaqaviy narxlar), "Yandex
+// Delivery" (tezkor kuryer ulash) VA "Kuryerlar" (o'z kuryerlar
+// ro'yxati) bir mavzuga tegishli bo'lgani uchun bitta sahifada, ichida
+// segment-tab bilan almashtiriladigan UCH bo'lim sifatida, bitta
+// orqaga tugmasi bilan ko'rsatiladi. Har bir bo'lim o'zining mustaqil
+// saqlash tugmasiga ega, chunki ular Firestore'da turli hujjatlarga
+// yoziladi (`sellers/{id}`, `sellers/{id}/private/yandexDelivery` va
+// `couriers` kolleksiyasi) — shuning uchun ularni bitta formaga
+// birlashtirish noto'g'ri bo'lardi, faqat ko'rinish birlashtirilgan.
+//
+// 2026-09 foydalanuvchi so'roviga ko'ra: "Kuryerlar" ILGARI Sozlamalar
+// (`More.jsx`) ro'yxatida alohida band edi — endi O'SHA YERDAN OLIB
+// TASHLANDI va shu YERGA, uchinchi tab sifatida ko'chirildi (mantiq
+// o'zi `CourierManagementSection.jsx`da, ikki marta yozilmasin deb
+// mustaqil sahifa - `CourierManagementPage.jsx` - bilan BIRGA
+// ishlatiladi).
 const DeliverySettingsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -37,7 +47,15 @@ const DeliverySettingsPage = () => {
   const yandexHook = useYandexDeliveryConfig(sellerId);
   const { config: yandexConfig, loading: yandexLoading, saving: yandexSaving, save: saveYandexConfig } = yandexHook;
 
-  const [activeTab, setActiveTab] = useState(location.state?.initialTab === "yandex" ? "yandex" : "zones");
+  // Yandex Delivery Z-Start tarifida mavjud emas (2026-09 tarif
+  // bo'yicha tozalash) — shu sabab bu bo'lim (tab) Z-Start uchun
+  // butunlay yashiriladi, sahifa doim "zones" bo'limida ochiladi.
+  const isStart = getEffectiveTariffPlan(store) === "start";
+  const [activeTab, setActiveTab] = useState(() => {
+    if (isStart) return "zones";
+    const requested = location.state?.initialTab;
+    return requested === "yandex" || requested === "couriers" ? requested : "zones";
+  });
 
   const sellerRegion = store?.region || null;
   const showDistrictTier = hasDistrictTier(sellerRegion);
@@ -188,8 +206,14 @@ const DeliverySettingsPage = () => {
         </div>
       </div>
 
+      {/* MUHIM: "Kuryerlar" tabi barcha tariflar uchun (Z-Start ham)
+          ko'rinadi — bu bo'lim ilgari `More.jsx`da HECH QANDAY tarif
+          cheklovisiz mavjud edi (`START_HIDDEN_IDS`da yo'q edi), shu
+          sabab bu yerga ko'chirilganda ham xuddi shu erkinlik
+          saqlanishi kerak. Faqat "Yandex Delivery" Z-Start uchun
+          yashiriladi (avvalgidek). */}
       <div className="p-4 pb-0">
-        <div className="bg-slate-200/60 dark:bg-slate-800 p-1 rounded-xl grid grid-cols-2 text-center text-xs font-black text-slate-500 dark:text-slate-400">
+        <div className={`bg-slate-200/60 dark:bg-slate-800 p-1 rounded-xl grid ${isStart ? "grid-cols-2" : "grid-cols-3"} text-center text-xs font-black text-slate-500 dark:text-slate-400`}>
           <button
             type="button"
             onClick={() => setActiveTab("zones")}
@@ -197,18 +221,29 @@ const DeliverySettingsPage = () => {
           >
             {t("deliverySettings.tabZones")}
           </button>
+          {!isStart && (
+            <button
+              type="button"
+              onClick={() => setActiveTab("yandex")}
+              className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${activeTab === "yandex" ? "bg-white dark:bg-slate-900 text-[#5346E0] dark:text-[#8b85f5] shadow-xs" : ""}`}
+            >
+              {t("deliverySettings.tabYandex")}
+              {!yandexLoading && isYandexConnected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => setActiveTab("yandex")}
-            className={`py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${activeTab === "yandex" ? "bg-white dark:bg-slate-900 text-[#5346E0] dark:text-[#8b85f5] shadow-xs" : ""}`}
+            onClick={() => setActiveTab("couriers")}
+            className={`py-2 rounded-lg transition-colors ${activeTab === "couriers" ? "bg-white dark:bg-slate-900 text-[#5346E0] dark:text-[#8b85f5] shadow-xs" : ""}`}
           >
-            {t("deliverySettings.tabYandex")}
-            {!yandexLoading && isYandexConnected && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />}
+            {t("deliverySettings.tabCouriers")}
           </button>
         </div>
       </div>
 
-      {activeTab === "zones" ? (
+      {activeTab === "couriers" ? (
+        <CourierManagementSection />
+      ) : activeTab === "zones" ? (
         <form onSubmit={handleSaveZones} className="p-4 space-y-4">
           {zonesError && (
             <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 p-3 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400">

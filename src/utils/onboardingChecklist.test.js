@@ -34,9 +34,14 @@ describe("buildOnboardingSteps", () => {
     expect(steps.find((s) => s.key === "deliveryZone").done).toBe(true);
   });
 
-  test("hasEverOrdered=true bo'lsa 'firstOrder' bajarilgan hisoblanadi", () => {
-    const steps = buildOnboardingSteps(null, { hasEverOrdered: true });
-    expect(steps.find((s) => s.key === "firstOrder").done).toBe(true);
+  test("paymentTypes bo'sh bo'lsa 'paymentInfo' bajarilmagan hisoblanadi", () => {
+    const steps = buildOnboardingSteps({ paymentTypes: [] }, null);
+    expect(steps.find((s) => s.key === "paymentInfo").done).toBe(false);
+  });
+
+  test("kamida bitta paymentTypes bo'lsa 'paymentInfo' bajarilgan hisoblanadi", () => {
+    const steps = buildOnboardingSteps({ paymentTypes: ["cod"] }, null);
+    expect(steps.find((s) => s.key === "paymentInfo").done).toBe(true);
   });
 
   test("onboardingSharedAt mavjud bo'lsa 'shareStore' bajarilgan hisoblanadi", () => {
@@ -54,8 +59,8 @@ describe("computeOnboardingProgress", () => {
 
   test("hammasi bajarilgan bo'lsa 100% va isComplete=true", () => {
     const steps = buildOnboardingSteps(
-      { storeName: "Zelo", logo: "x", deliveryTiers: { sameCity: {} }, onboardingSharedAt: 1 },
-      { totalProductsCount: 5, hasEverOrdered: true }
+      { storeName: "Zelo", logo: "x", deliveryTiers: { sameCity: {} }, onboardingSharedAt: 1, paymentTypes: ["cod"] },
+      { totalProductsCount: 5 }
     );
     const progress = computeOnboardingProgress(steps);
     expect(progress).toMatchObject({ total: 5, completed: 5, percent: 100, isComplete: true });

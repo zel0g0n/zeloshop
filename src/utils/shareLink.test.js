@@ -1,5 +1,5 @@
 import { describe, test, expect } from "vitest";
-import { buildShopLink, buildReferralLink, buildDeepLink, buildSellerInviteLink } from "./shareLink";
+import { buildShopLink, buildReferralLink, buildDeepLink, buildSellerInviteLink, buildSellerBotDeepLink } from "./shareLink";
 
 describe("buildShopLink", () => {
   test("sellerId asosida to'g'ri havola yasaydi", () => {
@@ -51,5 +51,22 @@ describe("buildSellerInviteLink", () => {
     expect(startParam).not.toContain("_r");
     expect(startParam).not.toContain("_p");
     expect(startParam.endsWith("_i")).toBe(true);
+  });
+});
+
+describe("buildSellerBotDeepLink", () => {
+  test("botUsername va yo'l berilsa - '?start=p<kod>' formatidagi havola qaytaradi (startapp EMAS)", () => {
+    const link = buildSellerBotDeepLink("mening_shopim_bot", "/product/abc1");
+    expect(link).toMatch(/^https:\/\/t\.me\/mening_shopim_bot\?start=p/);
+    expect(link).not.toContain("startapp");
+  });
+
+  test("yo'lsiz - botga faqat oddiy havola qaytaradi", () => {
+    expect(buildSellerBotDeepLink("mening_shopim_bot")).toBe("https://t.me/mening_shopim_bot");
+  });
+
+  test("botUsername bo'lmasa - null qaytaradi (chaqiruvchi ZeloShop umumiy botiga qaytishi uchun)", () => {
+    expect(buildSellerBotDeepLink(null, "/product/abc1")).toBeNull();
+    expect(buildSellerBotDeepLink(undefined)).toBeNull();
   });
 });

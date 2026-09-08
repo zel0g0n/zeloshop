@@ -11,6 +11,7 @@ import useCustomerIntelligence from "@/hooks/seller/useCustomerIntelligence";
 import { filterClassifiedCustomers } from "@/utils/customerIntelligence";
 import { GridSkeleton } from "@/components/ui/Skeleton";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import BiznesBadge from "@/components/ui/BiznesBadge";
 
 const SEGMENT_ICONS = {
   all: Crown, vip: Star, high_value: Gem, sleeping: Moon, churn_risk: AlertTriangle,
@@ -93,7 +94,7 @@ const CustomerIntelligencePanel = () => {
     <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
-          <Crown size={13} className="text-amber-500" /> {t("customerIntelligence.title")}
+          {t("customerIntelligence.title")} <BiznesBadge size="xs" />
         </h3>
         <button
           type="button"

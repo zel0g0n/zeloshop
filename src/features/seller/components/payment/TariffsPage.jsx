@@ -47,6 +47,7 @@ const PLANS = [
     id: "pro",
     nameKey: "planProName",
     priceKey: "planProPrice",
+    periodKeys: ["planProPriceQuarter", "planProPriceHalfYear", "planProPriceYear"],
     cumulativeFromKey: "planStartName",
     featureKeys: [
       "proFeature1", "proFeature2", "proFeature3", "proFeature4",
@@ -59,9 +60,15 @@ const PLANS = [
     id: "biznes",
     nameKey: "planBiznesName",
     priceKey: "planBiznesPrice",
+    periodKeys: ["planBiznesPriceQuarter", "planBiznesPriceHalfYear", "planBiznesPriceYear"],
     cumulativeFromKey: "planProName",
     featureKeys: ["biznesFeature1", "biznesFeature2"],
     accent: "amber",
+    // 2026-09: Z-Biznes hali TO'LIQ ishga tushirilmagan (Buyruq Markazi/
+    // Avtomatlashtirish/Mijozlar razvedkasi kabi bo'limlar mavjud, lekin
+    // tarif rasmiy ravishda "sotuvda" emas) — shu sabab "tavsiya etiladi"
+    // o'rniga ishlab chiqilayotgani haqida belgi ko'rsatiladi.
+    inDevelopment: true,
   },
 ];
 
@@ -215,24 +222,34 @@ const TariffsPage = () => {
               <div className="flex items-center justify-between mb-1 gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">
                   {plan.recommended && <Sparkles size={15} className={classes.title} />}
-                  <span className={`text-xs font-black uppercase tracking-wider truncate ${classes.title}`}>{t(plan.nameKey)}</span>
+                  <span className={`text-xs font-black uppercase tracking-wider truncate ${classes.title}`}>{t(`tariffs.${plan.nameKey}`)}</span>
                 </div>
                 {isCurrent ? (
                   <span className={`shrink-0 text-[9px] font-black px-2 py-1 rounded-md ${classes.badge}`}>
                     {activeTrial && plan.id === effectivePlan && plan.id !== basePlan ? t("tariffs.trialBadge") : t("tariffs.currentBadge")}
                   </span>
+                ) : plan.recommended ? (
+                  <span className={`shrink-0 text-[9px] font-black px-2 py-1 rounded-md ${classes.badge}`}>{t("tariffs.recommendedBadge")}</span>
                 ) : (
-                  plan.recommended && (
-                    <span className={`shrink-0 text-[9px] font-black px-2 py-1 rounded-md ${classes.badge}`}>{t("tariffs.recommendedBadge")}</span>
+                  plan.inDevelopment && (
+                    <span className={`shrink-0 text-[9px] font-black px-2 py-1 rounded-md ${classes.badge}`}>{t("tariffs.biznesInDevelopmentBadge")}</span>
                   )
                 )}
               </div>
 
-              <p className={`text-lg font-black mb-3 ${classes.price}`}>{t(plan.priceKey)}</p>
+              <p className={`text-lg font-black mb-1 ${classes.price}`}>{t(`tariffs.${plan.priceKey}`)}</p>
+
+              {plan.periodKeys && (
+                <div className="flex flex-col gap-0.5 mb-2.5">
+                  {plan.periodKeys.map((key) => (
+                    <p key={key} className={`text-[10px] font-bold ${classes.muted}`}>{t(`tariffs.${key}`)}</p>
+                  ))}
+                </div>
+              )}
 
               {plan.cumulativeFromKey && (
                 <p className={`text-[11px] mb-2.5 ${classes.muted}`}>
-                  {t("tariffs.cumulativeNote", { plan: t(plan.cumulativeFromKey) })}
+                  {t("tariffs.cumulativeNote", { plan: t(`tariffs.${plan.cumulativeFromKey}`) })}
                 </p>
               )}
 

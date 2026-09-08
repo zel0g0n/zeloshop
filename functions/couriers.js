@@ -227,6 +227,11 @@ async function applyCourierOrderAction({ courierId, orderId, action }) {
       courierPhone: admin.firestore.FieldValue.delete(),
       courierDeliveryStatus: admin.firestore.FieldValue.delete(),
       courierLocation: admin.firestore.FieldValue.delete(),
+      // "KURYER KECHIKISHI" avtomatlashtirish trigger'i (pastga qarang,
+      // `assignOrderToCourier`) uchun yozilgan vaqt belgisi ham
+      // tozalanadi — aks holda buyurtma keyinroq BOSHQA kuryerga qayta
+      // biriktirilganda ESKI (endi noto'g'ri) vaqt bilan qolib ketardi.
+      courierAssignedAtMs: admin.firestore.FieldValue.delete(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     try {
@@ -606,6 +611,15 @@ async function handleAssignOrderToCourier(request) {
     courierName: courier.name || null,
     courierPhone: courier.phone || null,
     courierDeliveryStatus: "assigned",
+    // "KURYER KECHIKISHI" AVTOMATLASHTIRISH TRIGGERI (2026-09,
+    // "Buyruq Markazi/Avtomatlashtirish kengaytmasi"):
+    // `functions/automationRules.js`dagi `courier_delay` trigger'i shu
+    // vaqt belgisidan "kuryerga biriktirilganidan beri necha soat
+    // o'tdi"ni hisoblaydi — umumiy `updatedAt` maydonidan FARQLI
+    // o'laroq, bu maydon FAQAT shu yerda (bitta marta, biriktirilgan
+    // paytda) yoziladi, keyingi har qanday buyurtma yangilanishida
+    // (holat o'zgarishi va h.k.) QAYTA yozilmaydi.
+    courierAssignedAtMs: Date.now(),
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 

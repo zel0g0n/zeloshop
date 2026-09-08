@@ -16,6 +16,7 @@ module.exports = {
   ...require("./products"),
   ...require("./notifications"),
   ...require("./customBot"),
+  ...require("./customBotWebhook"),
   ...require("./analytics"),
   ...require("./reviews"),
   ...require("./delivery"),
@@ -48,7 +49,6 @@ module.exports = {
   ...require("./birthdayRewards"),
   ...require("./nicheMigration"),
   ...require("./installments"),
-  ...require("./storyImage"),
   ...require("./pricingSuggestions"),
   ...require("./managerAlerts"),
   ...require("./tariffs"),
@@ -58,4 +58,5 @@ module.exports = {
   ...require("./atmosProxyTest"),
   ...require("./automationRules"),
   ...require("./customerIntelligence"),
+  ...require("./weeklyBusinessReport"),
 };

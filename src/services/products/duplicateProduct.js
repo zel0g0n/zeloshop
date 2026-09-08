@@ -19,13 +19,17 @@ const duplicateProduct = async (productId, currentSellerId) => {
       throw new Error("Bu mahsulot sizga tegishli emas.");
     }
 
-    const { id: _ignored, createdAt: _ignoredCreatedAt, sellerId: _ignoredSellerId, ...rest } = data;
+    // `lastSoldAtMs` ham asl mahsulotdan NUSXALANMAYDI — aks holda
+    // nusxa mahsulot darhol "kam sotilayotgan" (`slow_moving_product`
+    // avtomatlashtirish trigger'i) deb belgilanib qolishi mumkin edi.
+    const { id: _ignored, createdAt: _ignoredCreatedAt, sellerId: _ignoredSellerId, lastSoldAtMs: _ignoredLastSoldAtMs, ...rest } = data;
 
     const newDoc = await addDoc(collection(db, "products"), {
       ...rest,
       sellerId: currentSellerId,
       name: `${data.name || "Mahsulot"} (nusxa)`,
       sold: 0,
+      lastSoldAtMs: Date.now(),
       createdAt: serverTimestamp(),
     });
 

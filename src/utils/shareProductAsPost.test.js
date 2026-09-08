@@ -138,4 +138,39 @@ describe("shareProductAsPost", () => {
     expect(shareMock).toHaveBeenCalledTimes(1);
     expect(shareMock.mock.calls[0][0].url).toBeTruthy();
   });
+
+  test("sotuvchi shaxsiy botini ulagan bo'lsa - havola ZeloShop umumiy boti EMAS, sellerning O'Z boti orqali quriladi", async () => {
+    globalThis.fetch = vi.fn();
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    setGlobalNavigator({ share: shareMock });
+
+    await shareProductAsPost(product, "seller1", "mening_shopim_bot");
+
+    const link = shareMock.mock.calls[0][0].url;
+    expect(link).toMatch(/^https:\/\/t\.me\/mening_shopim_bot\?start=p/);
+  });
+
+  test("shaxsiy bot ulanmagan bo'lsa - avvalgidek ZeloShop umumiy botiga (`buildDeepLink`) tushadi", async () => {
+    globalThis.fetch = vi.fn();
+    const shareMock = vi.fn().mockResolvedValue(undefined);
+    setGlobalNavigator({ share: shareMock });
+
+    await shareProductAsPost(product, "seller1", null);
+
+    const link = shareMock.mock.calls[0][0].url;
+    expect(link).toMatch(/^https:\/\/t\.me\/zeloshop_bot\/shop\?startapp=seller1_p/);
+  });
+
+  test("`navigator.share` mavjud bo'lmasa VA Telegram WebApp mavjud bo'lsa - `openTelegramLink` orqali ochadi, `window.open` EMAS", async () => {
+    setGlobalNavigator({});
+    const openTelegramLink = vi.fn();
+    globalThis.window = { open: vi.fn(), Telegram: { WebApp: { openTelegramLink } } };
+
+    await shareProductAsPost(product, "seller1");
+
+    expect(openTelegramLink).toHaveBeenCalledTimes(1);
+    expect(globalThis.window.open).not.toHaveBeenCalled();
+    const [url] = openTelegramLink.mock.calls[0];
+    expect(url).toContain("https://t.me/share/url?url=");
+  });
 });

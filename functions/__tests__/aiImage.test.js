@@ -118,6 +118,71 @@ describe("generateProductStoryImage", () => {
   });
 });
 
+describe("buildPremiumShowcasePrompt", () => {
+  test("mahsulotni ASL holida saqlash qoidasini albatta o'z ichiga oladi", () => {
+    const { buildPremiumShowcasePrompt } = loadModule();
+    const prompt = buildPremiumShowcasePrompt({ productName: "Krem", category: "Yuz parvarishi" });
+    expect(prompt).toMatch(/do not redraw|reinterpret|alter/i);
+    expect(prompt).toContain("Krem");
+    expect(prompt).toContain("Yuz parvarishi");
+  });
+
+  test("mahsulot nomi/kategoriya berilmasa ham, xato bermaydi", () => {
+    const { buildPremiumShowcasePrompt } = loadModule();
+    expect(() => buildPremiumShowcasePrompt({})).not.toThrow();
+    expect(() => buildPremiumShowcasePrompt()).not.toThrow();
+  });
+
+  test("kvadrat 1:1 formatga oid ko'rsatmani va 'premium/luxury' uslubini o'z ichiga oladi", () => {
+    const { buildPremiumShowcasePrompt } = loadModule();
+    const prompt = buildPremiumShowcasePrompt({ productName: "Krem" });
+    expect(prompt).toMatch(/1:1|square/i);
+    expect(prompt).toMatch(/premium|luxury/i);
+  });
+
+  test("boshqa ikkala promptdan (Ad Creative, Story) FARQLI matn qaytaradi", () => {
+    const { buildPremiumShowcasePrompt, buildInstagramAdPrompt, buildStoryAdPrompt } = loadModule();
+    const showcase = buildPremiumShowcasePrompt({ productName: "Krem" });
+    expect(showcase).not.toBe(buildInstagramAdPrompt({ productName: "Krem" }));
+    expect(showcase).not.toBe(buildStoryAdPrompt({ productName: "Krem" }));
+  });
+});
+
+describe("generateProductShowcaseImage", () => {
+  test("manba rasm berilmasa, xato tashlaydi (Gemini'ga umuman murojaat qilinmaydi)", async () => {
+    const generateContentMock = jest.fn();
+    const { generateProductShowcaseImage } = loadModule({ generateContentMock });
+    await expect(generateProductShowcaseImage({ imageBase64: null, imageMimeType: null })).rejects.toThrow();
+    expect(generateContentMock).not.toHaveBeenCalled();
+  });
+
+  test("Gemini rasm qaytarsa, base64 va mimeType'ni to'g'ri ajratadi", async () => {
+    const generateContentMock = jest.fn().mockResolvedValue({
+      candidates: [{ content: { parts: [{ inlineData: { data: "c2hvd2Nhc2U=", mimeType: "image/png" } }] } }],
+    });
+    const { generateProductShowcaseImage } = loadModule({ generateContentMock });
+    const result = await generateProductShowcaseImage({
+      imageBase64: "c291cmNlLWJ5dGVz",
+      imageMimeType: "image/jpeg",
+      productName: "Krem",
+      category: "Yuz parvarishi",
+    });
+    expect(result).toEqual({ imageBase64: "c2hvd2Nhc2U=", mimeType: "image/png" });
+    const call = generateContentMock.mock.calls[0][0];
+    expect(call.contents[0].parts[0].text).toMatch(/premium|luxury/i);
+  });
+
+  test("Gemini javobida rasm qismi bo'lmasa, xato tashlaydi", async () => {
+    const generateContentMock = jest.fn().mockResolvedValue({
+      candidates: [{ content: { parts: [{ text: "Kechirasiz, rasm yarata olmadim." }] } }],
+    });
+    const { generateProductShowcaseImage } = loadModule({ generateContentMock });
+    await expect(
+      generateProductShowcaseImage({ imageBase64: "c291cmNl", imageMimeType: "image/jpeg", productName: "Krem" })
+    ).rejects.toThrow("AI rasm qaytarmadi.");
+  });
+});
+
 describe("generateProductAdImage", () => {
   test("manba rasm berilmasa, xato tashlaydi (Gemini'ga umuman murojaat qilinmaydi)", async () => {
     const generateContentMock = jest.fn();
@@ -166,5 +231,29 @@ describe("generateProductAdImage", () => {
     const call = generateContentMock.mock.calls[0][0];
     expect(call.model).toBe(AD_IMAGE_MODEL);
     expect(call.config.responseModalities).toEqual(["IMAGE"]);
+  });
+});
+
+describe("isGeminiRateLimitError", () => {
+  // 2026-09, Sentry orqali production'da ANIQLANGAN haqiqiy holat:
+  // Gemini API'ning `ApiError` klassi (`@google/genai` SDK) HTTP
+  // status kodini `.status` maydonida saqlaydi.
+  test("`.status === 429` bo'lsa - true qaytaradi", () => {
+    const { isGeminiRateLimitError } = loadModule();
+    const err = Object.assign(new Error('{"error":{"code":429}}'), { status: 429 });
+    expect(isGeminiRateLimitError(err)).toBe(true);
+  });
+
+  test("boshqa status kodlari (masalan 500) uchun - false qaytaradi", () => {
+    const { isGeminiRateLimitError } = loadModule();
+    const err = Object.assign(new Error("server error"), { status: 500 });
+    expect(isGeminiRateLimitError(err)).toBe(false);
+  });
+
+  test("`.status` umuman bo'lmagan oddiy xato uchun - false qaytaradi (xato tashlamaydi)", () => {
+    const { isGeminiRateLimitError } = loadModule();
+    expect(isGeminiRateLimitError(new Error("AI rasm qaytarmadi."))).toBe(false);
+    expect(isGeminiRateLimitError(null)).toBe(false);
+    expect(isGeminiRateLimitError(undefined)).toBe(false);
   });
 });

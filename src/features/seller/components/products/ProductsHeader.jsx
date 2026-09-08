@@ -4,6 +4,7 @@ import { Search, ArrowUpDown, BarChart3, Tag, ChevronRight } from "lucide-react"
 import { useLanguage } from "@/context/LanguageContext";
 import { useSession } from "@/context/SessionContext";
 import { getEffectiveCategoriesForStore } from "@/config/categoryCustomization";
+import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
 
 /**
  * MUHIM DIZAYN QARORI: dastlab Analitika tugmasi qidiruv qatoriga
@@ -34,6 +35,10 @@ const ProductsHeader = ({
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu] = useState(false);
   const categories = getEffectiveCategoriesForStore(store).map((c) => c.value);
+  // Mahsulotlar analitikasi (`/seller/products/analytics`) Z-Start
+  // tarifida mavjud emas — shu sabab bu "insight chip" kirish nuqtasi
+  // Z-Start uchun butunlay yashiriladi (2026-09 tarif bo'yicha tozalash).
+  const showAnalyticsChip = getEffectiveTariffPlan(store) !== "start";
 
   const SORT_OPTIONS = [
     { value: "none", label: t("sellerProducts.sortDefault") },
@@ -51,22 +56,25 @@ const ProductsHeader = ({
           <p className="text-[10px] font-bold text-slate-500 dark:text-zinc-400 uppercase tracking-wider truncate">{t("sellerProducts.subtitle")}</p>
         </div>
 
-        {/* "INSIGHT CHIP" — statistika + Analitikaga kirish, bir tugmada */}
-        <button
-          type="button"
-          onClick={() => navigate("/seller/products/analytics")}
-          className="group shrink-0 flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100/60 dark:from-indigo-500/15 dark:to-indigo-500/5 border border-indigo-100 dark:border-indigo-500/20 active:scale-95 transition-transform"
-        >
-          <span className="relative w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0 shadow-sm shadow-indigo-600/30">
-            <BarChart3 size={14} className="text-white" />
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border-2 border-white dark:border-slate-900 animate-pulse" />
-          </span>
-          <div className="text-right leading-tight">
-            <span className="block text-xs font-black text-slate-800 dark:text-white">{productsCount} {t("sellerProducts.countSuffix")}</span>
-            <span className="block text-[10px] font-bold text-indigo-600 dark:text-indigo-400">{inventoryValue.toLocaleString()} so'm</span>
-          </div>
-          <ChevronRight size={13} className="text-indigo-400 dark:text-indigo-500 shrink-0 group-active:translate-x-0.5 transition-transform" />
-        </button>
+        {/* "INSIGHT CHIP" — statistika + Analitikaga kirish, bir tugmada.
+            Z-Start tarifida yo'q (faqat Z-Pro/Z-Biznes). */}
+        {showAnalyticsChip && (
+          <button
+            type="button"
+            onClick={() => navigate("/seller/products/analytics")}
+            className="group shrink-0 flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-2xl bg-gradient-to-br from-indigo-50 to-indigo-100/60 dark:from-indigo-500/15 dark:to-indigo-500/5 border border-indigo-100 dark:border-indigo-500/20 active:scale-95 transition-transform"
+          >
+            <span className="relative w-8 h-8 rounded-xl bg-indigo-600 flex items-center justify-center shrink-0 shadow-sm shadow-indigo-600/30">
+              <BarChart3 size={14} className="text-white" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border-2 border-white dark:border-slate-900 animate-pulse" />
+            </span>
+            <div className="text-right leading-tight">
+              <span className="block text-xs font-black text-slate-800 dark:text-white">{productsCount} {t("sellerProducts.countSuffix")}</span>
+              <span className="block text-[10px] font-bold text-indigo-600 dark:text-indigo-400">{inventoryValue.toLocaleString()} so'm</span>
+            </div>
+            <ChevronRight size={13} className="text-indigo-400 dark:text-indigo-500 shrink-0 group-active:translate-x-0.5 transition-transform" />
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-2">

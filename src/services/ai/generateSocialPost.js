@@ -16,6 +16,7 @@ export const generateSocialPost = async ({ productName, description, price, plat
     platform,
     imageBase64: imageData?.base64 || null,
     imageMimeType: imageData?.mimeType || null,
+    imageUrl: imageData?.url || null,
   });
   return data.postText;
 };

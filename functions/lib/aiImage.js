@@ -118,6 +118,39 @@ Do not add any text, captions, logos, or watermarks into the image itself.`;
 }
 
 /**
+ * "PREMIUM SHOWCASE" USLUBI (2026-09, foydalanuvchi so'rovi: mahsulot
+ * uchun AI "asosiy rasm" yaratish, ikkita uslub tanlovi bilan — "Ad
+ * Creative" (yuqoridagi `buildInstagramAdPrompt`, allaqachon mavjud,
+ * qayta ishlatiladi) VA bu YANGI "Premium Showcase"). Farqi:
+ * `buildInstagramAdPrompt` "harakatchan, e'tibor tortuvchi reklama"
+ * hissini beradi (dinamik yorug'lik, kontekstli sahna), bu yerda esa
+ * ATAYLAB tinchroq, "hashamatli katalog/boutique" hissi — mahsulot
+ * nafis pyedestal yoki toza yuzada, yumshoq studiya yorug'ligi,
+ * minimalist fon bilan taqdim etiladi (Apple/luxury brend mahsulot
+ * sahifalariga xos "hero shot" uslubi). "Mahsulotni ASL holida
+ * saqlash" qoidasi bu yerda ham AYNAN bir xil (yuqoridagi izohga
+ * qarang).
+ *
+ * SOF FUNKSIYA — to'g'ridan-to'g'ri test qilinadi.
+ */
+function buildPremiumShowcasePrompt({ productName, category } = {}) {
+  const context = [
+    productName ? `Product name: ${productName}` : null,
+    category ? `Product category: ${category}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return `Create one professional, photorealistic, premium product showcase image, square 1:1 format, in the style of a luxury e-commerce catalog or high-end brand website hero shot.
+
+CRITICAL RULE: use the EXACT product shown in the attached photo. Do NOT redraw, reinterpret, or alter the product itself in any way — its shape, color, packaging, label, logo and any text printed on it must stay exactly as shown in the source photo.
+
+Place that exact product on an elegant pedestal or clean minimal surface, with a soft, sophisticated background (subtle gradient or soft bokeh, gentle studio lighting, shallow depth of field) that conveys quality and exclusivity. Calm, refined, editorial "hero shot" catalog look — not busy or cluttered.
+${context ? `\n${context}\n` : ""}
+Do not add any text, captions, logos, or watermarks into the image itself.`;
+}
+
+/**
  * ICHKI, ULASHILGAN YORDAMCHI — Gemini'ga rasm+prompt yuboradi va
  * javobdan rasm baytlarini ajratadi. `generateProductAdImage` HAM,
  * `generateProductStoryImage` HAM AYNAN shu mantiqni ishlatadi — farqi
@@ -184,10 +217,53 @@ async function generateProductStoryImage({ imageBase64, imageMimeType, productNa
   return callGeminiForAdImage(prompt, { imageBase64, imageMimeType });
 }
 
+/**
+ * `generateProductAdImage`/`generateProductStoryImage` bilan bir xil,
+ * lekin "Premium Showcase" (kvadrat 1:1, hashamatli katalog uslubi)
+ * rasm generatsiya qiladi — `functions/heroImage.js`dagi, sotuvchi
+ * QO'LDA tanlaydigan ikkita uslubdan biri.
+ *
+ * @returns {Promise<{imageBase64: string, mimeType: string}>}
+ * @throws AI rasm qaytarmasa yoki chaqiruv xato bersa.
+ */
+async function generateProductShowcaseImage({ imageBase64, imageMimeType, productName, category }) {
+  if (!imageBase64 || !imageMimeType) {
+    throw new Error("Manba rasm berilmagan.");
+  }
+  const prompt = buildPremiumShowcasePrompt({ productName, category });
+  return callGeminiForAdImage(prompt, { imageBase64, imageMimeType });
+}
+
+/**
+ * Gemini javobi 429 (RESOURCE_EXHAUSTED, ya'ni so'rovlar limiti/kvota
+ * tugashi) bilan tugaganini aniqlaydi.
+ *
+ * 2026-09 MUHIM KONTEKST (Sentry orqali production'da AYNAN shu holat
+ * ANIQLANGANDAN keyin qo'shildi): `geminiClient.js`dagi izohga qarang —
+ * `@google/genai` SDK'sining o'zi HAR BIR chaqiruvda 429'ni ALLAQACHON
+ * avtomatik qayta uradi (eksponensial kutish bilan, 3 marta jami). Demak
+ * bu yerga (chaqiruvchiga) yetib kelgan 429 xatosi — vaqtinchalik,
+ * bir martalik "blip" EMAS, balki SO'NGGI urinishda ham kvota hali
+ * tiklanmagan degani. Shuning uchun buni ODDIY ichki xatodan (masalan,
+ * noto'g'ri javob formati) AJRATIB, foydalanuvchiga HALOL, TO'G'RI xabar
+ * ko'rsatish kerak — "tizim buzilgan" emas, balki "AI hozircha band,
+ * biroz kutib qayta urinib ko'ring".
+ *
+ * `@google/genai`ning `ApiError` klassi (`node_modules/@google/genai/
+ * dist/node/index.cjs`) HTTP status kodini `.status` maydonida saqlaydi
+ * — shu maydonni tekshiramiz (mavjud bo'lmasa, xavfsiz `false`).
+ */
+function isGeminiRateLimitError(err) {
+  return err?.status === 429;
+}
+
 module.exports = {
   AD_IMAGE_MODEL,
   buildInstagramAdPrompt,
   generateProductAdImage,
   buildStoryAdPrompt,
   generateProductStoryImage,
+  buildPremiumShowcasePrompt,
+  generateProductShowcaseImage,
+  isGeminiRateLimitError,
 };

@@ -1,16 +1,7 @@
-const { randomUUID } = require("crypto");
 const { onDocumentCreated } = require("firebase-functions/v2/firestore");
-const { admin, db, BOT_TOKEN, GEMINI_API_KEY } = require("./lib/admin");
-const { buildDeepLink } = require("./lib/helpers");
-const { checkRateLimit } = require("./lib/rateLimit");
-const { incrementDailyStat } = require("./lib/dailyStats");
-// Mahsulot qo'shilganda, uning asosiy rasmidan avtomatik "Instagram
-// reklama surati" generatsiya qilish - batafsil izoh:
-// `lib/aiImage.js`. `generateProductStoryImage` esa xuddi shu
-// tamoyilda, lekin 9:16 "Story" formatida - quyidagi
-// `maybeGenerateStoryImage`ga qarang (#116).
-const { generateProductAdImage, generateProductStoryImage } = require("./lib/aiImage");
-const { fetchTrustedImage } = require("./lib/safeFetch");
+const { db, BOT_TOKEN } = require("./lib/admin");
+const { buildDeepLink, buildSellerBotDeepLink } = require("./lib/helpers");
+const { formatAttributesLine } = require("./lib/attributeLabels");
 const { withSentry, SENTRY_DSN, initSentry, Sentry } = require("./lib/sentry");
 
 /**
@@ -45,6 +36,18 @@ const { withSentry, SENTRY_DSN, initSentry, Sentry } = require("./lib/sentry");
  */
 
 const MAX_HASHTAG_LENGTH = 30;
+// Telegram `sendMediaGroup` — bitta albom (post)da 2 tadan 10 tagacha
+// media qabul qiladi (1 tasi bo'lsa alohida `sendPhoto` ishlatiladi,
+// pastga qarang). Mahsulot rasmlari allaqachon 4 tadan oshmaydi
+// (`heroImage.js`/`updateProductFull.js`dagi "birinchi rasm = asosiy"
+// qoidasi), shuning uchun bu chegara amalda hech qachon cheklamaydi.
+const MAX_TELEGRAM_ALBUM_SIZE = 10;
+// 2026-09 (foydalanuvchi so'ragan "sotuvga qaratilgan" post uslubi):
+// zaxira shu sondan KAM/TENG bo'lsagina "Faqat N ta qoldi!" tarzidagi
+// urgentlik uslubi ishlatiladi — KATTA zaxirada bunday yozish yolg'on
+// taassurot qoldirardi (haqiqiy son bilan mos kelmaydigan "kam qoldi"
+// signali), shuning uchun bu chegara MUHIM, o'zboshimcha emas.
+const LOW_STOCK_URGENCY_THRESHOLD = 10;
 
 /**
  * Kategoriya nomini Telegram hashtag'ga aylantiradi (bo'sh joy va
@@ -60,8 +63,27 @@ function categoryToHashtag(category) {
 }
 
 /**
+ * Telegram `parse_mode: "HTML"` bilan yuborilayotgan matnga
+ * qo'shilayotgan, FOYDALANUVCHI (sotuvchi) YOZGAN har qanday matnni
+ * (mahsulot nomi, tavsifi) xavfsiz qiladi — aks holda, masalan,
+ * tavsifida "<" yoki "&" belgisi bo'lgan mahsulot posti Telegram
+ * tomonidan "can't parse entities" xatosi bilan RAD ETILAR edi.
+ */
+function escapeHtml(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+/**
  * Yangi mahsulot uchun kanal post matnini quradi. Sof funksiya -
  * to'g'ridan-to'g'ri test qilinadi.
+ *
+ * 2026-09: nom va narx `<b>` (qalin) bilan ajratiladi, chiroyliroq
+ * ko'rinish uchun — `postToConnectedChannel` bu postni endi
+ * `parse_mode: "HTML"` bilan yuboradi, shuning uchun foydalanuvchi
+ * yozgan qismlar (nom, tavsif) `escapeHtml` orqali xavfsizlashtiriladi.
  *
  * Zaxira soni ("nechta dona bor") rasm+narxdan tashqari qo'shiladi -
  * agar `stock` maydoni haqiqiy son sifatida berilgan bo'lsa (0 ham
@@ -70,30 +92,84 @@ function categoryToHashtag(category) {
  * noto'g'ri o'tkazib yuborilardi). "Sotib olish" tugmasi matnga emas -
  * alohida `postToConnectedChannel`dagi `reply_markup`ga qo'shiladi
  * (Telegram tugmalari matn ichida bo'lmaydi).
+ *
+ * 2026-09: sotuvchi to'ldirgan `product.attributes` (brend, teri turi,
+ * hajm va sh.k. — dinamik "15-niche" maydonlari, `lib/attributeLabels.js`
+ * orqali o'zbekcha yorliqqa aylantiriladi) va `product.variants`
+ * (rang/o'lcham kabi tanlovlar) — ikkalasi ham, TO'LDIRILGAN bo'lsagina,
+ * postga qo'shiladi (bo'sh bo'lsa - qatorlar UMUMAN chiqmaydi).
+ *
+ * 2026-09 (foydalanuvchi so'ragan "sotuvga qaratilgan" post uslubi
+ * andozasi asosida): ANIQ, MAHSULOT MA'LUMOTIDAN hisoblab chiqarsa
+ * bo'ladigan qismlar QO'SHILDI — "siz X so'm tejaysiz" (chegirma
+ * summasi), va zaxira KAM bo'lsa "Faqat N ta qoldi!" urgentlik uslubi.
+ * ATAYLAB QO'SHILMAGAN qismlar (andozada bor edi, lekin HAR BIR
+ * sotuvchi/mahsulot uchun HAQIQAT bo'lishi kafolatlanmagan): "Bepul
+ * yetkazib berish", "N kun qaytarish kafolati", "Original mahsulot"
+ * kabi da'volar — bularni qattiq yozib qo'yish ba'zi sotuvchilar uchun
+ * YOLG'ON va'da bo'lib chiqishi mumkin edi. Xuddi shunday, "@shopbot —
+ * 'So'z' deb yozing" kabi kalit-so'z orqali buyurtma qabul qilish —
+ * bunday funksiya botlarimizda HALI MAVJUD EMAS (haqiqiy, ishlaydigan
+ * yagona yo'l — pastdagi "Sotib olish" tugmasi, `buttonUrl`).
  */
 function buildProductChannelPost(product) {
   const name = product?.name || "Yangi mahsulot";
-  const price = Number(product?.discountPrice) > 0 && Number(product.discountPrice) < Number(product.price)
-    ? Number(product.discountPrice)
-    : Number(product?.price) || 0;
-  const hasDiscount = Number(product?.discountPrice) > 0 && Number(product.discountPrice) < Number(product?.price);
+  const originalPrice = Number(product?.price) || 0;
+  const hasDiscount = Number(product?.discountPrice) > 0 && Number(product.discountPrice) < originalPrice;
+  const price = hasDiscount ? Number(product.discountPrice) : originalPrice;
+  const savings = hasDiscount ? originalPrice - price : 0;
   const hashtag = categoryToHashtag(product?.category);
+  // Brend nomidan HAM hashtag yasaladi (agar sotuvchi to'ldirgan bo'lsa) -
+  // kategoriya hashtagiga QO'SHIMCHA, uni ALMASHTIRMAYDI.
+  const brandHashtag = product?.attributes?.brand ? categoryToHashtag(product.attributes.brand) : "";
   const stock = Number(product?.stock);
 
-  const lines = [`🆕 ${name}`, ""];
+  // 2026-09 (foydalanuvchi savoli: "nega tavsif to'liq ko'rinmayabdi"):
+  // ILGARI bu yerda tavsif QO'SHIMCHA, o'zboshimcha 150 belgiga
+  // qisqartirilardi — bu Telegram'ning HAQIQIY cheklovi EMAS edi
+  // (haqiqiy limit — pastda, `postToConnectedChannel`dagi
+  // `caption.slice(0, 1024)`, Telegram'ning rasm/albom izohi uchun
+  // MAKSIMAL uzunligi). Demak tavsif ko'pincha 1024 belgiga SIG'GANIDA
+  // HAM, behuda 150 belgida kesilardi. Endi tavsif TO'LIQ qo'shiladi —
+  // faqat postning umumiy uzunligi HAQIQATAN 1024 belgidan oshsa,
+  // pastdagi yagona, haqiqiy chegara ishga tushadi.
+  // Sarlavha emojisi: chegirma bo'lsa 🔥 ("aksiya" hissi), bo'lmasa 🆕.
+  const lines = [`${hasDiscount ? "🔥" : "🆕"} <b>${escapeHtml(name)}</b>`, ""];
   if (product?.description) {
-    const shortDesc = product.description.length > 150 ? `${product.description.slice(0, 150).trim()}...` : product.description;
-    lines.push(shortDesc, "");
+    lines.push(escapeHtml(product.description), "");
   }
   if (hasDiscount) {
-    lines.push(`💰 ${price.toLocaleString()} so'm  (avvalgi narx: ${Number(product.price).toLocaleString()} so'm)`);
+    lines.push(`💰 <b>${price.toLocaleString()} so'm</b>  (avvalgi narx: ${originalPrice.toLocaleString()} so'm)`);
+    lines.push(`🎁 Siz <b>${savings.toLocaleString()} so'm</b> tejaysiz!`);
   } else {
-    lines.push(`💰 ${price.toLocaleString()} so'm`);
+    lines.push(`💰 <b>${price.toLocaleString()} so'm</b>`);
   }
   if (Number.isFinite(stock) && stock >= 0) {
-    lines.push(`📦 Zaxirada: ${stock.toLocaleString()} dona`);
+    lines.push(
+      stock > 0 && stock <= LOW_STOCK_URGENCY_THRESHOLD
+        ? `⏰ Omborda: Faqat <b>${stock.toLocaleString()}</b> ta qoldi!`
+        : `📦 Zaxirada: ${stock.toLocaleString()} dona`
+    );
   }
-  if (hashtag) lines.push("", hashtag);
+
+  // 2026-09 (foydalanuvchi savoli: "sotuvchi qo'shimcha xususiyatlarni
+  // to'ldirgan bo'lsa-chi, shuni hisobga oldingmi?"): ILGARI bu yerda
+  // `product.attributes` (brend, teri turi, hajm va h.k. — "15-niche
+  // universal platforma" dinamik maydonlari) VA `product.variants`
+  // (rang/o'lcham kabi tanlovlar) UMUMAN ko'rsatilmasdi — sotuvchi
+  // qanchalik to'liq to'ldirgan bo'lmasin, postda faqat nom/tavsif/
+  // narx/zaxira ko'rinardi. Endi ikkalasi ham qo'shiladi (agar
+  // to'ldirilgan bo'lsa) — yorliqlar `lib/attributeLabels.js`dan
+  // (frontend'dagi `productAttributes.*` bilan BIR XIL o'zbekcha so'z).
+  const attributesLine = formatAttributesLine(product?.attributes);
+  if (attributesLine) lines.push(`📋 ${escapeHtml(attributesLine)}`);
+
+  if (Array.isArray(product?.variants) && product.variants.length > 0) {
+    lines.push(`🎨 Variantlar: ${product.variants.map((v) => escapeHtml(String(v))).join(", ")}`);
+  }
+
+  const hashtags = [hashtag, brandHashtag].filter(Boolean).join(" ");
+  if (hashtags) lines.push("", hashtags);
 
   return lines.join("\n");
 }
@@ -122,15 +198,65 @@ function buildCouponChannelPost(coupon) {
 }
 
 /**
+ * Telegram Bot API'ga bitta so'rov yuboradi va javobni qaytaradi -
+ * `postToConnectedChannel` ichida bir necha marta (albom + tugma
+ * xabari) chaqirilishi mumkin bo'lgani uchun ALOHIDA, kichik
+ * yordamchiga chiqarilgan.
+ */
+async function callTelegramApi(botToken, method, body) {
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+/**
  * Sotuvchining ulangan kanaliga (agar bor bo'lsa) post yuboradi.
  * Xato bo'lsa, jim log yozadi - trigger funksiyasi hech qachon
  * foydalanuvchiga ko'rinadigan xato bermasligi kerak (fon jarayoni).
  *
- * `buttonUrl` (ixtiyoriy) - berilsa, xabar ostiga "Sotib olish"
- * inline tugmasi qo'shiladi (Telegram'da matn ichiga havola qo'yib
- * bo'lmaydi - shuning uchun alohida `reply_markup`).
+ * @param {string} sellerId
+ * @param {object} options
+ * @param {string} options.caption - post matni.
+ * @param {string[]} [options.images] - mahsulotning BARCHA rasmlari
+ *   (ixtiyoriy). 2026-09, foydalanuvchi so'rovi bilan qo'shildi: OLDIN
+ *   faqat BITTA (asosiy) rasm yuborilardi - endi mahsulotning HAMMA
+ *   rasmlari BITTA postda (Telegram albom, `sendMediaGroup`) ko'rinadi.
+ * @param {string} [options.productPath] - berilsa, "Sotib olish" inline
+ *   tugmasi qo'shiladi va shu ICHKI yo'lga (masalan `/product/{id}`)
+ *   ochiladi. Havola QAYSI BOT orqali ochilishi shu funksiya ICHIDA
+ *   hal qilinadi (pastga qarang) - chaqiruvchi tayyor URL emas, ICHKI
+ *   yo'lning O'ZINI beradi.
+ * @param {"HTML"} [options.parseMode] - berilsa, `caption` HTML
+ *   formatlash (`<b>` va sh.k.) bilan yuboriladi (kupon postlarida
+ *   ishlatilmaydi - ular oddiy matn, formatlash shart emas).
+ *
+ * 2026-09 (foydalanuvchi so'rovi: "Sotib olish tugmasi sellerning
+ * O'ZINING boti orqali ochilsin, ZeloShop'ning umumiy boti emas"):
+ * agar sotuvchi o'z botini ulagan bo'lsa (`customBotUsername`),
+ * tugma ENDI o'sha botga (`buildSellerBotDeepLink`, `?start=...`)
+ * ochiladi - bosilganda bot bilan xususiy chat ochiladi va
+ * `customBotWebhook.js` HAQIQIY Mini App tugmasi bilan javob beradi.
+ * Sotuvchi hali shaxsiy bot ulamagan bo'lsa, xavfsiz zaxira sifatida
+ * ZeloShop'ning umumiy boti (`buildDeepLink`) ishlatiladi - shu orqali
+ * tugma HAR DOIM ISHLAYDI, hech qachon "o'lik" havolaga aylanmaydi.
+ *
+ * MUHIM, TELEGRAM API CHEKLOVI: `sendMediaGroup` (bir nechta rasmni
+ * BITTA albom sifatida yuborish) `reply_markup` (inline tugma)ni
+ * QO'LLAB-QUVVATLAMAYDI - bu Telegram'ning o'zining API cheklovi,
+ * bizning kodimizdagi kamchilik emas. Shuning uchun 2+ rasm bo'lganda:
+ * (1) avval albom (barcha rasm + izoh, faqat BIRINCHI elementda)
+ * yuboriladi, (2) darhol ORQASIDAN, "Sotib olish" tugmasi bilan QISQA,
+ * MAZMUNLI (bo'sh "👆" belgi EMAS - foydalanuvchi buni "keraksiz
+ * stiker" deb ta'riflagan edi) alohida xabar yuboriladi - kanalda
+ * bular ketma-ket, BITTA vizual blok sifatida ko'rinadi. Faqat BITTA
+ * rasm bo'lsa (eng ko'p uchraydigan holat), bu ikkinchi xabar shart
+ * emas - `sendPhoto`ning o'zi `reply_markup`ni qo'llab-quvvatlaydi,
+ * xuddi ilgarigidek BITTA so'rovda ketadi.
  */
-async function postToConnectedChannel(sellerId, caption, imageUrl, buttonUrl) {
+async function postToConnectedChannel(sellerId, { caption, images, productPath, parseMode } = {}) {
   const [sellerSnap, customBotSnap] = await Promise.all([
     db.collection("sellers").doc(sellerId).get(),
     db.collection("sellers").doc(sellerId).collection("private").doc("customerBot").get(),
@@ -141,21 +267,51 @@ async function postToConnectedChannel(sellerId, caption, imageUrl, buttonUrl) {
   const customBot = customBotSnap.exists ? customBotSnap.data() : null;
   if (!customBot?.botToken || !customBot?.connectedChannelUsername) return;
 
+  const chatId = customBot.connectedChannelUsername;
+  const buttonUrl = productPath
+    ? (buildSellerBotDeepLink(sellerSnap.data().customBotUsername, productPath) || buildDeepLink(sellerId, productPath))
+    : null;
   const replyMarkup = buttonUrl ? { inline_keyboard: [[{ text: "🛒 Sotib olish", url: buttonUrl }]] } : undefined;
+  const imageList = (Array.isArray(images) ? images : (images ? [images] : []))
+    .filter(Boolean)
+    .slice(0, MAX_TELEGRAM_ALBUM_SIZE);
 
   try {
-    const endpoint = imageUrl ? "sendPhoto" : "sendMessage";
-    const body = imageUrl
-      ? { chat_id: customBot.connectedChannelUsername, photo: imageUrl, caption: caption.slice(0, 1024), reply_markup: replyMarkup }
-      : { chat_id: customBot.connectedChannelUsername, text: caption.slice(0, 4096), reply_markup: replyMarkup };
+    if (imageList.length >= 2) {
+      // ALBOM: barcha rasmlar BITTA postda. Izoh FAQAT birinchi
+      // elementga qo'yiladi - Telegram uni butun albomning izohi
+      // sifatida ko'rsatadi (qolgan elementlarga izoh qo'shilsa,
+      // ular alohida-alohida ko'rinib, tartibsizlik keltirib chiqarardi).
+      const media = imageList.map((url, index) => ({
+        type: "photo",
+        media: url,
+        ...(index === 0 ? { caption: caption.slice(0, 1024), parse_mode: parseMode } : {}),
+      }));
+      const albumData = await callTelegramApi(customBot.botToken, "sendMediaGroup", { chat_id: chatId, media });
+      if (!albumData.ok) console.error(`Avtomatik kanal albomi muvaffaqiyatsiz (sotuvchi ${sellerId}):`, albumData.description);
 
-    const res = await fetch(`https://api.telegram.org/bot${customBot.botToken}/${endpoint}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json();
-    if (!data.ok) console.error(`Avtomatik kanal posti muvaffaqiyatsiz (sotuvchi ${sellerId}):`, data.description);
+      if (replyMarkup) {
+        // Telegram `sendMediaGroup`ga `reply_markup` qo'shishga
+        // RUXSAT BERMAYDI (yuqoridagi izohga qarang) - shuning uchun
+        // tugma albomdan DARHOL keyin, qisqa, alohida xabar sifatida.
+        // MATN — ataylab bo'sh emoji ("👆") EMAS, HAQIQIY, mazmunli
+        // chaqiruv matni (foydalanuvchi so'rovi bilan tuzatildi).
+        const btnData = await callTelegramApi(customBot.botToken, "sendMessage", {
+          chat_id: chatId,
+          text: "🛒 Sotib olish uchun pastdagi tugmani bosing:",
+          reply_markup: replyMarkup,
+        });
+        if (!btnData.ok) console.error(`Avtomatik kanal tugma xabari muvaffaqiyatsiz (sotuvchi ${sellerId}):`, btnData.description);
+      }
+    } else {
+      const endpoint = imageList.length === 1 ? "sendPhoto" : "sendMessage";
+      const body = imageList.length === 1
+        ? { chat_id: chatId, photo: imageList[0], caption: caption.slice(0, 1024), parse_mode: parseMode, reply_markup: replyMarkup }
+        : { chat_id: chatId, text: caption.slice(0, 4096), parse_mode: parseMode, reply_markup: replyMarkup };
+
+      const data = await callTelegramApi(customBot.botToken, endpoint, body);
+      if (!data.ok) console.error(`Avtomatik kanal posti muvaffaqiyatsiz (sotuvchi ${sellerId}):`, data.description);
+    }
   } catch (err) {
     console.error(`Avtomatik kanal postida xatolik (sotuvchi ${sellerId}):`, err);
     initSentry();
@@ -163,182 +319,30 @@ async function postToConnectedChannel(sellerId, caption, imageUrl, buttonUrl) {
   }
 }
 
-/**
- * Mahsulotning asosiy rasmidan avtomatik "Instagram reklama surati"
- * generatsiya qiladi va natijani (agar muvaffaqiyatli bo'lsa)
- * `products/{productId}`ga `aiAdImageUrl` sifatida yozadi.
- *
- * Xavfsizlik/xarajat nazorati (`postToConnectedChannel`dagi kabi
- * tamoyillar, lekin mustaqil, alohida tekshiruv - ikkalasi bir-
- * biriga bog'liq emas, shuning uchun kanal ulanmagan bo'lsa ham
- * reklama rasmi baribir generatsiya qilinadi):
- * - Faqat `aiCeoEnabled === true` sotuvchilar uchun (premium
- *   xususiyat - rasm generatsiyasi matn generatsiyasidan sezilarli
- *   qimmatroq).
- * - Sotuvchi uchun kunlik chegarasi bor (`checkRateLimit`) -
- *   nazoratsiz xarajatning oldini olish uchun (masalan ketma-ket ko'p
- *   mahsulot qo'shilsa).
- * - Asosiy rasm (`product.image`) bo'lmasa - hech narsa qilinmaydi
- *   (generatsiya qiladigan narsa yo'q).
- * - Har qanday xato (Gemini, Storage, tarmoq) faqat log yoziladi -
- *   bu fon jarayoni, mahsulot allaqachon muvaffaqiyatli yaratilgan,
- *   reklama surati esa qo'shimcha, ixtiyoriy boyitish, xolos.
- */
-async function maybeGenerateAdImage(sellerId, productId, product) {
-  if (!sellerId || !productId || !product?.image) return;
-
-  const sellerSnap = await db.collection("sellers").doc(sellerId).get();
-  if (!sellerSnap.exists || sellerSnap.data().aiCeoEnabled !== true) return;
-
-  try {
-    await checkRateLimit(`autoAdImage:${sellerId}`, 30, 24 * 60 * 60);
-  } catch (err) {
-    console.warn(`Reklama rasmi kunlik chegarasidan oshib ketdi (${sellerId}):`, err.message);
-    return;
-  }
-
-  try {
-    // RASM RESIZE (2026-09 audit): bu yerda qo'shimcha resize QILINMAYDI
-    // — `product.image` allaqachon YUKLASH oqimida (`useUploadStorage.jsx`
-    // → `compressImage`, maks. 1000x1000, sifat 0.75) siqilgan holda
-    // Storage'ga yozilgan, shuning uchun Gemini'ga bu yerda ham kichik
-    // hajmda yuboriladi — qayta siqish ortiqcha CPU sarflaydigan,
-    // foydasiz qadam bo'lar edi.
-    const imageRes = await fetchTrustedImage(product.image);
-    const sourceBuffer = Buffer.from(await imageRes.arrayBuffer());
-    const sourceMimeType = imageRes.headers.get("content-type") || "image/jpeg";
-
-    const { imageBase64, mimeType } = await generateProductAdImage({
-      imageBase64: sourceBuffer.toString("base64"),
-      imageMimeType: sourceMimeType,
-      productName: product.name,
-      category: product.category,
-    });
-
-    const extension = mimeType.split("/").pop() || "png";
-    const filePath = `products/${sellerId}/ai-ad-${productId}.${extension}`;
-    const downloadToken = randomUUID();
-    const bucket = admin.storage().bucket();
-    await bucket.file(filePath).save(Buffer.from(imageBase64, "base64"), {
-      metadata: {
-        contentType: mimeType,
-        metadata: { firebaseStorageDownloadTokens: downloadToken },
-      },
-    });
-    // `storage.rules`dagi `products/{sellerId}/{fileName}` yo'li
-    // allaqachon `allow read: if true` - shuning uchun bu URL hech
-    // qanday qo'shimcha qoida o'zgarishisiz, mavjud mahsulot rasmlari
-    // bilan bir xil formatda ochiq o'qiladi.
-    const adImageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(filePath)}?alt=media&token=${downloadToken}`;
-
-    await db.collection("products").doc(productId).update({
-      aiAdImageUrl: adImageUrl,
-      aiAdImageGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    await incrementDailyStat(sellerId, "aiCeoAutoAdImagesGenerated");
-  } catch (err) {
-    console.error(`Reklama rasmi generatsiyasida xatolik (${sellerId}/${productId}):`, err);
-    initSentry();
-    Sentry.captureException(err, { extra: { sellerId, productId } });
-  }
-}
-
-/**
- * Mahsulotning asosiy rasmidan avtomatik 9:16 "Story" (Instagram/
- * Telegram Stories) formatidagi reklama surati generatsiya qiladi va
- * natijani `products/{productId}`ga `aiStoryImageUrl` sifatida yozadi
- * — xuddi `storyImage.js`dagi SOTUVCHI QO'LDA so'raganda ishlaydigan
- * `generateStoryImage`ning natijasi bilan BIR XIL maydonga (shuning
- * uchun mavjud UI, masalan story-yuklab-olish tugmasi, avtomatik
- * yaratilgan rasmni ham darhol taniydi — alohida frontend o'zgarish
- * shart emas).
- *
- * NEGA `storyImage.js`dagi ASL QARORDAN FARQLI (u yerda "avtomatik
- * EMAS, faqat so'ralganda" deb ATAYLAB yozilgan edi — sabab: "ko'p
- * mahsulot hech qachon story sifatida ulashilmaydi, shuning uchun
- * har birida avtomatik generatsiya - behuda xarajat"): bu haqiqiy
- * xavotir hali ham TO'G'RI, shuning uchun bu funksiya faqat sotuvchi
- * buni ALOHIDA, ATAYLAB yoqqan bo'lsagina (`aiAutoStoryImageEnabled
- * === true`, standart bo'yicha O'CHIQ — opt-in) ishlaydi. Ya'ni: kim
- * uchun bu xarajat arziydi (masalan doim story orqali reklama
- * qiladigan sotuvchi) — o'zi ONGLI ravishda yoqadi; qolganlar uchun
- * hech narsa o'zgarmaydi, xuddi ilgarigidek faqat qo'lda so'ralganda
- * ishlaydi.
- *
- * Qolgan xavfsizlik/xarajat nazorati - `maybeGenerateAdImage`dagi
- * bilan bir xil tamoyillar (mustaqil, alohida tekshiruv - reklama
- * rasmi generatsiyasidan BUTUNLAY erkin, biri ishlamasa ham ikkinchisi
- * davom etadi).
- */
-async function maybeGenerateStoryImage(sellerId, productId, product) {
-  if (!sellerId || !productId || !product?.image) return;
-
-  const sellerSnap = await db.collection("sellers").doc(sellerId).get();
-  if (!sellerSnap.exists) return;
-  const seller = sellerSnap.data();
-  if (seller.aiCeoEnabled !== true || seller.aiAutoStoryImageEnabled !== true) return;
-
-  try {
-    await checkRateLimit(`autoStoryImage:${sellerId}`, 30, 24 * 60 * 60);
-  } catch (err) {
-    console.warn(`Avtomatik story rasm kunlik chegarasidan oshib ketdi (${sellerId}):`, err.message);
-    return;
-  }
-
-  try {
-    // RASM RESIZE: yuqoridagi `maybeGenerateAdImage`dagi izohga qarang —
-    // `product.image` yuklashda allaqachon siqilgan, qo'shimcha resize
-    // shart emas.
-    const imageRes = await fetchTrustedImage(product.image);
-    const sourceBuffer = Buffer.from(await imageRes.arrayBuffer());
-    const sourceMimeType = imageRes.headers.get("content-type") || "image/jpeg";
-
-    const { imageBase64, mimeType } = await generateProductStoryImage({
-      imageBase64: sourceBuffer.toString("base64"),
-      imageMimeType: sourceMimeType,
-      productName: product.name,
-      category: product.category,
-    });
-
-    const extension = mimeType.split("/").pop() || "png";
-    const filePath = `products/${sellerId}/ai-story-${productId}.${extension}`;
-    const downloadToken = randomUUID();
-    const bucket = admin.storage().bucket();
-    await bucket.file(filePath).save(Buffer.from(imageBase64, "base64"), {
-      metadata: {
-        contentType: mimeType,
-        metadata: { firebaseStorageDownloadTokens: downloadToken },
-      },
-    });
-    const storyImageUrl = `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(filePath)}?alt=media&token=${downloadToken}`;
-
-    await db.collection("products").doc(productId).update({
-      aiStoryImageUrl: storyImageUrl,
-      aiStoryImageGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    await incrementDailyStat(sellerId, "aiCeoAutoStoryImagesGenerated");
-  } catch (err) {
-    console.error(`Avtomatik story rasm generatsiyasida xatolik (${sellerId}/${productId}):`, err);
-    initSentry();
-    Sentry.captureException(err, { extra: { sellerId, productId } });
-  }
-}
-
 exports.onProductCreated = onDocumentCreated(
-  { document: "products/{productId}", region: "asia-south1", secrets: [BOT_TOKEN, GEMINI_API_KEY, SENTRY_DSN] },
+  { document: "products/{productId}", region: "asia-south1", secrets: [BOT_TOKEN, SENTRY_DSN] },
   withSentry(async (event) => {
     const product = event.data?.data();
     if (!product?.sellerId) return;
     const caption = buildProductChannelPost(product);
     // "Sotib olish" tugmasi - do'kondagi o'sha mahsulot sahifasiga
-    // to'g'ridan-to'g'ri ochiladigan chuqur havola (`/product/{id}`,
-    // xaridor tugmani bosishi bilan Mini App o'sha mahsulot
-    // kartochkasida ochiladi - `src/utils/shareLink.js`dagi
-    // `buildDeepLink` bilan bir xil format, faqat server tomonida).
-    const buttonUrl = buildDeepLink(product.sellerId, `/product/${event.params.productId}`);
-    await postToConnectedChannel(product.sellerId, caption, product.image || null, buttonUrl);
-    await maybeGenerateAdImage(product.sellerId, event.params.productId, product);
-    await maybeGenerateStoryImage(product.sellerId, event.params.productId, product);
+    // to'g'ridan-to'g'ri ochiladigan ICHKI yo'l (`/product/{id}`) -
+    // QAYSI BOT orqali ochilishini `postToConnectedChannel`ning O'ZI
+    // hal qiladi (sotuvchining shaxsiy boti bo'lsa - o'sha, aks holda
+    // ZeloShop'ning umumiy boti, batafsil izoh shu funksiyada).
+    const productPath = `/product/${event.params.productId}`;
+    // Mahsulotning BARCHA rasmlari (birinchi = asosiy) - foydalanuvchi
+    // so'rovi bilan, faqat bitta asosiy rasm o'rniga.
+    const images = Array.isArray(product.images) && product.images.length > 0
+      ? product.images
+      : (product.image ? [product.image] : []);
+    await postToConnectedChannel(product.sellerId, { caption, images, productPath, parseMode: "HTML" });
+    // AI RASM GENERATSIYASI (avtomatik reklama surati + avtomatik Story
+    // rasmi) 2026-09, sotuvchi so'roviga ko'ra BUTUNLAY OLIB TASHLANDI
+    // (Gemini API kvotasi bilan bog'liq muammolar sababli, "rasm
+    // generatsiya qilish kerak emas" deb ANIQ belgilandi). Shu bilan
+    // birga, qo'lda chaqiriladigan "AI asosiy rasm" (`heroImage.js`) va
+    // uning barcha frontend qismlari ham o'chirildi.
   })
 );
 
@@ -349,8 +353,8 @@ exports.onCouponCreated = onDocumentCreated(
     const sellerId = event.params.sellerId;
     if (!coupon) return;
     const caption = buildCouponChannelPost(coupon);
-    await postToConnectedChannel(sellerId, caption, null, null);
+    await postToConnectedChannel(sellerId, { caption });
   })
 );
 
-exports._testables = { buildProductChannelPost, buildCouponChannelPost, categoryToHashtag, maybeGenerateAdImage, maybeGenerateStoryImage };
+exports._testables = { buildProductChannelPost, buildCouponChannelPost, categoryToHashtag, escapeHtml, postToConnectedChannel };

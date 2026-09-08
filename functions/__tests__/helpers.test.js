@@ -3,7 +3,7 @@
  * YANGI qo'shilgan "chuqur havola" (_p) formatini tekshirish.
  */
 const {
-  parseStartParam, encodeDeepLinkPath, buildDeepLink, buildSellerAppLink,
+  parseStartParam, encodeDeepLinkPath, decodeDeepLinkPath, buildDeepLink, buildSellerBotDeepLink, buildSellerAppLink,
   sendTelegramLiveLocation, editTelegramLiveLocation, stopTelegramLiveLocation,
   sendTelegramMessage,
 } = require("../lib/helpers");
@@ -101,6 +101,39 @@ describe("encodeDeepLinkPath + buildDeepLink (server tomoni)", () => {
   test("bo'sh yo'l uchun bo'sh qator qaytaradi, xato tashlamaydi", () => {
     expect(encodeDeepLinkPath("")).toBe("");
     expect(encodeDeepLinkPath(null)).toBe("");
+  });
+});
+
+/**
+ * `buildSellerBotDeepLink` (2026-09, sotuvchi so'roviga ko'ra qo'shildi
+ * — "Sotib olish" tugmasi ZeloShop umumiy boti o'rniga sellerning O'Z
+ * boti orqali ochilishi uchun). `buildDeepLink`dan FARQI: `?startapp=`
+ * o'rniga `?start=` ishlatadi (sellerning shaxsiy boti `/newapp`
+ * ro'yxatidan o'tmagan, batafsil izoh: `lib/helpers.js`ning o'zida).
+ * `customBotWebhook.js` bu havola bosilganda kelgan `/start <payload>`ni
+ * qabul qiladi — round-trip shu ikkalasi orasida (`decodeDeepLinkPath`
+ * bilan) tekshiriladi.
+ */
+describe("buildSellerBotDeepLink", () => {
+  test("botUsername va yo'l berilsa, `?start=p<kod>` havolasini quradi", () => {
+    const link = buildSellerBotDeepLink("mening_shopim_bot", "/product/abc-1");
+    expect(link).toMatch(/^https:\/\/t\.me\/mening_shopim_bot\?start=p/);
+  });
+
+  test("yasalgan havoladagi kod `decodeDeepLinkPath` orqali ORIGINAL yo'lga to'g'ri qaytariladi (round-trip)", () => {
+    const link = buildSellerBotDeepLink("mening_shopim_bot", "/product/abc-XYZ_1");
+    const payload = link.split("?start=")[1];
+    expect(payload.startsWith("p")).toBe(true);
+    expect(decodeDeepLinkPath(payload.slice(1))).toBe("/product/abc-XYZ_1");
+  });
+
+  test("yo'l berilmasa, botga oddiy (payloadsiz) havola qaytaradi", () => {
+    expect(buildSellerBotDeepLink("mening_shopim_bot", null)).toBe("https://t.me/mening_shopim_bot");
+  });
+
+  test("botUsername berilmasa (sotuvchi shaxsiy bot ulamagan), null qaytaradi", () => {
+    expect(buildSellerBotDeepLink(null, "/product/1")).toBeNull();
+    expect(buildSellerBotDeepLink(undefined, "/product/1")).toBeNull();
   });
 });
 

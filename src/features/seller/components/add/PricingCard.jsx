@@ -39,9 +39,20 @@ const PricingCard = ({
   originalStock = null,
   stockChangeReason = null,
   onStockChangeReasonChange,
+  // XODIM RUXSATLARI (2026-09, "korporativ RBAC" — haqiqiy muammo:
+  // Marketing Menejer/Ombor kabi `manageProducts` huquqiga ega, lekin
+  // `viewFinance`ga EGA BO'LMAGAN xodim mahsulot tahrirlaganda TANNARX/
+  // FOYDA/RENTABELLIKni ko'rmasligi/o'zgartira olmasligi SHART — aks
+  // holda `manageProducts` orqali moliyaviy ma'lumot "orqa eshikdan"
+  // sizib chiqardi. Standart `true` — sotuvchining o'zi (`AddProductPage`/
+  // `EditProductPage`) HAR DOIM to'liq ko'radi, faqat `StaffProductForm`
+  // buni `false` qilib uzatadi.
+  showCostPrice = true,
 }) => {
   const { t } = useLanguage();
-  const { profit, marginPercentage, hasValues } = computeProfitMetrics(price, costPrice, discountPrice);
+  const { profit, marginPercentage, hasValues } = showCostPrice
+    ? computeProfitMetrics(price, costPrice, discountPrice)
+    : { profit: 0, marginPercentage: 0, hasValues: false };
   const stockActuallyChanged =
     originalStock != null && stock !== "" && Number(stock) !== Number(originalStock);
 
@@ -55,20 +66,22 @@ const PricingCard = ({
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">{t("sellerProductForm.costPriceLabel")}</label>
-          <input
-            type="number"
-            required
-            disabled={disabled}
-            placeholder="0"
-            value={costPrice}
-            onChange={(e) => onCostPriceChange(e.target.value)}
-            className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl font-black text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
-          />
-        </div>
+        {showCostPrice && (
+          <div className="space-y-1">
+            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">{t("sellerProductForm.costPriceLabel")}</label>
+            <input
+              type="number"
+              required
+              disabled={disabled}
+              placeholder="0"
+              value={costPrice}
+              onChange={(e) => onCostPriceChange(e.target.value)}
+              className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl font-black text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+            />
+          </div>
+        )}
 
-        <div className="space-y-1">
+        <div className={`space-y-1 ${showCostPrice ? "" : "col-span-2"}`}>
           <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block">{t("sellerProductForm.sellPriceLabel")}</label>
           <input
             type="number"
@@ -94,7 +107,7 @@ const PricingCard = ({
         </div>
       </div>
 
-      {hasValues && (
+      {showCostPrice && hasValues && (
         <div
           className={`border p-3 rounded-xl flex items-center justify-between ${
             profit >= 0
@@ -114,6 +127,12 @@ const PricingCard = ({
             <div className="text-sm font-black mt-0.5">{marginPercentage}%</div>
           </div>
         </div>
+      )}
+
+      {!showCostPrice && (
+        <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 flex items-center gap-1.5 px-0.5">
+          {t("sellerProductForm.costPriceRestricted")}
+        </p>
       )}
 
       <div className="space-y-1 pt-1">

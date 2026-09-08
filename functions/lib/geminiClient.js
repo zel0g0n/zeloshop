@@ -4,9 +4,15 @@ const { GoogleGenAI } = require("@google/genai");
  * BUTUN ilova bo'yicha Gemini (`@google/genai`) mijozini yaratish
  * uchun YAGONA joy — `productDrafts.js`, `pricingSuggestions.js`,
  * `productAssistant.js`, `products.js`, `aiCeo.js`, `aiCeoAgent.js`,
- * `lib/aiImage.js`, `lib/aiStyle.js` barchasi shu orqali yaratadi
- * (ILGARI har biri `new GoogleGenAI(...)`ni MUSTAQIL, TAKRORLANGAN
- * holda chaqirardi).
+ * `lib/aiStyle.js` barchasi shu orqali yaratadi (ILGARI har biri
+ * `new GoogleGenAI(...)`ni MUSTAQIL, TAKRORLANGAN holda chaqirardi).
+ *
+ * 2026-09: `lib/aiImage.js` (AI rasm generatsiyasi — avtomatik reklama
+ * surati, avtomatik Story rasmi, qo'lda "AI asosiy rasm") sotuvchi
+ * so'roviga ko'ra BUTUNLAY OLIB TASHLANDI (Gemini rasm modelining
+ * kvota/429 muammolari sababli). Ro'yxatdan ATAYLAB o'chirilmadi —
+ * kelajakda kimdir shu faylni qayta o'qisa, "aiImage.js nega yo'q"
+ * degan savolga javob bo'lsin deb.
  *
  * 2026-09 audit (P1 — "AI: Gemini retry/backoff qo'shish"):
  * TEKSHIRUV natijasi — `@google/genai` SDK'sining o'zi (node_modules/

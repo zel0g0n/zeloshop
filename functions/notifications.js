@@ -233,11 +233,17 @@ function buildSellerNewOrderMessage(order) {
 }
 
 /**
- * Yangi buyurtma kelganda sotuvchiga HAQIQIY Telegram xabari
- * yuboriladi (agar `notifyNewOrder` sozlamasi yoqilgan bo'lsa —
- * standart holatda yoqilgan hisoblanadi), va, mustaqil ravishda,
- * `permissions.manageOrders` huquqiga ega xodimlarga ham
- * (`notifyStaffOfNewOrder`).
+ * Yangi buyurtma kelganda sotuvchiga HAQIQIY Telegram xabari HAR DOIM
+ * yuboriladi, va, mustaqil ravishda, `permissions.manageOrders`
+ * huquqiga ega xodimlarga ham (`notifyStaffOfNewOrder`).
+ *
+ * 2026-09 foydalanuvchi so'roviga ko'ra: Sozlamalar (`More.jsx`)dagi
+ * "Bildirishnomalar" yoqish/o'chirish TUMBLERI OLIB TASHLANDI — lekin
+ * FUNKSIONAL jihatdan bu bildirishnoma DOIM YOQIQ bo'lishi kerak edi
+ * ("barcha bildirishnomalar yuborilishda davom etsin"). Shu sabab,
+ * `seller.notifyNewOrder` maydoniga qarab shartli o'tkazib yuborish
+ * ENDI OLIB TASHLANDI — Firestore'da eski qiymat qolgan bo'lsa ham
+ * (masalan `false`), e'tiborga olinmaydi.
  */
 exports.onNewOrderNotifySeller = onDocumentCreated(
   { document: "orders/{orderId}", secrets: [BOT_TOKEN, STAFF_BOT_TOKEN, SENTRY_DSN], region: "asia-south1" },
@@ -264,16 +270,13 @@ exports.onNewOrderNotifySeller = onDocumentCreated(
     try {
       const sellerSnap = await admin.firestore().collection("sellers").doc(order.sellerId).get();
       const seller = sellerSnap.data();
-      // MUHIM TUZATISH: OLDIN bu yerda `return` ishlatilgan edi -
-      // sotuvchi o'zining shaxsiy bildirishnoma sozlamasini
-      // o'chirgan (yoki hujjati topilmagan) bo'lsa, bu PASTDAGI
-      // xodimlarga xabar yuborish bosqichini HAM (butun funksiya
-      // to'xtab qolgani uchun) UMUMAN ishga tushirmas edi - bu ikki
-      // MUSTAQIL sozlama (sotuvchining o'zi VA uning xodimlari)
-      // bo'lgani uchun noto'g'ri edi. Endi shartli blok orqali FAQAT
-      // sotuvchiga xabar yuborish o'tkazib yuboriladi, funksiya esa
-      // pastga, xodimlarga xabar yuborishga davom etadi.
-      if (seller && seller.notifyNewOrder !== false) { // standart holatda yoqilgan
+      // MUHIM: sotuvchi hujjati topilgan bo'lsa, unga xabar HAR DOIM
+      // yuboriladi (2026-09: `notifyNewOrder` sozlamasiga bog'liqlik
+      // OLIB TASHLANDI — bildirishnomalar endi doim yoqiq). Hujjat
+      // umuman topilmasa (juda kam holat) - jim o'tkazib yuboriladi,
+      // funksiya esa pastga, xodimlarga xabar yuborishga davom etadi
+      // (bu ikki MUSTAQIL sozlama/oqim).
+      if (seller) {
         const text = buildSellerNewOrderMessage(order);
         const inlineKeyboard = [[{ text: "📋 Buyurtmalarni ochish", web_app: { url: buildSellerAppLink("/seller/orders") } }]];
         const result = await sendTelegramMessage(BOT_TOKEN.value(), order.sellerId, text, { inlineKeyboard });

@@ -28,14 +28,22 @@ const { withSentry, SENTRY_DSN } = require("./lib/sentry");
  * SXEMA: `sellers/{sellerId}/automationRules/{ruleId}`:
  *   {
  *     name: string,
- *     triggerType: "customer_inactive" | "order_undelivered" | "low_stock",
+ *     triggerType: "customer_inactive" | "order_undelivered" | "low_stock" |
+ *                  "slow_moving_product" | "courier_delay",
  *     triggerParams: { days?, segment?, hours?, threshold? },
- *     actionType: "notify_customer_telegram" | "alert_manager",
- *     actionParams: { message? },
+ *     actionType: "notify_customer_telegram" | "alert_manager" | "apply_discount",
+ *     actionParams: { message?, discountPercent?, durationDays? },
  *     isActive: boolean,
  *     createdAtMs, updatedAtMs,
  *     stats: { firedCount, lastFiredAtMs },
  *   }
+ * 2026-09 KENGAYTMA ("katta bizneslar uchun" ro'yxati, 2-guruh):
+ * `slow_moving_product` (mahsulot `products.lastSoldAtMs`dan beri
+ * uzoq sotilmagan) + `apply_discount` (FAQAT shu trigger bilan mos —
+ * mahsulotga avtomatik vaqtinchalik chegirma qo'yadi, xuddi
+ * `setDiscountPrice.js` yozadigan maydonlar orqali) va
+ * `courier_delay` (buyurtma `courierAssignedAtMs`dan beri uzoq
+ * yetkazilmagan, `alert_manager` bilan ishlatiladi) qo'shildi.
  * Klient (frontend) TO'G'RIDAN-TO'G'RI yozadi (`sellers/{id}/coupons`
  * bilan BIR XIL naqsh — murakkab CRUD onCall funksiyalar shart emas)
  * — `firestore.rules` egalik + Biznes tarifini va asosiy shaklni
@@ -56,8 +64,8 @@ const { withSentry, SENTRY_DSN } = require("./lib/sentry");
  * qayta ishlanadi (qolganlari keyingi soatlik yugurishda davom etadi).
  */
 
-const TRIGGER_TYPES = ["customer_inactive", "order_undelivered", "low_stock"];
-const ACTION_TYPES = ["notify_customer_telegram", "alert_manager"];
+const TRIGGER_TYPES = ["customer_inactive", "order_undelivered", "low_stock", "slow_moving_product", "courier_delay"];
+const ACTION_TYPES = ["notify_customer_telegram", "alert_manager", "apply_discount"];
 // `src/constants/orderStatus.js`dagi `CAN_CANCEL_STATUSES` bilan BIR
 // XIL — "hali ochiq/yakunlanmagan" holatlar.
 const OPEN_ORDER_STATUSES = ["new", "processing", "shipped"];
@@ -159,10 +167,70 @@ async function findLowStockMatches(sellerId, triggerParams) {
   return snap.docs.map((d) => ({ entityId: d.id, name: d.data().name || "Mahsulot", stock: Number(d.data().stock) || 0 }));
 }
 
+/**
+ * `slow_moving_product` — mahsulot `lastSoldAtMs`dan beri (yaratilgan
+ * paytdan yoki so'nggi sotilgan paytdan, `orders.js`dagi izohga
+ * qarang) berilgan kundan ko'proq vaqt sotilmagan bo'lsa mos keladi.
+ * Bitta maydonli tengsizlik (`sellerId ASC, lastSoldAtMs ASC` kompozit
+ * indeks, `firestore.indexes.json`) — qolgan shartlar (zaxira bor,
+ * hali qo'lda chegirma qo'yilmagan) kichik natija to'plamida JS'da
+ * filtrlanadi (`findCustomerInactiveMatches`dagi VIP filtri bilan BIR
+ * XIL naqsh).
+ */
+async function findSlowMovingProductMatches(sellerId, triggerParams) {
+  const days = clampNumber(triggerParams?.days, 30, 7, 180);
+  const cutoffMs = Date.now() - days * 24 * 60 * 60 * 1000;
+  const snap = await db.collection("products")
+    .where("sellerId", "==", sellerId)
+    .where("lastSoldAtMs", "<", cutoffMs)
+    .limit(MAX_MATCHES_PER_RULE)
+    .get();
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((p) => (Number(p.stock) || 0) > 0 && p.discountPrice == null)
+    .map((p) => ({
+      entityId: p.id,
+      name: p.name || "Mahsulot",
+      stock: Number(p.stock) || 0,
+      price: Number(p.price) || 0,
+      lastSoldAtMs: Number(p.lastSoldAtMs) || 0,
+    }));
+}
+
+/**
+ * `courier_delay` — buyurtma kuryerga biriktirilgan
+ * (`courierAssignedAtMs`, `couriers.js`dagi `assignOrderToCourier`)
+ * paytdan beri berilgan soatdan ko'proq vaqt hali "assigned"/
+ * "picked_up" holatida (ya'ni yetkazib bo'linmagan) bo'lsa mos keladi.
+ * `order_undelivered`dan FARQI: bu yerda hisob buyurtma
+ * YARATILGANIDAN emas, kuryerga BIRIKTIRILGANIDAN boshlanadi — real
+ * "kuryer kechikyapti" muammosini aniqlaydi (`orders (sellerId ASC,
+ * courierDeliveryStatus ASC)` kompozit indeks — `order_undelivered`
+ * uchun mavjud `sellerId+status` bilan BIR XIL naqsh).
+ */
+async function findCourierDelayMatches(sellerId, triggerParams) {
+  const hours = clampNumber(triggerParams?.hours, 3, 1, 72);
+  const cutoffMs = Date.now() - hours * 60 * 60 * 1000;
+  const snap = await db.collection("orders")
+    .where("sellerId", "==", sellerId)
+    .where("courierDeliveryStatus", "in", ["assigned", "picked_up"])
+    .limit(MAX_MATCHES_PER_RULE)
+    .get();
+  return snap.docs
+    .map((d) => {
+      const o = d.data();
+      return { id: d.id, courierAssignedAtMs: Number(o.courierAssignedAtMs) || 0, courierName: o.courierName || "" };
+    })
+    .filter((o) => o.courierAssignedAtMs > 0 && o.courierAssignedAtMs < cutoffMs)
+    .map((o) => ({ entityId: o.id, courierName: o.courierName, courierAssignedAtMs: o.courierAssignedAtMs }));
+}
+
 const TRIGGER_FINDERS = {
   customer_inactive: findCustomerInactiveMatches,
   order_undelivered: findOrderUndeliveredMatches,
   low_stock: findLowStockMatches,
+  slow_moving_product: findSlowMovingProductMatches,
+  courier_delay: findCourierDelayMatches,
 };
 
 // ---------------------------------------------------------------------
@@ -180,9 +248,19 @@ function cooldownMsForRule(rule) {
   if (rule.triggerType === "low_stock") {
     return LOW_STOCK_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
   }
-  // order_undelivered - bitta buyurtma uchun BIR MARTA (buyurtma
-  // vaqt o'tishi bilan albatta boshqa holatga o'tadi yoki yetkaziladi
-  // - `staleOrderAlerted` bayrog'i bilan bir xil g'oya).
+  if (rule.triggerType === "slow_moving_product") {
+    // Agar harakat aksiya qo'yish bo'lsa - aksiya MUDDATI tugagunча
+    // qayta ishlov berilmaydi (aks holda amaldagi chegirma muddati
+    // tugashidan oldin yana "yangilanib", cheksiz uzayib ketardi).
+    if (rule.actionType === "apply_discount") {
+      return clampNumber(rule.actionParams?.durationDays, 14, 1, 90) * 24 * 60 * 60 * 1000;
+    }
+    return clampNumber(rule.triggerParams?.days, 30, 7, 180) * 24 * 60 * 60 * 1000;
+  }
+  // order_undelivered / courier_delay - bitta buyurtma uchun BIR
+  // MARTA (buyurtma vaqt o'tishi bilan albatta boshqa holatga o'tadi
+  // yoki yetkaziladi - `staleOrderAlerted` bayrog'i bilan bir xil
+  // g'oya).
   return Infinity;
 }
 
@@ -237,6 +315,40 @@ async function runNotifyCustomerAction(sellerId, rule, matches) {
 }
 
 /**
+ * `apply_discount` — FAQAT `slow_moving_product` trigger bilan mos
+ * keladi (`processAutomationRule`dagi juftlik tekshiruvi). Mos
+ * kelgan (uzoq sotilmagan, hali qo'lda chegirma qo'yilmagan)
+ * mahsulotlarga avtomatik vaqtinchalik chegirma qo'yadi — xuddi
+ * `setDiscountPrice.js`/`CreatePromotionPage.jsx` yozadigan
+ * MAYDONLARNING O'ZI (`discountPrice`, `discountExpiresAt`) orqali,
+ * shuning uchun `functions/products.js`dagi
+ * `onProductWriteUpdateDiscountCounter` trigger avtomatik ishga
+ * tushib, `activeDiscountCount` hisoblagichini ham to'g'ri yuritadi
+ * (Biznes'da bu limit cheksiz bo'lsa ham, hisoblagichning o'zi
+ * to'g'ri qolishi kerak).
+ */
+async function runApplyDiscountAction(sellerId, rule, matches) {
+  const percent = clampNumber(rule.actionParams?.discountPercent, 15, 5, 70);
+  const durationDays = clampNumber(rule.actionParams?.durationDays, 14, 1, 90);
+  const expiresAt = new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString();
+  const toApply = matches.slice(0, MAX_MATCHES_PER_RULE);
+  const batch = db.batch();
+  const firedEntityIds = [];
+  for (const m of toApply) {
+    if (!(Number(m.price) > 0)) continue; // Narxsiz mahsulotga foizli chegirma hisoblab bo'lmaydi.
+    const discountPrice = Math.max(1, Math.round(m.price * (1 - percent / 100)));
+    batch.set(
+      db.collection("products").doc(m.entityId),
+      { discountPrice, discountExpiresAt: expiresAt, updatedAt: new Date().toISOString() },
+      { merge: true }
+    );
+    firedEntityIds.push(m.entityId);
+  }
+  if (firedEntityIds.length > 0) await batch.commit();
+  return { firedEntityIds, sentCount: firedEntityIds.length };
+}
+
+/**
  * `alert_manager` — trigger turidan qat'i nazar, sotuvchining O'ZIGA
  * (platforma boti orqali, `managerAlerts.js` bilan bir xil naqsh)
  * BITTA jamlangan xabar yuboradi.
@@ -245,6 +357,8 @@ async function runAlertManagerAction(sellerId, rule, matches, botToken) {
   const lines = matches.slice(0, 10).map((m) => {
     if (rule.triggerType === "low_stock") return `• ${m.name} — ${m.stock} dona qoldi`;
     if (rule.triggerType === "order_undelivered") return `• #${m.entityId.slice(0, 6)} — ${formatMoney(m.totalAmount)}`;
+    if (rule.triggerType === "slow_moving_product") return `• ${m.name} — ${Math.round((Date.now() - m.lastSoldAtMs) / (24 * 60 * 60 * 1000))} kundan beri sotilmagan`;
+    if (rule.triggerType === "courier_delay") return `• #${m.entityId.slice(0, 6)} — kuryer: ${m.courierName || "noma'lum"}`;
     return `• ${m.fullName || "Mijoz"}`;
   });
   const moreCount = matches.length > 10 ? matches.length - 10 : 0;
@@ -252,7 +366,13 @@ async function runAlertManagerAction(sellerId, rule, matches, botToken) {
   let text = `Avtomatlashtirish: "${rule.name || "Qoida"}"\n\n${customText}${lines.join("\n")}`;
   if (moreCount > 0) text += `\n... va yana ${moreCount} ta`;
 
-  const pageByTrigger = { low_stock: "/seller/products", order_undelivered: "/seller/orders", customer_inactive: "/seller/crm" };
+  const pageByTrigger = {
+    low_stock: "/seller/products",
+    order_undelivered: "/seller/orders",
+    customer_inactive: "/seller/crm",
+    slow_moving_product: "/seller/products",
+    courier_delay: "/seller/orders",
+  };
   await sendTelegramMessage(botToken, sellerId, text, {
     inlineKeyboard: [[{ text: "Ko'rish", web_app: { url: buildSellerAppLink(pageByTrigger[rule.triggerType] || "/seller") } }]],
   });
@@ -267,10 +387,12 @@ async function processAutomationRule(sellerId, ruleDoc, botToken) {
   const rule = ruleDoc.data();
   if (rule.isActive !== true) return;
   if (!TRIGGER_TYPES.includes(rule.triggerType) || !ACTION_TYPES.includes(rule.actionType)) return;
-  // `notify_customer_telegram` FAQAT `customer_inactive` bilan mos -
-  // noto'g'ri (masalan `firestore.rules`ni chetlab o'tishga urinish
-  // natijasida yozilgan) kombinatsiya JIM tarzda o'tkazib yuboriladi.
+  // `notify_customer_telegram` FAQAT `customer_inactive`, `apply_discount`
+  // FAQAT `slow_moving_product` bilan mos - noto'g'ri (masalan
+  // `firestore.rules`ni chetlab o'tishga urinish natijasida yozilgan)
+  // kombinatsiya JIM tarzda o'tkazib yuboriladi.
   if (rule.actionType === "notify_customer_telegram" && rule.triggerType !== "customer_inactive") return;
+  if (rule.actionType === "apply_discount" && rule.triggerType !== "slow_moving_product") return;
 
   const finder = TRIGGER_FINDERS[rule.triggerType];
   const allMatches = await finder(sellerId, rule.triggerParams || {});
@@ -281,7 +403,9 @@ async function processAutomationRule(sellerId, ruleDoc, botToken) {
 
   const { firedEntityIds, sentCount } = rule.actionType === "notify_customer_telegram"
     ? await runNotifyCustomerAction(sellerId, rule, dueMatches)
-    : await runAlertManagerAction(sellerId, rule, dueMatches, botToken);
+    : rule.actionType === "apply_discount"
+      ? await runApplyDiscountAction(sellerId, rule, dueMatches)
+      : await runAlertManagerAction(sellerId, rule, dueMatches, botToken);
 
   await markFired(ruleDoc.ref, firedEntityIds);
   if (sentCount > 0) {
@@ -387,10 +511,13 @@ exports._testables = {
   findCustomerInactiveMatches,
   findOrderUndeliveredMatches,
   findLowStockMatches,
+  findSlowMovingProductMatches,
+  findCourierDelayMatches,
   cooldownMsForRule,
   filterDueMatches,
   markFired,
   runNotifyCustomerAction,
+  runApplyDiscountAction,
   runAlertManagerAction,
   processAutomationRule,
   processSellerAutomationRules,

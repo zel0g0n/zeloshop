@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft, UserRoundCog, Plus, Check, Send, Trash2, Loader2, X, PhoneCall, ChevronDown,
+  ArrowLeft, UserRoundCog, Plus, Check, Send, Trash2, Loader2, X, PhoneCall, ChevronDown, ShieldCheck, Crown,
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -14,7 +14,8 @@ import ConfirmDialog from "@/components/ui/ConfirmDialog";
 import { formatUzPhone, isValidUzPhone, hasMeaningfulPhoneDigits } from "@/utils/phone";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import { useExpenses } from "@/hooks/seller/useExpenses";
-import { getTariffLimits } from "@/utils/tariffLimits";
+import { getTariffLimits, getEffectiveTariffPlan } from "@/utils/tariffLimits";
+import BiznesBadge from "@/components/ui/BiznesBadge";
 import {
   PERMISSION_KEYS, STAFF_ROLE_KEYS, normalizeStaffPermissions,
   getRolePermissionPreset, matchRoleFromPermissions,
@@ -45,6 +46,16 @@ const StaffManagementPage = () => {
   const navigate = useNavigate();
   const { sellerId, store } = useSession();
   const maxStaff = getTariffLimits(store).maxStaff;
+  // ADVANCED TEAM & RBAC (9 ta korporativ rol: Owner + 8 tayinlanadigan
+  // rol) — foydalanuvchi so'rovi bilan Z-Biznesga XOS qilib ajratildi.
+  // Z-Pro'da ("Pro'da employee bor") xodim funksiyasi ISHLAYVERADI —
+  // xuddi shu 6 ta granular ruxsat (`PERMISSION_KEYS`) qo'lda
+  // belgilanadi — lekin nomlangan rol katalogi (Admin/Buxgalter/
+  // Marketing menejeri va h.k.) va tayyor rol belgisi/o'zgartirish
+  // faqat Z-Biznesda ko'rsatiladi. Bu FAQAT UI qatlami — ruxsatlarning
+  // o'zi (backend + firestore.rules) ikkala tarifda ham BIR XIL,
+  // to'liq xavfsiz tarzda ishlaydi.
+  const isBiznes = getEffectiveTariffPlan(store) === "biznes";
 
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -301,47 +312,63 @@ const StaffManagementPage = () => {
                 className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 rounded-xl text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
               />
 
-              {/* ROL TANLASH (2026-09 punkt-royxati, 2-band): ixtiyoriy —
-                  tanlansa ruxsatlar pastda avtomatik belgilanadi. */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block pl-1">
-                  {t("staffManagement.roleLabel")}
-                </label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    disabled={creating}
-                    onClick={() => setRoleMenuOpen((v) => !v)}
-                    className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-between disabled:opacity-60"
-                  >
-                    <span>{newRole ? t(`staffManagement.${ROLE_META[newRole].nameKey}`) : t("staffManagement.roleCustomOption")}</span>
-                    <ChevronDown size={14} className={`text-slate-400 transition-transform ${roleMenuOpen ? "rotate-180" : ""}`} />
-                  </button>
-                  {roleMenuOpen && (
-                    <div className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-lg max-h-64 overflow-y-auto">
-                      <button
-                        type="button"
-                        onClick={() => handleSelectRole(null)}
-                        className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                      >
-                        {t("staffManagement.roleCustomOption")}
-                      </button>
-                      {STAFF_ROLE_KEYS.map((role) => (
+              {/* ROL TANLASH (2026-09 punkt-royxati, 2-band "Advanced
+                  Team & RBAC"): FAQAT Z-Biznes — nomlangan korporativ
+                  rol katalogi shu tarifning ustunligi. Z-Pro'da
+                  ("Pro'da employee bor") bu blok o'rniga qisqa
+                  tushuntirish ko'rsatiladi, ruxsatlar esa pastdagi
+                  granular ro'yxatdan to'g'ridan-to'g'ri qo'lda
+                  belgilanadi — funksionallik yo'qolmaydi, faqat
+                  "korporativ rol" qatlami Biznesga xos. */}
+              {isBiznes ? (
+                <div className="space-y-1.5 pt-1">
+                  <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider pl-1 flex items-center gap-1.5">
+                    {t("staffManagement.roleLabel")} <BiznesBadge size="xs" />
+                  </label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      disabled={creating}
+                      onClick={() => setRoleMenuOpen((v) => !v)}
+                      className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl text-xs font-bold flex items-center justify-between disabled:opacity-60"
+                    >
+                      <span>{newRole ? t(`staffManagement.${ROLE_META[newRole].nameKey}`) : t("staffManagement.roleCustomOption")}</span>
+                      <ChevronDown size={14} className={`text-slate-400 transition-transform ${roleMenuOpen ? "rotate-180" : ""}`} />
+                    </button>
+                    {roleMenuOpen && (
+                      <div className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-lg max-h-64 overflow-y-auto">
                         <button
-                          key={role}
                           type="button"
-                          onClick={() => handleSelectRole(role)}
-                          className="w-full text-left px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+                          onClick={() => handleSelectRole(null)}
+                          className="w-full text-left px-3 py-2.5 text-xs font-bold text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
                         >
-                          <p className="text-xs font-black text-slate-700 dark:text-white">{t(`staffManagement.${ROLE_META[role].nameKey}`)}</p>
-                          <p className="text-[10px] text-slate-400 dark:text-slate-500">{t(`staffManagement.${ROLE_META[role].descKey}`)}</p>
+                          {t("staffManagement.roleCustomOption")}
                         </button>
-                      ))}
-                    </div>
-                  )}
+                        {STAFF_ROLE_KEYS.map((role) => (
+                          <button
+                            key={role}
+                            type="button"
+                            onClick={() => handleSelectRole(role)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+                          >
+                            <p className="text-xs font-black text-slate-700 dark:text-white">{t(`staffManagement.${ROLE_META[role].nameKey}`)}</p>
+                            <p className="text-[10px] text-slate-400 dark:text-slate-500">{t(`staffManagement.${ROLE_META[role].descKey}`)}</p>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed pl-1">{t("staffManagement.roleHint")}</p>
                 </div>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-relaxed pl-1">{t("staffManagement.roleHint")}</p>
-              </div>
+              ) : (
+                <div className="flex items-start gap-2 p-3 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-2xl">
+                  <ShieldCheck size={14} className="text-indigo-500 dark:text-indigo-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-[11px] font-black text-indigo-700 dark:text-indigo-300">{t("staffManagement.roleUpsellTitle")}</p>
+                    <p className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80 leading-relaxed mt-0.5">{t("staffManagement.roleUpsellDesc")}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5 pt-1">
                 <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block pl-1">
@@ -387,6 +414,28 @@ const StaffManagementPage = () => {
             </form>
           )}
         </div>
+
+        {/* EGASI (Owner) kartochkasi — 9 ta rolli korporativ tuzilmani
+            to'liq ko'rsatish uchun (foydalanuvchi so'rovi: "Owner" ham
+            ro'yxatda birinchi rol). Bu FAQAT vizual/kontekst — `staff/`
+            kolleksiyasida hech qanday hujjat yaratilmaydi, chunki egasi
+            cheklovsiz (`sellers/{sellerId}` hujjatining o'zi). Faqat
+            Z-Biznesda ko'rsatiladi, chunki to'liq rol tuzilmasi ham
+            shu tarifga xos. */}
+        {isBiznes && (
+          <div className="bg-white dark:bg-slate-900 rounded-2xl border border-amber-200 dark:border-amber-500/30 shadow-xs p-3.5 flex items-center gap-3">
+            <div className="w-9 h-9 shrink-0 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 rounded-xl flex items-center justify-center">
+              <Crown size={16} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-bold text-slate-800 dark:text-white truncate">{t("staffManagement.ownerCardName")}</h4>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 truncate">{t("staffManagement.ownerCardDesc")}</p>
+            </div>
+            <span className="shrink-0 text-[9px] font-black px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400">
+              {t("staffManagement.ownerCardRole")}
+            </span>
+          </div>
+        )}
 
         {/* RO'YXAT */}
         <div className="space-y-2">
@@ -442,10 +491,13 @@ const StaffManagementPage = () => {
                     </div>
 
                     {/* ROL BELGISI + O'ZGARTIRISH (2026-09 punkt-royxati,
-                        2-band): saqlangan `member.role` bo'lsa o'shani,
-                        aks holda joriy ruxsatlarga MOS keladigan
-                        presetni (agar bo'lsa) ko'rsatadi — mos kelmasa
-                        "Moslashtirilgan". */}
+                        2-band): FAQAT Z-Biznes — saqlangan `member.role`
+                        bo'lsa o'shani, aks holda joriy ruxsatlarga MOS
+                        keladigan presetni (agar bo'lsa) ko'rsatadi — mos
+                        kelmasa "Moslashtirilgan". Z-Pro'da bu blok
+                        ko'rsatilmaydi (pastdagi ruxsat chiplari yetarli
+                        — "korporativ rol" qatlami Biznesga xos). */}
+                    {isBiznes && (
                     <div className="relative pl-11.5">
                       <button
                         type="button"
@@ -483,6 +535,7 @@ const StaffManagementPage = () => {
                         </div>
                       )}
                     </div>
+                    )}
 
                     <div className="flex flex-wrap items-center gap-1.5 pl-11.5">
                       {PERMISSION_KEYS.map((permKey) => {

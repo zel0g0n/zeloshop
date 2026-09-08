@@ -5,6 +5,7 @@ const { withSentry, SENTRY_DSN } = require("./lib/sentry");
 const { getEffectiveTariffPlan } = require("./lib/tariffs");
 const { classifyCustomerIntelligence } = require("./lib/customerIntelligence");
 const { CUSTOMER_SEGMENTS_SAMPLE_LIMIT, loadHighIntentClientIds } = require("./lib/customerIntelligenceQueries");
+const { resolveActingSellerContext } = require("./lib/staffAccess");
 
 /**
  * MIJOZLAR RAZVEDKASI — CRM Hub sahifasi uchun onCall (Z-Biznes,
@@ -29,7 +30,17 @@ async function handleGetCustomerIntelligence(request) {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "Bu funksiyani ishlatish uchun tizimga kirgan bo'lishingiz kerak.");
   }
-  const sellerId = request.auth.uid;
+  // MUHIM TUZATISH (2026-09, Advanced Team & RBAC kengaytmasi bilan
+  // birga topilgan haqiqiy nomuvofiqlik): OLDIN bu yerda to'g'ridan-
+  // to'g'ri `request.auth.uid` ishlatilardi — bu funksiyani FAQAT
+  // do'kon egasi chaqira olardi. `manageCustomers` ruxsatiga ega
+  // Z-Biznes xodimi (masalan Marketing/Sotuv menejeri) esa CRM Hub'da
+  // "Mijozlar razvedkasi"ni ochishga urinsa, `sellers/{xodimUid}`
+  // topilmagani uchun har doim "permission-denied" olardi — CRM'ning
+  // qolgan qismi (ro'yxat/segmentlar) xodimga ochiq bo'lsa ham. Endi
+  // boshqa barcha xodim-ruxsatli Cloud Function bilan BIR XIL
+  // (`resolveActingSellerContext`) chokepoint ishlatiladi.
+  const { sellerId } = await resolveActingSellerContext(db, request.auth.uid, "manageCustomers");
   await checkRateLimit(`getCustomerIntelligence:${sellerId}`, 30, 3600);
 
   const sellerSnap = await db.collection("sellers").doc(sellerId).get();

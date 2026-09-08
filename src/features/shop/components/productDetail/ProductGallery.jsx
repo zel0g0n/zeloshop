@@ -17,7 +17,7 @@ import {
 // uchun ham ishlaydi (`images` bo'lmasa `image`ga qaytadi).
 export const ProductGallery = memo(({ product }) => {
   const { isFavorite, toggleFavorite } = useAddFavorite(product);
-  const { sellerId } = useSession();
+  const { sellerId, store } = useSession();
   const navigate = useNavigate();
   const scrollRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -31,8 +31,8 @@ export const ProductGallery = memo(({ product }) => {
     // FOYDALANUVCHI SO'ROVI BILAN QO'SHILDI: endi RASM+matn "post"
     // ko'rinishida ulashiladi (mumkin bo'lganda) - batafsil izoh:
     // `shareProductAsPost.js`.
-    await shareProductAsPost(product, sellerId);
-  }, [product, sellerId]);
+    await shareProductAsPost(product, sellerId, store?.customBotUsername);
+  }, [product, sellerId, store?.customBotUsername]);
 
   const images = Array.isArray(product?.images) && product.images.length > 0
     ? product.images

@@ -42,8 +42,14 @@ import StaffDescriptionCard from "./StaffDescriptionCard";
  */
 const StaffProductForm = ({ mode, product, onClose, onSaved }) => {
   const { t } = useLanguage();
-  const { sellerId, store, staffId, staffName } = useStaffSession();
+  const { sellerId, store, staffId, staffName, permissions } = useStaffSession();
   const isEdit = mode === "edit";
+  // KORPORATIV RBAC (2026-09): `manageProducts` huquqi katalogni
+  // boshqarishga ruxsat beradi, lekin TANNARX/FOYDA — bu MOLIYAVIY
+  // ma'lumot, `viewFinance` huquqiga tegishli. Shu ikkisi ATAYLAB
+  // ALOHIDA — masalan, Marketing Menejer/Ombor mahsulot tahrirlay
+  // olsin, lekin foyda margasini KO'RMASIN.
+  const canViewCost = permissions?.viewFinance === true;
 
   const {
     uploadImage,
@@ -116,7 +122,14 @@ const StaffProductForm = ({ mode, product, onClose, onSaved }) => {
         title,
         category,
         price: Number(price),
-        costPrice: Number(costPrice),
+        // `canViewCost === false` bo'lsa, `costPrice` payload'ga UMUMAN
+        // qo'shilmaydi — mavjud mahsulotni tahrirlashda
+        // `updateProductFull`ga bu maydon "berilmagan" deb yuboriladi,
+        // shunda u eskisini SAQLAB QOLADI (0ga aylantirib qo'ymaydi).
+        // Yangi mahsulot yaratishda esa `addProduct` uni standart 0
+        // qiladi — `firestore.rules` ham buni serverda mustaqil
+        // ravishda talab qiladi (`isCostPriceOk`).
+        ...(canViewCost ? { costPrice: Number(costPrice) } : {}),
         discountPrice: discountPrice !== "" ? Number(discountPrice) : null,
         stock: Number(stock),
         description,
@@ -142,6 +155,7 @@ const StaffProductForm = ({ mode, product, onClose, onSaved }) => {
   }, [
     isEdit, product, sellerId, resolveUploadedUrls, uploadImage, title, category, price, costPrice, discountPrice,
     stock, description, variants, t, stockActuallyChanged, stockChangeReason, stockReasonMissing, staffId, staffName,
+    canViewCost,
   ]);
 
   return (
@@ -195,6 +209,7 @@ const StaffProductForm = ({ mode, product, onClose, onSaved }) => {
           originalStock={isEdit ? originalStock : null}
           stockChangeReason={stockChangeReason}
           onStockChangeReasonChange={setStockChangeReason}
+          showCostPrice={canViewCost}
         />
 
         {isEdit && originalStock != null && (

@@ -210,7 +210,19 @@ service cloud.firestore {
                     "aiCeoGrantedViaTariff", "activeDiscountCount", "couponCount",
                     "tariffCountersBackfilledAt"]) &&
          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["heroBanners"]) ||
-          request.resource.data.get("heroBanners", []).size() <= tariffBannerLimit(tariffEffectivePlan(resource.data))));
+          request.resource.data.get("heroBanners", []).size() <= tariffBannerLimit(tariffEffectivePlan(resource.data))) &&
+         // VIP TUG'ILGAN KUN BONUSI (2026-09, "katta bizneslar uchun"
+         // ro'yxati, 2-guruh): oddiy tug'ilgan kun chegirmasidan farqli
+         // o'laroq (u BARCHA tarifda bepul, yuqorida cheklovsiz), VIP
+         // mijozlar uchun ALOHIDA (odatda kattaroq) foiz FAQAT Z-Biznes
+         // tarifiga xos — aks holda sotuvchi brauzer konsolidan bu
+         // maydonlarni to'g'ridan-to'g'ri yozib, tarif cheklovini
+         // chetlab o'tishi mumkin edi (`functions/birthdayRewards.js`
+         // ijro paytida SAMARALI tarifni YANA tekshiradi — ikki
+         // qatlamli himoya, boshqa Biznes funksiyalari bilan bir xil).
+         (!request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(["vipBirthdayBonusEnabled", "vipBirthdayDiscountPercent"]) ||
+          tariffEffectivePlan(resource.data) == "biznes"));
       // Do'kon ro'yxatdan o'tish oqimi orqali yaratiladi — faqat o'z
       // uid'iga mos hujjatni, va faqat status="active" bilan (moderatsiya
       // yo'q, lekin boshqa qiymat bilan yaratib bo'lmaydi).
@@ -454,8 +466,8 @@ service cloud.firestore {
       allow create, update: if (isOwner(sellerId) || isAdmin()) &&
         (isAdmin() ||
          tariffEffectivePlan(get(/databases/$(database)/documents/sellers/$(sellerId)).data) == "biznes") &&
-        request.resource.data.triggerType in ["customer_inactive", "order_undelivered", "low_stock"] &&
-        request.resource.data.actionType in ["notify_customer_telegram", "alert_manager"] &&
+        request.resource.data.triggerType in ["customer_inactive", "order_undelivered", "low_stock", "slow_moving_product", "courier_delay"] &&
+        request.resource.data.actionType in ["notify_customer_telegram", "alert_manager", "apply_discount"] &&
         request.resource.data.isActive is bool;
       allow delete: if isOwner(sellerId) || isAdmin();
 
@@ -492,6 +504,22 @@ service cloud.firestore {
       // `functions/products.js`dagi trigger orqali avtomatik
       // yangilanadi). Narxning O'ZI o'zgarishi, yoki chegirma OLIB
       // TASHLANISHI (endi `null`) HECH QACHON bloklanmaydi.
+      // KORPORATIV RBAC (2026-09, "haqiqiy muammo": Marketing Menejer/
+      // Ombor kabi `manageProducts` huquqiga ega, lekin `viewFinance`GA
+      // EGA BO'LMAGAN xodim TANNARX/FOYDA ko'rishi/o'zgartirishi SHART
+      // EMAS — bu moliyaviy ma'lumot. Frontend (`StaffProductForm.jsx`/
+      // `PricingCard.jsx`) bu maydonni allaqachon yashiradi va
+      // yubormaydi, lekin qoidalar darajasida ham MUSTAQIL talab
+      // qilinadi (client kodini chetlab o'tishga qarshi): egasi/admin —
+      // cheksiz; `viewFinance` huquqiga ega xodim — cheksiz; qolgan
+      // xodim — `costPrice` FAQAT eskisi bilan bir xil qolsa (yoki
+      // yaratishda 0 bo'lsa) ruxsat beriladi.
+      function isCostPriceOk(sellerId, existingData) {
+        return request.resource.data.sellerId == request.auth.uid || isAdmin() ||
+          staffPermission(sellerId, "viewFinance") ||
+          request.resource.data.get("costPrice", 0) ==
+            (existingData == null ? 0 : existingData.get("costPrice", 0));
+      }
       function isNewActiveDiscount(existingData) {
         return request.resource.data.get("discountPrice", null) != null &&
           (existingData == null || existingData.get("discountPrice", null) == null);
@@ -527,7 +555,8 @@ service cloud.firestore {
       allow create: if isSignedIn() &&
         (request.resource.data.sellerId == request.auth.uid ||
          staffPermission(request.resource.data.sellerId, "manageProducts")) &&
-        discountLimitOk(request.resource.data.sellerId, null);
+        discountLimitOk(request.resource.data.sellerId, null) &&
+        isCostPriceOk(request.resource.data.sellerId, null);
       // XAVFSIZLIK TUZATISHI (2026-09 audit, P1): oldin `sellerId`
       // maydonining O'ZI update paytida tekshirilmagan edi — ya'ni
       // mahsulot egasi o'z mahsulotini BOSHQA (jabrlangan) sotuvchining
@@ -541,7 +570,8 @@ service cloud.firestore {
         (resource.data.sellerId == request.auth.uid || isAdmin() ||
          staffPermission(resource.data.sellerId, "manageProducts")) &&
         (isAdmin() || discountLimitOk(resource.data.sellerId, resource.data)) &&
-        (isAdmin() || !isStockChanging(resource.data) || stockChangeReasonOk());
+        (isAdmin() || !isStockChanging(resource.data) || stockChangeReasonOk()) &&
+        (isAdmin() || isCostPriceOk(resource.data.sellerId, resource.data));
       allow delete: if isSignedIn() &&
         (resource.data.sellerId == request.auth.uid || isAdmin());
     }

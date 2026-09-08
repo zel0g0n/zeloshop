@@ -2,21 +2,33 @@ import { useState, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Workflow, Trash2, Loader2, Crown, ChevronRight, Clock, PackageX, AlertTriangle, Send, Megaphone,
+  TrendingDown, Percent, Truck,
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
 import { useAutomationRules } from "@/hooks/seller/useAutomationRules";
 import CustomSelect from "@/components/ui/CustomSelect";
+import BiznesBadge from "@/components/ui/BiznesBadge";
 
-const TRIGGER_ICONS = { customer_inactive: Clock, order_undelivered: PackageX, low_stock: AlertTriangle };
-const ACTION_ICONS = { notify_customer_telegram: Send, alert_manager: Megaphone };
+const TRIGGER_ICONS = {
+  customer_inactive: Clock,
+  order_undelivered: PackageX,
+  low_stock: AlertTriangle,
+  slow_moving_product: TrendingDown,
+  courier_delay: Truck,
+};
+const ACTION_ICONS = { notify_customer_telegram: Send, alert_manager: Megaphone, apply_discount: Percent };
 
 const DEFAULT_TRIGGER_PARAMS = {
   customer_inactive: { days: 30, vipOnly: false },
   order_undelivered: { hours: 72 },
   low_stock: { threshold: 5 },
+  slow_moving_product: { days: 30 },
+  courier_delay: { hours: 3 },
 };
+const DEFAULT_DISCOUNT_PERCENT = 15;
+const DEFAULT_DISCOUNT_DURATION_DAYS = 14;
 
 /**
  * ADVANCED AUTOMATION (Z-Biznes, 2026-09 punkt-royxati, 5-band) —
@@ -26,10 +38,11 @@ const DEFAULT_TRIGGER_PARAMS = {
  * qiladi) — lekin bu yerda IJRO alohida, serverdagi soatlik cron
  * orqali (`functions/automationRules.js`), batafsil izoh o'sha faylda.
  *
- * MUHIM: `notify_customer_telegram` harakati FAQAT `customer_inactive`
- * trigger'i bilan mos keladi (faqat shu holatda `clientId` mavjud) —
- * bu cheklov `firestore.rules`da HAM, backendda HAM, shu yerdagi
- * formada HAM (harakat tanlovi dinamik ravishda cheklanadi) qo'llanadi.
+ * MUHIM: `notify_customer_telegram` harakati FAQAT `customer_inactive`,
+ * `apply_discount` esa FAQAT `slow_moving_product` trigger'i bilan mos
+ * keladi (birinchisida `clientId`, ikkinchisida `price` mavjud) — bu
+ * cheklov `firestore.rules`da HAM, backendda HAM, shu yerdagi formada
+ * HAM (harakat tanlovi dinamik ravishda cheklanadi) qo'llanadi.
  */
 const AutomationRulesPage = () => {
   const navigate = useNavigate();
@@ -43,6 +56,8 @@ const AutomationRulesPage = () => {
   const [triggerParams, setTriggerParams] = useState(DEFAULT_TRIGGER_PARAMS.customer_inactive);
   const [actionType, setActionType] = useState("notify_customer_telegram");
   const [message, setMessage] = useState("");
+  const [discountPercent, setDiscountPercent] = useState(DEFAULT_DISCOUNT_PERCENT);
+  const [discountDurationDays, setDiscountDurationDays] = useState(DEFAULT_DISCOUNT_DURATION_DAYS);
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -51,16 +66,22 @@ const AutomationRulesPage = () => {
     { value: "customer_inactive", label: t("automationRules.trigger.customer_inactive") },
     { value: "order_undelivered", label: t("automationRules.trigger.order_undelivered") },
     { value: "low_stock", label: t("automationRules.trigger.low_stock") },
+    { value: "slow_moving_product", label: t("automationRules.trigger.slow_moving_product") },
+    { value: "courier_delay", label: t("automationRules.trigger.courier_delay") },
   ]), [t]);
 
   // `CustomSelect` variantlar ichida `disabled` bayrog'ini QO'LLAMAYDI
   // (faqat butun tanlovni o'chirib qo'yish mumkin) — shuning uchun
-  // "Mijozga xabar" harakati faqat `customer_inactive` trigger'i
-  // tanlanganda RO'YXATGA UMUMAN qo'shiladi (backend/`firestore.rules`
-  // bilan BIR XIL cheklov, faqat UI darajasida).
+  // "Mijozga xabar" harakati faqat `customer_inactive`, "Avtomatik
+  // chegirma" esa faqat `slow_moving_product` trigger'i tanlanganda
+  // RO'YXATGA UMUMAN qo'shiladi (backend/`firestore.rules` bilan BIR
+  // XIL cheklov, faqat UI darajasida).
   const actionOptions = useMemo(() => ([
     ...(triggerType === "customer_inactive"
       ? [{ value: "notify_customer_telegram", label: t("automationRules.action.notify_customer_telegram") }]
+      : []),
+    ...(triggerType === "slow_moving_product"
+      ? [{ value: "apply_discount", label: t("automationRules.action.apply_discount") }]
       : []),
     { value: "alert_manager", label: t("automationRules.action.alert_manager") },
   ]), [t, triggerType]);
@@ -68,10 +89,15 @@ const AutomationRulesPage = () => {
   const handleTriggerTypeChange = useCallback((next) => {
     setTriggerType(next);
     setTriggerParams(DEFAULT_TRIGGER_PARAMS[next]);
-    // "Mijozga xabar" harakati faqat "mijoz faolsizligi" trigger'i bilan
-    // mos - boshqa trigger tanlansa, avtomatik "menejerga ogohlantirish"ga
-    // o'tkaziladi (foydalanuvchi noto'g'ri kombinatsiya yubormasligi uchun).
+    // "Mijozga xabar" harakati faqat "mijoz faolsizligi", "Avtomatik
+    // chegirma" esa faqat "kam sotilayotgan mahsulot" trigger'i bilan
+    // mos - mos kelmaydigan trigger tanlansa, avtomatik "menejerga
+    // ogohlantirish"ga o'tkaziladi (foydalanuvchi noto'g'ri kombinatsiya
+    // yubormasligi uchun).
     if (next !== "customer_inactive" && actionType === "notify_customer_telegram") {
+      setActionType("alert_manager");
+    }
+    if (next !== "slow_moving_product" && actionType === "apply_discount") {
       setActionType("alert_manager");
     }
   }, [actionType]);
@@ -87,19 +113,22 @@ const AutomationRulesPage = () => {
 
     setCreating(true);
     try {
-      await create({
-        name,
-        triggerType,
-        triggerParams: triggerType === "customer_inactive"
-          ? { days: Number(triggerParams.days) || 30, segment: triggerParams.vipOnly ? "vip" : undefined }
-          : triggerType === "order_undelivered"
-            ? { hours: Number(triggerParams.hours) || 72 }
-            : { threshold: Number(triggerParams.threshold) || 5 },
-        actionType,
-        actionParams: message.trim() ? { message: message.trim() } : {},
-      });
+      const resolvedTriggerParams =
+        triggerType === "customer_inactive" ? { days: Number(triggerParams.days) || 30, segment: triggerParams.vipOnly ? "vip" : undefined } :
+        triggerType === "order_undelivered" ? { hours: Number(triggerParams.hours) || 72 } :
+        triggerType === "low_stock" ? { threshold: Number(triggerParams.threshold) || 5 } :
+        triggerType === "slow_moving_product" ? { days: Number(triggerParams.days) || 30 } :
+        { hours: Number(triggerParams.hours) || 3 }; // courier_delay
+
+      const resolvedActionParams = actionType === "apply_discount"
+        ? { discountPercent: Number(discountPercent) || DEFAULT_DISCOUNT_PERCENT, durationDays: Number(discountDurationDays) || DEFAULT_DISCOUNT_DURATION_DAYS }
+        : (message.trim() ? { message: message.trim() } : {});
+
+      await create({ name, triggerType, triggerParams: resolvedTriggerParams, actionType, actionParams: resolvedActionParams });
       setName("");
       setMessage("");
+      setDiscountPercent(DEFAULT_DISCOUNT_PERCENT);
+      setDiscountDurationDays(DEFAULT_DISCOUNT_DURATION_DAYS);
       setTriggerType("customer_inactive");
       setTriggerParams(DEFAULT_TRIGGER_PARAMS.customer_inactive);
       setActionType("notify_customer_telegram");
@@ -108,7 +137,7 @@ const AutomationRulesPage = () => {
     } finally {
       setCreating(false);
     }
-  }, [name, triggerType, triggerParams, actionType, message, create, t]);
+  }, [name, triggerType, triggerParams, actionType, message, discountPercent, discountDurationDays, create, t]);
 
   const handleToggle = useCallback(async (rule) => {
     setBusyId(rule.id);
@@ -136,6 +165,12 @@ const AutomationRulesPage = () => {
     }
     if (rule.triggerType === "order_undelivered") {
       return t("automationRules.summary.orderUndelivered", { hours: rule.triggerParams?.hours || 72 });
+    }
+    if (rule.triggerType === "slow_moving_product") {
+      return t("automationRules.summary.slowMovingProduct", { days: rule.triggerParams?.days || 30 });
+    }
+    if (rule.triggerType === "courier_delay") {
+      return t("automationRules.summary.courierDelay", { hours: rule.triggerParams?.hours || 3 });
     }
     return t("automationRules.summary.lowStock", { threshold: rule.triggerParams?.threshold || 5 });
   }, [t]);
@@ -174,7 +209,9 @@ const AutomationRulesPage = () => {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-base font-black text-slate-800 dark:text-white">{t("automationRules.title")}</h1>
+          <h1 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+            {t("automationRules.title")} <BiznesBadge size="xs" />
+          </h1>
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t("automationRules.subtitle")}</p>
         </div>
       </div>
@@ -249,6 +286,30 @@ const AutomationRulesPage = () => {
             </div>
           )}
 
+          {triggerType === "slow_moving_product" && (
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t("automationRules.slowMovingDaysLabel")}</label>
+              <input
+                type="number" min={7} max={180} disabled={creating}
+                value={triggerParams.days}
+                onChange={(e) => setTriggerParams((p) => ({ ...p, days: e.target.value }))}
+                className="w-full h-10 mt-1 px-3 bg-[#F4F5F9] dark:bg-slate-800 rounded-xl text-sm font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+              />
+            </div>
+          )}
+
+          {triggerType === "courier_delay" && (
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t("automationRules.courierDelayHoursLabel")}</label>
+              <input
+                type="number" min={1} max={72} disabled={creating}
+                value={triggerParams.hours}
+                onChange={(e) => setTriggerParams((p) => ({ ...p, hours: e.target.value }))}
+                className="w-full h-10 mt-1 px-3 bg-[#F4F5F9] dark:bg-slate-800 rounded-xl text-sm font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+              />
+            </div>
+          )}
+
           <div>
             <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t("automationRules.thenLabel")}</label>
             <div className="mt-1">
@@ -256,21 +317,44 @@ const AutomationRulesPage = () => {
             </div>
           </div>
 
-          <div>
-            <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
-              {actionType === "notify_customer_telegram" ? t("automationRules.messageLabelCustomer") : t("automationRules.messageLabelManager")}
-            </label>
-            <textarea
-              rows={2} disabled={creating}
-              placeholder={actionType === "notify_customer_telegram" ? t("automationRules.messagePlaceholderCustomer") : t("automationRules.messagePlaceholderManager")}
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              className="w-full mt-1 px-3 py-2.5 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60 resize-none"
-            />
-            {actionType === "notify_customer_telegram" && (
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{t("automationRules.personalizeHint")}</p>
-            )}
-          </div>
+          {actionType === "apply_discount" ? (
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t("automationRules.discountPercentLabel")}</label>
+                <input
+                  type="number" min={5} max={70} disabled={creating}
+                  value={discountPercent}
+                  onChange={(e) => setDiscountPercent(e.target.value)}
+                  className="w-full h-10 mt-1 px-3 bg-[#F4F5F9] dark:bg-slate-800 rounded-xl text-sm font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t("automationRules.discountDurationLabel")}</label>
+                <input
+                  type="number" min={1} max={90} disabled={creating}
+                  value={discountDurationDays}
+                  onChange={(e) => setDiscountDurationDays(e.target.value)}
+                  className="w-full h-10 mt-1 px-3 bg-[#F4F5F9] dark:bg-slate-800 rounded-xl text-sm font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
+                />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                {actionType === "notify_customer_telegram" ? t("automationRules.messageLabelCustomer") : t("automationRules.messageLabelManager")}
+              </label>
+              <textarea
+                rows={2} disabled={creating}
+                placeholder={actionType === "notify_customer_telegram" ? t("automationRules.messagePlaceholderCustomer") : t("automationRules.messagePlaceholderManager")}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                className="w-full mt-1 px-3 py-2.5 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl text-sm font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60 resize-none"
+              />
+              {actionType === "notify_customer_telegram" && (
+                <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">{t("automationRules.personalizeHint")}</p>
+              )}
+            </div>
+          )}
 
           {formError && <p className="text-[11px] text-rose-500 font-semibold">{formError}</p>}
 

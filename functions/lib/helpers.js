@@ -189,6 +189,39 @@ function buildDeepLink(sellerId, path) {
 }
 
 /**
+ * SOTUVCHINING SHAXSIY BOTI orqali ochiladigan havola (2026-09,
+ * sotuvchi so'roviga ko'ra qo'shildi — kanal posti/ulashishdagi
+ * "Sotib olish" tugmasi ZeloShop'ning umumiy boti o'rniga sellerning
+ * O'ZINING botiga olib borishi uchun).
+ *
+ * NEGA `buildDeepLink`dan (yuqorida) FARQLI, `?startapp=`EMAS,
+ * `?start=` ishlatiladi: `startapp` faqat botda BotFather orqali
+ * qo'lda ro'yxatdan o'tkazilgan Mini App ("/newapp") bo'lsagina
+ * ishlaydi — sotuvchining shaxsiy boti buni talab qilmaydi
+ * (`connectCustomBot` oqimi ataylab shunday soddalashtirilgan,
+ * `src/utils/shareLink.js`dagi izohga qarang). Oddiy `?start=` esa
+ * HAR QANDAY botda ishlaydi — bosilganda bot bilan shaxsiy chat
+ * ochiladi va `/start <payload>` buyrug'i yuboriladi, buni esa
+ * ENDI `customBotWebhook.js` QABUL QILADI va javobida haqiqiy Mini
+ * App tugmasini (`web_app` turidagi inline tugma — bu XUSUSIY chatda
+ * `/newapp`siz ham ishlaydi) yuboradi.
+ *
+ * `botUsername` — `sellers/{id}.customBotUsername` (ommaviy maydon,
+ * `customBot.js`da yoziladi). Agar sotuvchi hali shaxsiy botini
+ * ulamagan bo'lsa, chaqiruvchi kod (`productAutomation.js`,
+ * `shareProductAsPost.js`) buning o'rniga `buildDeepLink`ga
+ * (umumiy ZeloShop boti) qaytishi kerak — bu funksiya shunchaki
+ * `null` qaytaradi, xato tashlamaydi.
+ */
+function buildSellerBotDeepLink(botUsername, path) {
+  if (!botUsername) return null;
+  const payload = path ? `p${encodeDeepLinkPath(path)}` : "";
+  return payload
+    ? `https://t.me/${botUsername}?start=${payload}`
+    : `https://t.me/${botUsername}`;
+}
+
+/**
  * Platform ilovasini (Mini App) bevosita, `start_param`siz ochadigan
  * havola. `buildDeepLink`dan farqi: `buildDeepLink` orqali ochilgan
  * sahifa `SessionContext.jsx`da har doim "mijoz" sifatida
@@ -358,6 +391,6 @@ async function stopTelegramLiveLocation(token, chatId, messageId) {
 module.exports = {
   sanitizeFirestoreData, sendTelegramMessage, parseStartParam,
   answerCallbackQuery, editTelegramMessageText,
-  encodeDeepLinkPath, buildDeepLink, buildSellerAppLink,
+  encodeDeepLinkPath, decodeDeepLinkPath, buildDeepLink, buildSellerBotDeepLink, buildSellerAppLink,
   sendTelegramLiveLocation, editTelegramLiveLocation, stopTelegramLiveLocation,
 };

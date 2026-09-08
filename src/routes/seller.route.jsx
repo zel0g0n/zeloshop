@@ -30,8 +30,13 @@ const YandexDeliveryPage = lazy(() => import('@/features/seller/components/order
 const OrderAnalytics = lazy(() => import('@/features/seller/components/order/OrderAnalytics'))
 const AddProductPage = lazy(() => import('../features/seller/components/add/AddProductPage'))
 const EditProductPage = lazy(() => import('../features/seller/components/add/EditProductPage'))
-const PaymentSettingsPage = lazy(() => import('../features/seller/components/payment/PaymentSettingsPage'))
-const TariffsPage = lazy(() => import('../features/seller/components/payment/TariffsPage'))
+// 2026-09 foydalanuvchi so'roviga ko'ra: "To'lov tizimlari" va "Tariflar"
+// BITTA sahifaga (tab-filtr bilan) birlashtirildi — batafsil izoh:
+// `PaymentAndTariffsPage.jsx`. Ikkala ESKI route ham ('payment-settings'
+// va 'tariffs') pastda saqlangan (boshqa ko'p joydan '/seller/tariffs'ga
+// havola beriladi), lekin ikkalasi ham AYNAN shu bitta komponentga
+// ishora qiladi.
+const PaymentAndTariffsPage = lazy(() => import('../features/seller/components/payment/PaymentAndTariffsPage'))
 const ConnectionsPage = lazy(() => import('../features/seller/components/bot/ConnectionsPage'))
 const SupportPage = lazy(() => import('../features/seller/components/support/SupportPage'))
 const PnLDashboard = lazy(() => import('../features/seller/components/finance/PnLDashboard'))
@@ -44,11 +49,18 @@ const StoreSettingsPage = lazy(() => import('../features/seller/components/setti
 const CategoryManagementPage = lazy(() => import('../features/seller/components/settings/CategoryManagementPage'))
 const BannerSettingsPage = lazy(() => import('../features/seller/components/settings/BannerSettingsPage'))
 const AiCeoInfoPage = lazy(() => import('../features/seller/components/dashboard/AiCeoInfoPage'))
-const MarketingCoupons = lazy(() => import('../features/seller/components/marketing/MarketingCoupons'))
-const CreatePromotionPage = lazy(() => import('../features/seller/components/marketing/CreatePromotionPage'))
+const AiCeoSettingsPage = lazy(() => import('../features/seller/components/dashboard/AiCeoSettingsPage'))
+// 2026-09 foydalanuvchi so'roviga ko'ra (8-band): "Marketing va
+// Kuponlar", "Mahsulot bandllari" va "Aksiya yaratish" UCHTASI ham
+// BITTA sahifaga (tab-filtr bilan) birlashtirildi — batafsil izoh:
+// `MarketingHub.jsx`. UCHALA ESKI route ham ('marketing', 'bundles' va
+// 'create-promotion') pastda saqlangan (navbar'ning markaziy "+"
+// tugmasi va boshqa ko'p joy shu yo'llarga to'g'ridan-to'g'ri havola
+// beradi), lekin barchasi AYNAN shu bitta komponentga ishora qiladi.
+const MarketingHub = lazy(() => import('../features/seller/components/marketing/MarketingHub'))
+const MarketingSettingsPage = lazy(() => import('../features/seller/components/marketing/MarketingSettingsPage'))
 const PrivacySecurityPage = lazy(() => import('../features/seller/components/security/PrivacySecurityPage'))
 const SellerReferralPage = lazy(() => import('../features/seller/components/marketing/SellerReferralPage'))
-const BundleManagementPage = lazy(() => import('../features/seller/components/marketing/BundleManagementPage'))
 const AutomationRulesPage = lazy(() => import('../features/seller/components/marketing/AutomationRulesPage'))
 const PricingSuggestionsPage = lazy(() => import('../features/seller/components/marketing/PricingSuggestionsPage'))
 const BusinessCommandCenterPage = lazy(() => import('../features/seller/components/dashboard/BusinessCommandCenterPage'))
@@ -67,8 +79,8 @@ export const SellerRoute = () => {
       <Route path='orders/:orderId/yandex-delivery' element={<YandexDeliveryPage/>} />
       <Route path='orders/analytics' element={<OrderAnalytics/>} />
       <Route path='functions' element={<MorePage/>} />
-      <Route path='payment-settings' element={<PaymentSettingsPage/>} />
-      <Route path='tariffs' element={<TariffsPage/>} />
+      <Route path='payment-settings' element={<PaymentAndTariffsPage/>} />
+      <Route path='tariffs' element={<PaymentAndTariffsPage/>} />
       <Route path='connections' element={<ConnectionsPage/>} />
       <Route path='support' element={<SupportPage/>} />
       <Route path='pnl' element={<PnLDashboard/>} />
@@ -81,11 +93,13 @@ export const SellerRoute = () => {
       <Route path='category-settings' element={<CategoryManagementPage/>} />
       <Route path='banners' element={<BannerSettingsPage/>} />
       <Route path='ai-ceo' element={<AiCeoInfoPage/>} />
-      <Route path='marketing' element={<MarketingCoupons/>} />
-      <Route path='create-promotion' element={<CreatePromotionPage/>} />
+      <Route path='ai-ceo/settings' element={<AiCeoSettingsPage/>} />
+      <Route path='marketing' element={<MarketingHub/>} />
+      <Route path='marketing/settings' element={<MarketingSettingsPage/>} />
+      <Route path='create-promotion' element={<MarketingHub/>} />
       <Route path='security' element={<PrivacySecurityPage/>} />
       <Route path='invite-sellers' element={<SellerReferralPage/>} />
-      <Route path='bundles' element={<BundleManagementPage/>} />
+      <Route path='bundles' element={<MarketingHub/>} />
       <Route path='automation-rules' element={<AutomationRulesPage/>} />
       <Route path='pricing-suggestions' element={<PricingSuggestionsPage/>} />
       <Route path='command-center' element={<BusinessCommandCenterPage/>} />

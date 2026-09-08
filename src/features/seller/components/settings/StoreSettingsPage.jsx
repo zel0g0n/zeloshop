@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Store as StoreIcon, Pencil, Compass } from "lucide-react";
+import { ArrowLeft, Store as StoreIcon, Pencil, Compass, LayoutGrid, ChevronRight } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useUploadImage } from "@/hooks/storage/useUploadStorage";
 import { useYandexDeliveryConfig } from "@/hooks/seller/useYandexDeliveryConfig";
@@ -248,6 +248,29 @@ const StoreSettingsPage = () => {
             <span className={`block w-5 h-5 rounded-full bg-white shadow-xs transition-transform ${showcaseOptIn ? "translate-x-5" : ""}`} />
           </button>
         </div>
+
+        {/* FOYDALANUVCHI SO'ROVI (2026-09): "Kategoriyalarni boshqarish"
+            ILGARI Sozlamalar (`More.jsx`) ro'yxatida alohida band edi —
+            endi O'SHA YERDAN OLIB TASHLANDI va Do'kon sozlamalari
+            sahifasi ICHIDAN ochiladigan qatorga ko'chirildi (mavjud
+            `/seller/category-settings` sahifasining O'ZI o'zgarishsiz
+            qoldi — faqat unga olib boruvchi kirish nuqtasi ko'chdi). */}
+        <button
+          type="button"
+          onClick={() => navigate('/seller/category-settings')}
+          className="w-full bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs flex items-center justify-between gap-3 active:scale-[0.99] transition-transform"
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-9 h-9 shrink-0 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 rounded-xl flex items-center justify-center">
+              <LayoutGrid size={16} />
+            </div>
+            <div className="min-w-0 text-left">
+              <p className="text-xs font-bold text-slate-800 dark:text-white">{t("storeSettings.categorySettingsLabel")}</p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-medium leading-snug mt-0.5">{t("storeSettings.categorySettingsDesc")}</p>
+            </div>
+          </div>
+          <ChevronRight size={16} className="shrink-0 text-slate-300 dark:text-slate-600" />
+        </button>
 
         <button
           type="submit"

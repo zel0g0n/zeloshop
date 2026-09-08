@@ -1,16 +1,22 @@
-import { buildDeepLink } from "./shareLink";
+import { buildDeepLink, buildSellerBotDeepLink } from "./shareLink";
 import { buildProductShareText } from "./productShareText";
+import { getTelegramWebApp } from "@/config/telegram";
 
 // FOYDALANUVCHI SO'ROVI BILAN QO'SHILDI (v38): Storage bucket'ning
-// CORS sozlamasi (`cors.json`) hali HAQIQIY loyihada ishga
-// tushirilmagan - shuning uchun sotuvchi rasm bilan ulashish
-// tugmasini VAQTINCHA, BUTUNLAY yashirishni so'radi (ichki fallback
-// - CORS bo'lmasa ham matn+havola bilan ishlashi - baribir, ammo
-// sotuvchi hozircha tugmaning o'zini ko'rsatishni xohlamadi). Kodning
-// o'zi O'CHIRILMAGAN - `ProductCard.jsx`/`ProductGallery.jsx` shu
-// flagga qarab tugmani render qiladi. CORS sozlangach, shuni
-// `true`ga qaytaring.
-export const PRODUCT_SHARE_BUTTON_ENABLED = false;
+// CORS sozlamasi (`cors.json`) avval HAQIQIY loyihada ishga
+// tushirilmagan edi - shuning uchun sotuvchi rasm bilan ulashish
+// tugmasini VAQTINCHA, BUTUNLAY yashirishni so'ragan edi (ichki
+// fallback - CORS bo'lmasa ham matn+havola bilan ishlashi - baribir,
+// ammo sotuvchi o'shanda tugmaning o'zini ko'rsatishni xohlamagan
+// edi). Kodning o'zi HECH QACHON O'CHIRILMAGAN -
+// `ProductCard.jsx`/`ProductGallery.jsx` shu flagga qarab tugmani
+// render qiladi.
+//
+// 2026-09: CORS `gsutil cors get`/`gcloud storage buckets update
+// --cors-file=cors.json` orqali HAQIQIY bucket'ga (`commerce-zelo.
+// firebasestorage.app`) qo'llandi va tasdiqlandi - endi tugma qayta
+// yoqildi.
+export const PRODUCT_SHARE_BUTTON_ENABLED = true;
 
 /**
  * Mahsulotni "POST" KO'RINISHIDA ulashadi.
@@ -53,9 +59,17 @@ export const PRODUCT_SHARE_BUTTON_ENABLED = false;
  *    matnning ICHIGA qo'shamiz - ba'zi brauzer/ilovalar `files`+`url`
  *    birgalikda berilganda notinch xatti-harakat qilishi mumkin,
  *    matn ichida bo'lsa havola HAR DOIM saqlanib qoladi.
+ *
+ * TUGMA QAYSI BOTGA OCHILADI (2026-09, foydalanuvchi so'roviga ko'ra):
+ * agar sotuvchi o'z shaxsiy botini ulagan bo'lsa (`customBotUsername`),
+ * havola O'SHA botga (`buildSellerBotDeepLink`) ishora qiladi - xaridor
+ * "Sotib olish" bosganda sellerning O'Z boti ochiladi, ZeloShop'ning
+ * umumiy boti EMAS. Ulanmagan bo'lsa, avvalgidek ZeloShop umumiy
+ * botiga (`buildDeepLink`) tushiladi.
  */
-export async function shareProductAsPost(product, sellerId) {
-  const productLink = buildDeepLink(sellerId, `/product/${product?.id}`);
+export async function shareProductAsPost(product, sellerId, customBotUsername) {
+  const productPath = `/product/${product?.id}`;
+  const productLink = buildSellerBotDeepLink(customBotUsername, productPath) || buildDeepLink(sellerId, productPath);
   const shareText = buildProductShareText(product);
   const name = product?.name || product?.title || "";
   const imageUrl = product?.image || null;
@@ -63,9 +77,18 @@ export async function shareProductAsPost(product, sellerId) {
   if (!navigator.share) {
     // Zaxira: Telegram'ning o'z ulashish oynasi - bu YO'L orqali
     // rasm biriktirib bo'lmaydi (URL asosidagi mexanizm), faqat
-    // matn+havola.
+    // matn+havola. `window.open` o'rniga (Telegram WebView ichida
+    // ko'pincha ishlamaydi/bo'sh oyna ochadi - `ShareStoreModal.jsx`da
+    // ALLAQACHON isbotlangan naqsh) Telegram WebApp SDK'ning
+    // `openTelegramLink` metodi ISHLATILADI, u yerda ham bo'lmasa
+    // (Telegram tashqarisida) `window.open`ga tushiladi.
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(productLink)}&text=${encodeURIComponent(shareText)}`;
-    window.open(shareUrl, "_blank");
+    const webApp = getTelegramWebApp();
+    if (webApp?.openTelegramLink) {
+      webApp.openTelegramLink(shareUrl);
+    } else {
+      window.open(shareUrl, "_blank");
+    }
     return;
   }
 

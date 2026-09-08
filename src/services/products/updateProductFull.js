@@ -32,7 +32,6 @@ const updateProductFull = async (productId, productData) => {
     name: productData.title || "",
     category: productData.category || "Boshqa",
     price: Number(productData.price) || 0,
-    costPrice: Number(productData.costPrice) || 0,
     discountPrice: productData.discountPrice != null ? Number(productData.discountPrice) : null,
     // `paymentTypes` endi mahsulot darajasida SAQLANMAYDI - to'lov
     // turi butun do'kon uchun `sellers/{id}.paymentTypes`da (2026-09
@@ -45,6 +44,18 @@ const updateProductFull = async (productId, productData) => {
     image: images[0] || null,
     updatedAt: new Date().toISOString(),
   };
+
+  // KORPORATIV RBAC (2026-09): `costPrice` FAQAT haqiqatan
+  // `productData`da berilgan bo'lsa yoziladi. Buni SHART qiladigan
+  // sabab — `StaffProductForm.jsx` `viewFinance` huquqi bo'lmagan
+  // xodim uchun bu maydonni payload'dan ATAYLAB olib tashlaydi (chunki
+  // xodim uni ko'rmaydi ham); agar shu yerda "berilmagansa 0" degan
+  // eski qoida qolganida, HAR safar shunday xodim boshqa maydonni
+  // (masalan, nom yoki stok) tahrirlaganida mavjud mahsulotning
+  // HAQIQIY tannarxi jimgina 0ga tushib qolar edi.
+  if (productData.costPrice !== undefined) {
+    updateData.costPrice = Number(productData.costPrice) || 0;
+  }
 
   // Faqat HAQIQATAN berilgan bo'lsa qo'shiladi - `firestore.rules`
   // `stock` o'zgarmagan yozuvlarda bu maydonni UMUMAN talab qilmaydi,

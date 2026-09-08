@@ -26,8 +26,8 @@ const MAX_REVIEW_PHOTOS = 3;
  * - `storage.rules`da FAQAT shu mijozning o'ziga yozish ruxsat
  * etilgan) yuklaydi, bu yerga esa faqat TAYYOR URL manzillar
  * keladi - bu funksiya o'zi hech qanday fayl bilan ishlamaydi
- * (boshqa `onCall` funksiyalar - masalan `storyImage.js` - dagidan
- * farqli, chunki bu yerda AI qayta ishlash shart emas).
+ * (boshqa, fayl bilan ishlaydigan `onCall` funksiyalardan farqli,
+ * chunki bu yerda AI qayta ishlash shart emas).
  */
 async function handleSubmitProductReview(request) {
   if (!request.auth) {

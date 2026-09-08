@@ -21,7 +21,7 @@ import { getTariffLimits } from "@/utils/tariffLimits";
 const BannerSettingsPage = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { sellerId, store } = useSession();
+  const { sellerId, store, patchStore } = useSession();
   const { uploadImage, progress, loading: uploading } = useUploadImage();
 
   const [banners, setBanners] = useState(store?.heroBanners || []);
@@ -59,6 +59,7 @@ const BannerSettingsPage = () => {
       const newBanner = { id: `banner_${Date.now()}`, imageUrl, title: title.trim(), description: description.trim(), href: linkPath || null };
       const updated = [...banners, newBanner];
       await updateSeller(sellerId, { heroBanners: updated });
+      patchStore({ heroBanners: updated });
       setBanners(updated);
       setTitle("");
       setDescription("");
@@ -70,17 +71,18 @@ const BannerSettingsPage = () => {
     } finally {
       setSaving(false);
     }
-  }, [imageFile, title, description, banners, sellerId, uploadImage, linkPath, t]);
+  }, [imageFile, title, description, banners, sellerId, uploadImage, linkPath, t, patchStore]);
 
   const handleRemove = useCallback(async (bannerId) => {
     const updated = banners.filter((b) => b.id !== bannerId);
     setBanners(updated);
     try {
       await updateSeller(sellerId, { heroBanners: updated });
+      patchStore({ heroBanners: updated });
     } catch (err) {
       setError(err.message || t("bannerSettings.saveError"));
     }
-  }, [banners, sellerId, t]);
+  }, [banners, sellerId, t, patchStore]);
 
   const isBusy = saving || uploading;
   const canAddMore = maxBanners === null || banners.length < maxBanners;

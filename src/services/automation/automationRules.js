@@ -12,8 +12,8 @@ import { doc, setDoc, deleteDoc, collection, query, orderBy, serverTimestamp } f
  * dagi soatlik cron).
  */
 
-const TRIGGER_TYPES = ["customer_inactive", "order_undelivered", "low_stock"];
-const ACTION_TYPES = ["notify_customer_telegram", "alert_manager"];
+const TRIGGER_TYPES = ["customer_inactive", "order_undelivered", "low_stock", "slow_moving_product", "courier_delay"];
+const ACTION_TYPES = ["notify_customer_telegram", "alert_manager", "apply_discount"];
 
 export const createAutomationRule = async (sellerId, { name, triggerType, triggerParams, actionType, actionParams }) => {
   if (!sellerId) throw new Error("Sotuvchi ID topilmadi.");
@@ -23,6 +23,9 @@ export const createAutomationRule = async (sellerId, { name, triggerType, trigge
   if (!ACTION_TYPES.includes(actionType)) throw new Error("Harakat turi noto'g'ri.");
   if (actionType === "notify_customer_telegram" && triggerType !== "customer_inactive") {
     throw new Error("Mijozga xabar yuborish faqat \"Mijoz faolsizligi\" trigger'i bilan mos keladi.");
+  }
+  if (actionType === "apply_discount" && triggerType !== "slow_moving_product") {
+    throw new Error("Avtomatik chegirma qo'yish faqat \"Kam sotilayotgan mahsulot\" trigger'i bilan mos keladi.");
   }
 
   try {

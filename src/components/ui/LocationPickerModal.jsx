@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
-import { loadLeaflet } from "@/utils/loadLeaflet";
+import { loadLeaflet, applyMapTileLayer } from "@/utils/loadLeaflet";
+import { useTheme } from "@/context/ThemeContext";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
 // Toshkent markazi — standart boshlang'ich nuqta.
@@ -22,8 +23,10 @@ const DEFAULT_CENTER = { lat: 41.311081, lng: 69.240562 };
  */
 const LocationPickerModal = ({ initialLocation, onConfirm, onClose }) => {
   const { t } = useLanguage();
+  const { isDark } = useTheme();
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
+  const tileLayerRef = useRef(null);
   const markerRef = useRef(null);
   const [ready, setReady] = useState(false);
   const [selected, setSelected] = useState(initialLocation || DEFAULT_CENTER);
@@ -40,10 +43,7 @@ const LocationPickerModal = ({ initialLocation, onConfirm, onClose }) => {
         const start = initialLocation || DEFAULT_CENTER;
         const map = L.map(mapContainerRef.current).setView([start.lat, start.lng], 13);
 
-        L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-          attribution: '&copy; OpenStreetMap',
-          maxZoom: 19,
-        }).addTo(map);
+        applyMapTileLayer(L, map, tileLayerRef, isDark);
 
         const marker = L.marker([start.lat, start.lng], { draggable: true }).addTo(map);
         marker.on("dragend", () => {
@@ -87,9 +87,19 @@ const LocationPickerModal = ({ initialLocation, onConfirm, onClose }) => {
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
+        tileLayerRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLocation]);
+
+  // Modal ochiq turganida foydalanuvchi temani almashtirsa (kam
+  // uchraydigan holat, lekin mumkin) — plitka qatlami mos ravishda
+  // yangilanadi.
+  useEffect(() => {
+    if (!mapRef.current || !window.L) return;
+    applyMapTileLayer(window.L, mapRef.current, tileLayerRef, isDark);
+  }, [isDark]);
 
   return (
     <div className="fixed inset-0 bg-black/50 z-[100] flex items-end justify-center" role="dialog" aria-modal="true">

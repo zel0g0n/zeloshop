@@ -9,6 +9,7 @@ import {
   DEV_FALLBACK_SELLER_ID,
   DEV_FALLBACK_CLIENT_ID,
 } from "@/config/telegram";
+import { AUTH_RETRY_DELAYS_MS, isLikelyNetworkError } from "@/utils/authErrorClassifier";
 
 /**
  * SessionContext — butun ilova uchun BITTA joriy sotuvchi/mijoz manbai.
@@ -55,7 +56,7 @@ const SessionContext = createContext(null);
 
 export const SessionProvider = ({ children }) => {
   const [state, setState] = useState({
-    status: "loading", // 'loading' | 'ready' | 'error'
+    status: "loading", // 'loading' | 'ready' | 'error' | 'network-error'
     sellerId: null,
     clientId: null,
     isSeller: false,
@@ -85,6 +86,11 @@ export const SessionProvider = ({ children }) => {
     sellerInviterId: null,
     error: null,
   });
+
+  // 2026-09 QO'SHILDI (13/14-band): "Qayta urinish" tugmasi shu sonni
+  // oshiradi — bu pastdagi `useEffect`ni qaytadan ishga tushiradi va
+  // butun autentifikatsiya jarayoni boshidan boshlanadi.
+  const [retryToken, setRetryToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -121,38 +127,95 @@ export const SessionProvider = ({ children }) => {
       webApp.ready?.();
       webApp.expand?.();
 
-      // `initData` "sovuq" ochilishda bir zumga bo'sh bo'lishi mumkin —
-      // shuning uchun uni to'ldirilishini biroz kutamiz (ODATDA bir
-      // necha millisoniya ichida tayyor bo'ladi). Sahifani yangilashda
-      // muammo ko'rinmasligining sababi ham shu edi — refresh paytida
-      // Telegram allaqachon tayyor holatda edi.
-      const initData = await waitForInitData();
+      // Sotuvchining shaxsiy (faqat xaridor uchun) boti — Mini App
+      // manziliga ATAYLAB o'z sellerId'ini o'rnatib qo'yadi
+      // (`?ownerSellerId=...`). Bu — botni HAR QANDAY tarzda (hatto
+      // oddiy "Start" tugmasi bilan, `start_param`siz) ochilganda
+      // ham, qaysi sotuvchining shaxsiy tokenini sinash kerakligini
+      // aniqlash imkonini beradi.
+      const urlParams = new URLSearchParams(window.location.search);
+      const ownerSellerId = urlParams.get("ownerSellerId") || null;
+      // Sotuvchining shaxsiy boti (`customBotWebhook.js`) mahsulotga
+      // TO'G'RIDAN-TO'G'RI ochiladigan Mini App tugmasi yuborganda,
+      // yo'l shu YERDA, oddiy URL parametri sifatida keladi (Telegram
+      // `start_param`i orqali EMAS — chunki bu oddiy `web_app` tugma,
+      // `startapp` chuqur havolasi emas, demak `initData`da
+      // `start_param` umuman bo'lmaydi). Backend buni bila olmaydi —
+      // shuning uchun xavfsizlik tekshiruvi (faqat HAQIQIY, bitta "/"
+      // bilan boshlangan ichki yo'l — ochiq yo'naltirish oldini olish
+      // uchun) shu yerda, `functions/lib/helpers.js`dagi
+      // `decodeDeepLinkPath` bilan BIR XIL mantiqda takrorlanadi.
+      const rawOwnerDeepLinkPath = urlParams.get("deepLinkPath") || null;
+      const ownerDeepLinkPath =
+        rawOwnerDeepLinkPath &&
+        rawOwnerDeepLinkPath.startsWith("/") &&
+        !(rawOwnerDeepLinkPath.length > 1 && (rawOwnerDeepLinkPath[1] === "/" || rawOwnerDeepLinkPath[1] === "\\"))
+          ? rawOwnerDeepLinkPath
+          : null;
 
-      if (!initData) {
-        console.error("Telegram initData ko'rinmadi (kutishdan keyin ham bo'sh).");
-        if (!cancelled) {
-          setState((prev) => ({
-            ...prev,
-            status: "error",
-            error: "Telegram ma'lumotlarini o'qib bo'lmadi. Ilovani qayta oching.",
-          }));
+      // 2026-09 TUZATISH (13/14-band): ILGARI `initData` bo'sh chiqsa
+      // yoki `verifyTelegramAuth`/`signInWithCustomToken` BIRON tarmoq
+      // xatoligiga uchrasa (masalan Telegram WebView sekin internetda),
+      // HECH QANDAY qayta urinishsiz darhol `status: "error"` qo'yilib,
+      // foydalanuvchi "Kirishda xatolik yuz berdi" devoriga tiqilib
+      // qolardi — sahifani oddiy yangilashning o'zi ham shunga olib
+      // kelishi mumkin edi (`waitForInitData()`ning chegaralangan ~2
+      // soniyalik kutishi WebView "sovuq" qayta yuklanganda yetmasligi
+      // mumkin edi). ENDI: bir necha marta, qisqa oraliqlar bilan qayta
+      // uriniladi — FAQAT tarmoqqa o'xshash xatoliklar uchun
+      // (`isLikelyNetworkError`). Haqiqiy autentifikatsiya rad etilishi
+      // (masalan Telegram imzosi noto'g'ri) qayta urinishsiz darhol
+      // to'xtatiladi — buni takrorlash foyda bermaydi.
+      let data = null;
+      let lastErr = null;
+      for (let attempt = 0; attempt < AUTH_RETRY_DELAYS_MS.length; attempt++) {
+        if (cancelled) return;
+        if (attempt > 0) {
+          await new Promise((resolve) => setTimeout(resolve, AUTH_RETRY_DELAYS_MS[attempt]));
+          if (cancelled) return;
         }
+        try {
+          // `initData` "sovuq" ochilishda bir zumga bo'sh bo'lishi mumkin —
+          // shuning uchun har urinishda YANGIDAN kutamiz (ODATDA bir
+          // necha millisoniya ichida tayyor bo'ladi).
+          const freshInitData = await waitForInitData();
+          if (!freshInitData) {
+            const emptyErr = new Error(
+              "Telegram ma'lumotlarini o'qib bo'lmadi. Ilovani qayta oching."
+            );
+            emptyErr.isNetworkLike = true;
+            throw emptyErr;
+          }
+          const verifyTelegramAuth = httpsCallable(functions, "verifyTelegramAuth");
+          const result = await verifyTelegramAuth({ initData: freshInitData, ownerSellerId });
+          await signInWithCustomToken(auth, result.data.token);
+          data = result.data;
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          // Tarmoqqa o'xshamaydigan (haqiqiy, doimiy) xatolik bo'lsa —
+          // qayta urinishning ma'nosi yo'q, darhol to'xtatamiz.
+          if (!isLikelyNetworkError(err)) break;
+        }
+      }
+
+      if (cancelled) return;
+
+      if (!data) {
+        console.error(
+          "Sessiyani aniqlashda xatolik (barcha urinishlardan keyin):",
+          lastErr
+        );
+        setState((prev) => ({
+          ...prev,
+          status: isLikelyNetworkError(lastErr) ? "network-error" : "error",
+          error: lastErr?.message || "Noma'lum xatolik",
+        }));
         return;
       }
 
       try {
-        const verifyTelegramAuth = httpsCallable(functions, "verifyTelegramAuth");
-        // Sotuvchining shaxsiy (faqat xaridor uchun) boti — Mini App
-        // manziliga ATAYLAB o'z sellerId'ini o'rnatib qo'yadi
-        // (`?ownerSellerId=...`). Bu — botni HAR QANDAY tarzda (hatto
-        // oddiy "Start" tugmasi bilan, `start_param`siz) ochilganda
-        // ham, qaysi sotuvchining shaxsiy tokenini sinash kerakligini
-        // aniqlash imkonini beradi.
-        const ownerSellerId = new URLSearchParams(window.location.search).get("ownerSellerId") || null;
-        const { data } = await verifyTelegramAuth({ initData, ownerSellerId });
-
-        await signInWithCustomToken(auth, data.token);
-
         const ownUid = data.telegramUser.id;
         const startParam = data.startParam;
 
@@ -206,7 +269,7 @@ export const SessionProvider = ({ children }) => {
               store: sellerDoc,
               security: null,
               dashboardSummary: null,
-              deepLinkPath: data.deepLinkPath || null,
+              deepLinkPath: data.deepLinkPath || ownerDeepLinkPath || null,
               sellerInviterId: null,
               error: null,
             });
@@ -249,6 +312,16 @@ export const SessionProvider = ({ children }) => {
     return () => {
       cancelled = true;
     };
+  }, [retryToken]);
+
+  // 2026-09 QO'SHILDI (13/14-band): "Qayta urinish" tugmasi
+  // (`SessionGate.jsx`dagi tarmoq xatoligi modali) shu funksiyani
+  // chaqiradi — holat "loading"ga qaytariladi (shunda modal yopilib,
+  // spinner ko'rinadi) va `retryToken` oshiriladi, bu esa yuqoridagi
+  // `useEffect`ni qaytadan ishga tushiradi.
+  const retrySession = useCallback(() => {
+    setState((prev) => ({ ...prev, status: "loading", error: null }));
+    setRetryToken((prev) => prev + 1);
   }, []);
 
   // Ro'yxatdan o'tish (do'kon yaratish) muvaffaqiyatli tugagach chaqiriladi —
@@ -308,8 +381,8 @@ export const SessionProvider = ({ children }) => {
   }, []);
 
   const value = useMemo(
-    () => ({ ...state, completeOnboarding, patchStore, patchDashboardSummary, patchSecurity }),
-    [state, completeOnboarding, patchStore, patchDashboardSummary, patchSecurity]
+    () => ({ ...state, completeOnboarding, patchStore, patchDashboardSummary, patchSecurity, retrySession }),
+    [state, completeOnboarding, patchStore, patchDashboardSummary, patchSecurity, retrySession]
   );
 
   return (

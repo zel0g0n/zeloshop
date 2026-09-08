@@ -73,3 +73,27 @@ export const buildSellerInviteLink = (sellerId) => {
   if (!sellerId) return "";
   return `https://t.me/${BOT_USERNAME}/${APP_SHORT_NAME}?startapp=${sellerId}_i`;
 };
+
+/**
+ * Sotuvchining O'Z (shaxsiy) boti orqali ochiladigan havola yasaydi
+ * (2026-09, foydalanuvchi so'roviga ko'ra qo'shildi: "Sotib olish"/
+ * "Ulashish" tugmasi ZeloShop umumiy boti EMAS, sellerning O'Z botiga
+ * ochilishi kerak).
+ *
+ * `functions/lib/helpers.js`dagi backend `buildSellerBotDeepLink`
+ * bilan BIR XIL formatda: `?startapp=` EMAS, oddiy `?start=` — chunki
+ * sotuvchining shaxsiy boti BotFather'da Mini App sifatida qo'lda
+ * ro'yxatdan o'tkazilmagan (`buildShopLink`dagi izohga qarang). Oddiy
+ * `?start=` esa har qanday botda ishlaydi va xususiy chatni ochib,
+ * `/start <payload>` yuboradi — bunga sotuvchining O'Z boti
+ * (`customBotWebhook.js`) HAQIQIY Mini App tugmasi bilan javob beradi.
+ *
+ * `botUsername` berilmagan (sotuvchi shaxsiy bot ulamagan) bo'lsa
+ * `null` qaytaradi — chaqiruvchi tomon bunda ZeloShop umumiy botiga
+ * (`buildShopLink`/`buildDeepLink`) qaytishi kerak.
+ */
+export const buildSellerBotDeepLink = (botUsername, path) => {
+  if (!botUsername) return null;
+  const payload = path ? `p${encodeDeepLinkPath(path)}` : "";
+  return payload ? `https://t.me/${botUsername}?start=${payload}` : `https://t.me/${botUsername}`;
+};

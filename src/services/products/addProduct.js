@@ -48,6 +48,12 @@ const addProduct = async (productData, sellerId) => {
       // Tizim parametrlari
       rating: 0,
       sold: 0,
+      // "Kam sotilayotgan mahsulot" avtomatlashtirish qoidasi
+      // (`functions/automationRules.js`dagi `slow_moving_product`)
+      // uchun boshlang'ich qiymat — hozirgi vaqt, shunda yangi
+      // mahsulot darhol "eskirgan" deb belgilanmaydi (yaratilgan
+      // vaqtidan hisoblab muhlat beriladi).
+      lastSoldAtMs: Date.now(),
       isNew: true,
       promotion: false,
       createdAt: new Date().toISOString(),

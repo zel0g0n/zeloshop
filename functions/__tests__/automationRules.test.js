@@ -81,7 +81,15 @@ function buildMockDb({ sellerData = {}, customers = [], orders = [], products = 
         };
       }
       if (name === "orders") return makeQueryable(orders);
-      if (name === "products") return makeQueryable(products);
+      if (name === "products") {
+        // `runApplyDiscountAction` `.doc(id)`ga yozadi (batch orqali) -
+        // shu bilan bir vaqtda `find*Matches` so'rov (where/limit)
+        // qiladi, shuning uchun IKKALASINI ham qo'llab-quvvatlashi
+        // kerak (`makeQueryable` obyektiga `.doc` qo'shib qo'yamiz).
+        const queryable = makeQueryable(products);
+        queryable.doc = (id) => ({ __isProductRef: true, id });
+        return queryable;
+      }
       throw new Error(`Kutilmagan kolleksiya: ${name}`);
     },
     batch: () => {
@@ -209,6 +217,95 @@ describe("findLowStockMatches", () => {
     const { _testables } = loadModule(buildMockDb({ products }));
     const result = await _testables.findLowStockMatches("seller-1", { threshold: 5 });
     expect(result.map((m) => m.entityId)).toEqual(["p1"]);
+  });
+});
+
+describe("findSlowMovingProductMatches", () => {
+  test("FAQAT chegaradan eski VA zaxirasi bor VA qo'lda chegirmasi yo'q mahsulotlarni qaytaradi", async () => {
+    const products = [
+      { id: "p1", sellerId: "seller-1", name: "Eski krem", stock: 5, price: 50_000, lastSoldAtMs: NOW - 40 * DAY_MS },
+      { id: "p2", sellerId: "seller-1", name: "Yangi sotilgan", stock: 5, price: 50_000, lastSoldAtMs: NOW - 5 * DAY_MS }, // hali eski emas
+      { id: "p3", sellerId: "seller-1", name: "Tugagan", stock: 0, price: 50_000, lastSoldAtMs: NOW - 40 * DAY_MS }, // zaxira yo'q
+      { id: "p4", sellerId: "seller-1", name: "Aksiyadagi", stock: 5, price: 50_000, discountPrice: 40_000, lastSoldAtMs: NOW - 40 * DAY_MS }, // allaqachon chegirmada
+    ];
+    const { _testables } = loadModule(buildMockDb({ products }));
+    const result = await _testables.findSlowMovingProductMatches("seller-1", { days: 30 });
+    expect(result.map((m) => m.entityId)).toEqual(["p1"]);
+    expect(result[0].price).toBe(50_000);
+  });
+});
+
+describe("findCourierDelayMatches", () => {
+  test("FAQAT hali yetkazilmagan VA biriktirilganidan beri chegaradan eski buyurtmalarni qaytaradi", async () => {
+    const orders = [
+      { id: "o1", sellerId: "seller-1", courierDeliveryStatus: "assigned", courierAssignedAtMs: NOW - 5 * HOUR_MS, courierName: "Aziz" },
+      { id: "o2", sellerId: "seller-1", courierDeliveryStatus: "picked_up", courierAssignedAtMs: NOW - 1 * HOUR_MS, courierName: "Vali" }, // hali yangi
+      { id: "o3", sellerId: "seller-1", courierDeliveryStatus: "delivered", courierAssignedAtMs: NOW - 5 * HOUR_MS, courierName: "Olim" }, // yetkazilgan
+    ];
+    const { _testables } = loadModule(buildMockDb({ orders }));
+    const result = await _testables.findCourierDelayMatches("seller-1", { hours: 2 });
+    expect(result.map((m) => m.entityId)).toEqual(["o1"]);
+    expect(result[0].courierName).toBe("Aziz");
+  });
+});
+
+describe("runApplyDiscountAction", () => {
+  test("mos mahsulotlarga foizli chegirma qo'yadi va discountExpiresAt belgilaydi", async () => {
+    const db = buildMockDb();
+    const { _testables } = loadModule(db);
+    const rule = { actionParams: { discountPercent: 20, durationDays: 10 } };
+    const matches = [{ entityId: "p1", price: 100_000 }];
+    const result = await _testables.runApplyDiscountAction("seller-1", rule, matches);
+
+    expect(result.firedEntityIds).toEqual(["p1"]);
+    expect(db.__batchWrites).toHaveLength(1);
+    expect(db.__batchWrites[0].ref.id).toBe("p1");
+    expect(db.__batchWrites[0].data.discountPrice).toBe(80_000);
+    expect(typeof db.__batchWrites[0].data.discountExpiresAt).toBe("string");
+  });
+
+  test("narxi 0/yo'q mahsulotni chetlab o'tadi", async () => {
+    const db = buildMockDb();
+    const { _testables } = loadModule(db);
+    const result = await _testables.runApplyDiscountAction("seller-1", { actionParams: {} }, [{ entityId: "p1", price: 0 }]);
+    expect(result.firedEntityIds).toEqual([]);
+    expect(db.__batchWrites).toHaveLength(0);
+  });
+});
+
+describe("cooldownMsForRule (yangi trigger turlari)", () => {
+  test("slow_moving_product + apply_discount - aksiya MUDDATIGA (durationDays) teng", () => {
+    const { _testables } = loadModule(buildMockDb());
+    const cooldown = _testables.cooldownMsForRule({ triggerType: "slow_moving_product", actionType: "apply_discount", actionParams: { durationDays: 10 } });
+    expect(cooldown).toBe(10 * DAY_MS);
+  });
+
+  test("courier_delay - CHEKSIZ (bitta buyurtma uchun bir marta)", () => {
+    const { _testables } = loadModule(buildMockDb());
+    expect(_testables.cooldownMsForRule({ triggerType: "courier_delay", triggerParams: {} })).toBe(Infinity);
+  });
+});
+
+describe("processAutomationRule (yangi juftlik cheklovi)", () => {
+  test("apply_discount FAQAT slow_moving_product bilan mos - noto'g'ri kombinatsiya JIM o'tkazib yuboriladi", async () => {
+    const products = [{ id: "p1", sellerId: "s1", name: "Krem", stock: 3, price: 50_000 }];
+    const db = buildMockDb({ products });
+    const { _testables } = loadModule(db);
+    const ruleDoc = makeRuleDoc({ id: "r1", isActive: true, triggerType: "low_stock", actionType: "apply_discount", triggerParams: { threshold: 5 }, actionParams: {} });
+    await _testables.processAutomationRule("s1", ruleDoc, "token");
+    expect(db.__batchWrites).toHaveLength(0);
+  });
+
+  test("TO'LIQ oqim: slow_moving_product -> apply_discount - mahsulotga chegirma qo'yiladi", async () => {
+    const products = [{ id: "p1", sellerId: "s1", name: "Eski", stock: 3, price: 100_000, lastSoldAtMs: NOW - 40 * DAY_MS }];
+    const db = buildMockDb({ products });
+    const { _testables } = loadModule(db);
+    const ruleDoc = makeRuleDoc({ id: "r1", name: "Kam sotilgan", isActive: true, triggerType: "slow_moving_product", actionType: "apply_discount", triggerParams: { days: 30 }, actionParams: { discountPercent: 25, durationDays: 7 } });
+    await _testables.processAutomationRule("s1", ruleDoc, "token");
+
+    expect(db.__batchWrites.some((w) => w.ref.id === "p1" && w.data.discountPrice === 75_000)).toBe(true);
+    expect(ruleDoc.__firedForStore.has("p1")).toBe(true);
+    expect(ruleDoc.__statsSets).toHaveLength(1);
   });
 });
 

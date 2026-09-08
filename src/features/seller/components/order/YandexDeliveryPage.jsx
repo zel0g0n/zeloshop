@@ -8,7 +8,8 @@ import {
   Package, ChevronDown, Maximize2, Minimize2,
 } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
-import { loadLeaflet } from "@/utils/loadLeaflet";
+import { loadLeaflet, applyMapTileLayer } from "@/utils/loadLeaflet";
+import { useTheme } from "@/context/ThemeContext";
 import YandexTariffModal from "./YandexTariffModal";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
@@ -57,6 +58,7 @@ const YandexDeliveryPage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const { isDark } = useTheme();
   const initialStatus = location.state?.initialStatus || null;
 
   const [status, setStatus] = useState(initialStatus);
@@ -95,6 +97,7 @@ const YandexDeliveryPage = () => {
 
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
+  const tileLayerRef = useRef(null);
   const pickupMarkerRef = useRef(null);
   const dropoffMarkerRef = useRef(null);
   const courierMarkerRef = useRef(null);
@@ -139,10 +142,7 @@ const YandexDeliveryPage = () => {
 
       const center = pickup || dropoff;
       const map = L.map(mapContainerRef.current).setView([center.lat, center.lng], 13);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        attribution: "&copy; OpenStreetMap",
-        maxZoom: 19,
-      }).addTo(map);
+      applyMapTileLayer(L, map, tileLayerRef, isDark);
       mapRef.current = map;
 
       const makeDivIcon = (bgColor, label) => L.divIcon({
@@ -179,6 +179,7 @@ const YandexDeliveryPage = () => {
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
+        tileLayerRef.current = null;
         pickupMarkerRef.current = null;
         dropoffMarkerRef.current = null;
         courierMarkerRef.current = null;
@@ -187,6 +188,14 @@ const YandexDeliveryPage = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pickup?.lat, pickup?.lng, dropoff?.lat, dropoff?.lng]);
+
+  // TEMA (dark/light) almashsa — `LiveDeliveryMap.jsx`dagi bilan bir
+  // xil naqsh: xarita qaytadan yaratilmaydi, faqat plitka qatlami
+  // yangilanadi.
+  useEffect(() => {
+    if (!mapRef.current || !window.L) return;
+    applyMapTileLayer(window.L, mapRef.current, tileLayerRef, isDark);
+  }, [isDark]);
 
   // Kuryer belgisini xaritada yangilash.
   useEffect(() => {

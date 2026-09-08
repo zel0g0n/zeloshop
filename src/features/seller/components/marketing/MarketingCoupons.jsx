@@ -8,7 +8,8 @@ import updateSeller from "@/services/sellers/updateSeller";
 import StatusModal from "@/components/ui/StatusModal";
 import CustomSelect from "@/components/ui/CustomSelect";
 import { useLanguage } from "@/context/LanguageContext";
-import { getTariffLimits } from "@/utils/tariffLimits";
+import { getTariffLimits, getEffectiveTariffPlan } from "@/utils/tariffLimits";
+import BiznesBadge from "@/components/ui/BiznesBadge";
 
 const MarketingCoupons = () => {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ const MarketingCoupons = () => {
   // tagacha, Z-Biznes'da cheksiz (haqiqiy tekshiruv `firestore.rules`da
   // - bu yerdagi hisob faqat tezkor UX xabari uchun).
   const maxCoupons = getTariffLimits(store).maxCoupons;
+  const isBiznes = getEffectiveTariffPlan(store) === "biznes";
   const couponLimitReached = maxCoupons !== null && coupons.length >= maxCoupons;
   // Hamkor/blogger kodlari samaradorligi (#117) - alohida, YIG'MA
   // kolleksiyadan (`orders.js` avtomatik yozadi), pastdagi
@@ -187,6 +189,47 @@ const MarketingCoupons = () => {
       setBirthdaySaving(false);
     }
   }, [sellerId, birthdayDiscountPercent]);
+
+  // VIP TUG'ILGAN KUN BONUSI (2026-09, "katta bizneslar uchun"
+  // ro'yxati, 2-guruh) — FAQAT Z-Biznes tarifiga xos (`firestore.rules`
+  // yozishda ham, `functions/birthdayRewards.js` ijro paytida ham
+  // qayta tekshiradi). Oddiy tug'ilgan kun chegirmasi YOQILGAN bo'lsa
+  // ko'rsatiladi — VIP bonusi shu asosiy tizim USTIGA qo'shiladi.
+  const [vipBirthdayEnabled, setVipBirthdayEnabled] = useState(store?.vipBirthdayBonusEnabled === true);
+  const [vipBirthdayPercent, setVipBirthdayPercent] = useState(store?.vipBirthdayDiscountPercent || 20);
+  const [vipBirthdayDirty, setVipBirthdayDirty] = useState(false);
+  const [vipBirthdaySaving, setVipBirthdaySaving] = useState(false);
+
+  useEffect(() => {
+    if (!store) return;
+    setVipBirthdayEnabled(store.vipBirthdayBonusEnabled === true);
+    setVipBirthdayPercent(store.vipBirthdayDiscountPercent || 20);
+  }, [store]);
+
+  const handleVipBirthdayToggle = useCallback(async () => {
+    const next = !vipBirthdayEnabled;
+    setVipBirthdayEnabled(next);
+    if (sellerId) {
+      try {
+        await updateSeller(sellerId, { vipBirthdayBonusEnabled: next });
+      } catch (err) {
+        setGlobalError(err.message);
+      }
+    }
+  }, [vipBirthdayEnabled, sellerId]);
+
+  const handleVipBirthdaySave = useCallback(async () => {
+    if (!sellerId) return;
+    setVipBirthdaySaving(true);
+    try {
+      await updateSeller(sellerId, { vipBirthdayDiscountPercent: Number(vipBirthdayPercent) || 20 });
+      setVipBirthdayDirty(false);
+    } catch (err) {
+      setGlobalError(err.message);
+    } finally {
+      setVipBirthdaySaving(false);
+    }
+  }, [sellerId, vipBirthdayPercent]);
 
   // "TASHLAB KETILGAN SAVAT" ESLATMASI SOZLAMALARI - eslatmaning
   // o'zi standart bo'yicha YOQILGAN (chegirmasiz - shunchaki
@@ -506,6 +549,55 @@ const MarketingCoupons = () => {
                 >
                   {birthdaySaving ? t("marketing.birthday.saving") : t("marketing.birthday.save")}
                 </button>
+              )}
+            </div>
+          )}
+
+          {/* VIP TUG'ILGAN KUN BONUSI — faqat Z-Biznes, va faqat
+              oddiy tug'ilgan kun chegirmasi allaqachon yoqilgan bo'lsa. */}
+          {birthdayDiscountEnabled && isBiznes && (
+            <div className="pt-3 mt-1 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-[11px] font-black text-slate-600 dark:text-slate-300">{t("marketing.birthday.vipTitle")}</h4>
+                  <BiznesBadge size="xs" />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleVipBirthdayToggle}
+                  className={`w-10 h-6 rounded-full flex items-center px-0.5 transition-colors ${vipBirthdayEnabled ? "bg-amber-500 justify-end" : "bg-slate-200 dark:bg-slate-700 justify-start"}`}
+                >
+                  <span className="w-5 h-5 rounded-full bg-white shadow-sm" />
+                </button>
+              </div>
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("marketing.birthday.vipDescription")}</p>
+              {vipBirthdayEnabled && (
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="flex-1">
+                    <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t("marketing.birthday.vipPercentLabel")}</label>
+                    <div className="relative mt-1">
+                      <input
+                        type="number"
+                        min="1"
+                        max="70"
+                        value={vipBirthdayPercent}
+                        onChange={(e) => { setVipBirthdayPercent(e.target.value); setVipBirthdayDirty(true); }}
+                        className="w-full h-10 px-3 pr-8 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                      <Percent size={12} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
+                    </div>
+                  </div>
+                  {vipBirthdayDirty && (
+                    <button
+                      type="button"
+                      onClick={handleVipBirthdaySave}
+                      disabled={vipBirthdaySaving}
+                      className="h-10 px-4 mt-4 bg-amber-500 text-white text-xs font-black rounded-xl disabled:opacity-60"
+                    >
+                      {vipBirthdaySaving ? t("marketing.birthday.saving") : t("marketing.birthday.save")}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
           )}

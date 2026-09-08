@@ -9,7 +9,6 @@ import useUpdateProductFull from "@/hooks/seller/useUpdateProductFull";
 import { useUploadImage } from "@/hooks/storage/useUploadStorage";
 import { useProductImages } from "@/hooks/seller/useProductImages";
 import { useAIDescription } from "@/hooks/seller/useAIDescription";
-import { useSocialPost } from "@/hooks/seller/useSocialPost";
 import { getEffectiveCategoriesForStore } from "@/config/categoryCustomization";
 import StatusModal from "@/components/ui/StatusModal";
 
@@ -21,9 +20,6 @@ import PricingCard from "./PricingCard";
 import VariantsCard from "./VariantsCard";
 import AttributesCard from "./AttributesCard";
 import DescriptionCard from "./DescriptionCard";
-import SocialPostGeneratorCard from "./SocialPostGeneratorCard";
-import InstagramAdImageCard from "./InstagramAdImageCard";
-import StoryAdImageCard from "./StoryAdImageCard";
 import SellerReviewsCard from "./SellerReviewsCard";
 import SubmitBar from "./SubmitBar";
 import StockHistoryPanel from "./StockHistoryPanel";
@@ -80,21 +76,6 @@ const EditProductPage = () => {
     category,
     thumbnailImage: images[0],
     onResult: setDescription,
-  });
-
-  const {
-    platform: socialPlatform,
-    setPlatform: setSocialPlatform,
-    postText: socialPostText,
-    setPostText: setSocialPostText,
-    generating: socialGenerating,
-    error: socialError,
-    generate: handleGenerateSocialPost,
-  } = useSocialPost({
-    productName: title,
-    description,
-    price,
-    thumbnailImage: images[0],
   });
 
   useEffect(() => {
@@ -273,26 +254,19 @@ const EditProductPage = () => {
           onDescriptionChange={setDescription}
         />
 
-        {store?.aiCeoEnabled === true && (
-          <SocialPostGeneratorCard
-            platform={socialPlatform}
-            onPlatformChange={setSocialPlatform}
-            postText={socialPostText}
-            onPostTextChange={setSocialPostText}
-            generating={socialGenerating}
-            error={socialError}
-            onGenerate={handleGenerateSocialPost}
-            productImageUrl={images[0]?.url || null}
-          />
-        )}
+        {/* IJTIMOIY TARMOQ POSTI GENERATORI ("Post yaratish") — 2026-09,
+            sotuvchi so'roviga ko'ra shu sahifadan OLIB TASHLANGANICHA
+            qoladi (sotuvchi buni kerak emas deb aniq belgiladi).
+            Backend funksiyasi (`generateSocialPost`) va tegishli
+            komponent/hook O'CHIRILMAGAN, faqat shu yerdagi chaqiruv
+            yo'q. */}
 
-        <InstagramAdImageCard imageUrl={product?.aiAdImageUrl || null} />
-
-        <StoryAdImageCard
-          productId={id}
-          initialImageUrl={product?.aiStoryImageUrl || null}
-          aiCeoEnabled={store?.aiCeoEnabled === true}
-        />
+        {/* AI RASM GENERATSIYASI (avtomatik reklama surati va qo'lda
+            chaqiriladigan "AI asosiy rasm" tugmasi) — 2026-09, sotuvchi
+            so'roviga ko'ra BUTUNLAY OLIB TASHLANDI (Gemini API
+            kvotasi/429 muammolari sababli, "rasm generatsiya qilish
+            kerak emas" deb ANIQ belgilandi). `InstagramAdImageCard.jsx`
+            va `AiHeroImageCard.jsx` O'CHIRILGAN. */}
 
         <SellerReviewsCard productId={id} />
 

@@ -1,40 +1,53 @@
-import { useMemo, useState, useEffect, useCallback } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTelegramWebApp } from '@/config/telegram';
 import {
-  BarChart3, Users, CreditCard, Zap, Truck, Tag, Image,
-  Bell, Globe, Lock, Headphones, LogOut, ChevronRight, Store, Moon, Sun, Bot, Bike, Gift, Inbox, UserRoundCog, PackagePlus, TrendingUp, LayoutGrid, Crown, Workflow,
+  BarChart3, Users, CreditCard, Zap, Truck, Tag,
+  Globe, Lock, Headphones, LogOut, ChevronRight, Store, Moon, Sun, Bot, Gift, Inbox, UserRoundCog, Crown, Workflow, Settings,
 } from 'lucide-react';
 import { useSession } from '@/context/SessionContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useLanguage } from '@/context/LanguageContext';
 import { translations } from '@/i18n/translations';
-import updateSeller from '@/services/sellers/updateSeller';
 import LanguageModal from '@/components/ui/LanguageModal';
 import ThemeModal from '@/components/ui/ThemeModal';
 import StatusModal from '@/components/ui/StatusModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
+import { getEffectiveTariffPlan } from '@/utils/tariffLimits';
+import BiznesBadge from '@/components/ui/BiznesBadge';
+
+// Z-Start tarifida MAVJUD BO'LMAGAN bo'limlar (2026-09 tarif bo'yicha
+// tozalash) — ushbu ID'ga ega elementlar Z-Pro/Z-Biznes uchun
+// ko'rsatiladi. `dokon-sozlamalari` bu ro'yxatda YO'Q — u umuman
+// boshqacha sabab bilan (barcha tariflar uchun) ro'yxatdan olib
+// tashlanib, profil kartochkasiga ko'chirilgan (pastga qarang).
+const START_HIDDEN_IDS = new Set([
+  'analitika', 'mijozlar', 'inbox',
+  'xodimlar', 'marketing',
+]);
+
+// FAQAT Z-Biznesda ishlaydigan bo'limlar (`BusinessCommandCenterPage.jsx`,
+// `AutomationRulesPage.jsx` — ikkalasi ham kodda `isBiznes` bilan qattiq
+// qulflangan, Z-Pro'da faqat "yangilang" devoriga chiqadi) — 2026-09:
+// foydalanuvchi so'rovi bilan Z-Pro uchun ham yashiriladi ("ishlamaydigan
+// narsalar ko'rinmasin").
+const BIZNES_ONLY_IDS = new Set(['buyruq-markazi', 'automation-rules']);
 
 // OLDIN: bu sahifa oddiy ro'yxat edi, ikonkalar emoji shaklida,
 // "Tizimdan chiqish" tasdiqlashsiz to'g'ridan-to'g'ri ishlardi, va
 // bildirishnoma sozlamasi umuman yo'q edi.
 const MorePage = () => {
-  const { telegramUser, store, sellerId } = useSession();
+  const { telegramUser, store } = useSession();
   const { isDark } = useTheme();
   const { language, t } = useLanguage();
+  const effectivePlan = getEffectiveTariffPlan(store);
+  const isStart = effectivePlan === "start";
+  const isBiznes = effectivePlan === "biznes";
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [openModal, setOpenModal] = useState(null); // 'language' | 'theme' | null
   const [comingSoonName, setComingSoonName] = useState(null);
-  const [notifyNewOrder, setNotifyNewOrder] = useState(true);
-  const [savingPref, setSavingPref] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (store?.notifyNewOrder !== undefined) {
-      setNotifyNewOrder(store.notifyNewOrder);
-    }
-  }, [store]);
 
   const displayName = useMemo(() => {
     if (store?.storeName) return store.storeName;
@@ -44,20 +57,8 @@ const MorePage = () => {
 
   const isActive = store?.status !== "suspended";
 
-  const handleToggleNotifications = useCallback(async () => {
-    const next = !notifyNewOrder;
-    setNotifyNewOrder(next);
-    setSavingPref(true);
-    try {
-      await updateSeller(sellerId, { notifyNewOrder: next });
-    } catch {
-      setNotifyNewOrder(!next); // xatolik bo'lsa, orqaga qaytaramiz
-    } finally {
-      setSavingPref(false);
-    }
-  }, [notifyNewOrder, sellerId]);
-
-  const menuGroups = useMemo(() => [
+  const menuGroups = useMemo(() => {
+    const groups = [
     {
       title: t("more.groupManagement"),
       items: [
@@ -74,22 +75,21 @@ const MorePage = () => {
       items: [
         { id: 'tolov-tizimlari', name: t("more.paymentSystemsName"), desc: t("more.paymentSystemsDesc"), icon: Zap, onClick: () => navigate('/seller/payment-settings') },
         { id: 'yetkazib-berish', name: t("more.deliveryName"), desc: t("more.deliveryDesc"), icon: Truck, onClick: () => navigate('/seller/delivery-settings') },
-        { id: 'kuryerlar', name: t("more.couriersName"), desc: t("more.couriersDesc"), icon: Bike, onClick: () => navigate('/seller/couriers') },
         { id: 'xodimlar', name: t("more.staffName"), desc: t("more.staffDesc"), icon: UserRoundCog, onClick: () => navigate('/seller/staff') },
-        { id: 'dokon-sozlamalari', name: t("more.storeSettingsName"), desc: t("more.storeSettingsDesc"), icon: Store, onClick: () => navigate('/seller/store-settings') },
-        { id: 'kategoriya-boshqaruvi', name: t("more.categoryManagementName"), desc: t("more.categoryManagementDesc"), icon: LayoutGrid, onClick: () => navigate('/seller/category-settings') },
-        { id: 'bannerlar', name: t("more.bannersName"), desc: t("more.bannersDesc"), icon: Image, onClick: () => navigate('/seller/banners') },
         { id: 'connections', name: t("more.connectionsName"), desc: t("more.connectionsDesc"), icon: Bot, onClick: () => navigate('/seller/connections') },
+        // 2026-09 (8-band): "Marketing va Kuponlar" va "Mahsulot
+        // bandllari" endi BITTA sahifada (tab-filtr bilan)
+        // birlashtirilgan (`MarketingHub.jsx`) - shuning uchun bu
+        // yerda ham ENDI faqat BITTA yo'l (bandllar - shu sahifaning
+        // "Bandllar" tabi orqali ochiladi, alohida menyu band shart
+        // emas).
         { id: 'marketing', name: t("more.marketingName"), desc: t("more.marketingDesc"), icon: Tag, onClick: () => navigate('/seller/marketing') },
-        { id: 'bundles', name: t("more.bundlesName"), desc: t("more.bundlesDesc"), icon: PackagePlus, onClick: () => navigate('/seller/bundles') },
-        { id: 'pricing-suggestions', name: t("more.pricingSuggestionsName"), desc: t("more.pricingSuggestionsDesc"), icon: TrendingUp, onClick: () => navigate('/seller/pricing-suggestions') },
         { id: 'automation-rules', name: t("more.automationRulesName"), desc: t("more.automationRulesDesc"), icon: Workflow, onClick: () => navigate('/seller/automation-rules') },
       ]
     },
     {
       title: t("more.groupNotifications"),
       items: [
-        { id: 'bildirishnoma', name: t("more.notificationsName"), desc: t("more.notificationsDesc"), icon: Bell, toggle: true, toggleValue: notifyNewOrder, onToggle: handleToggleNotifications },
         { id: 'til', name: t("more.languageName"), desc: translations[language].language_name, icon: Globe, onClick: () => setOpenModal('language') },
         { id: 'tema', name: t("more.themeName"), desc: isDark ? t("more.darkMode") : t("more.lightMode"), icon: isDark ? Moon : Sun, onClick: () => setOpenModal('theme') },
         { id: 'maxfiylik', name: t("more.privacyName"), desc: t("more.privacyDesc"), icon: Lock, onClick: () => navigate('/seller/security') },
@@ -101,13 +101,26 @@ const MorePage = () => {
         { id: 'support', name: t("more.supportName"), desc: t("more.supportDesc"), icon: Headphones, onClick: () => navigate('/seller/support') },
       ]
     },
-  ], [t, language, isDark, notifyNewOrder, handleToggleNotifications, navigate]);
+    ];
+
+    // Joriy tarifda mavjud bo'lmagan (yoki ochilganda faqat "yangilang"
+    // devoriga chiqadigan) bo'limlar butunlay yashiriladi (2026-09 tarif
+    // bo'yicha tozalash — oldin hamma tarifda bir xil to'liq ro'yxat
+    // ko'rsatilardi). Bo'sh qolgan guruh sarlavhasi ham ko'rsatilmasin
+    // deb, items bo'sh qolgan guruhlar butunlay chiqarib tashlanadi.
+    return groups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => {
+          if (isStart && START_HIDDEN_IDS.has(item.id)) return false;
+          if (!isBiznes && BIZNES_ONLY_IDS.has(item.id)) return false;
+          return true;
+        }),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [t, language, isDark, navigate, isStart, isBiznes]);
 
   const handleItemClick = (item) => {
-    if (item.toggle) {
-      item.onToggle();
-      return;
-    }
     if (item.comingSoon) {
       setComingSoonName(item.name);
       return;
@@ -165,6 +178,19 @@ const MorePage = () => {
                 {isActive ? t("more.statusActive") : t("more.statusSuspended")}
               </span>
             </div>
+
+            {/* "Do'kon sozlamalari" endi alohida ro'yxat elementi emas —
+                profil kartochkasidagi shu sozlama ikonkasi orqali
+                to'g'ridan-to'g'ri ochiladi (barcha tariflar uchun). */}
+            <button
+              type="button"
+              onClick={() => navigate('/seller/store-settings')}
+              aria-label={t("more.storeSettingsName")}
+              title={t("more.storeSettingsName")}
+              className="shrink-0 w-9 h-9 flex items-center justify-center rounded-xl bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-slate-400 active:scale-95 transition-transform"
+            >
+              <Settings size={16} />
+            </button>
           </div>
         </div>
 
@@ -189,8 +215,9 @@ const MorePage = () => {
                           <Icon size={16} />
                         </div>
                         <div className="min-w-0">
-                          <h4 className="text-sm font-bold text-gray-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-all truncate">
-                            {item.name}
+                          <h4 className="text-sm font-bold text-gray-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-all truncate flex items-center gap-1.5">
+                            <span className="truncate">{item.name}</span>
+                            {BIZNES_ONLY_IDS.has(item.id) && <BiznesBadge size="xs" />}
                           </h4>
                           <p className="text-[11px] text-gray-400 dark:text-slate-500 font-medium truncate">
                             {item.desc}
@@ -198,16 +225,7 @@ const MorePage = () => {
                         </div>
                       </div>
 
-                      {item.toggle ? (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); item.onToggle(); }}
-                          disabled={savingPref}
-                          className={`shrink-0 w-11 h-6 rounded-full p-0.5 transition-colors disabled:opacity-50 ${item.toggleValue ? "bg-emerald-500" : "bg-slate-200 dark:bg-slate-700"}`}
-                        >
-                          <span className={`block w-5 h-5 rounded-full bg-white shadow-xs transition-transform ${item.toggleValue ? "translate-x-5" : ""}`} />
-                        </button>
-                      ) : item.comingSoon ? (
+                      {item.comingSoon ? (
                         <span className="shrink-0 text-[9px] font-black text-gray-300 dark:text-slate-600 uppercase tracking-wider">{t("more.comingSoon")}</span>
                       ) : (
                         <ChevronRight size={16} className="shrink-0 text-gray-300 dark:text-slate-600" />

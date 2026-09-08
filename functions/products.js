@@ -10,6 +10,7 @@ const { DEFAULT_GENERATION_CONFIG, BASE_STYLE_INSTRUCTION, CTA_RULE } = require(
 const { withSentry, SENTRY_DSN } = require("./lib/sentry");
 const { getNicheConfig } = require("./lib/niches");
 const { buildStockAuditEntryFromChange, writeStockAuditEntry } = require("./lib/stockAuditLog");
+const { resolveImageBase64 } = require("./lib/safeFetch");
 
 /**
  * Sof funksiya - Gemini'ga yuboriladigan promptni tuzadi. ALOHIDA
@@ -75,7 +76,7 @@ async function handleGenerateProductDescription(request) {
   // 480/kunlik nazariy maksimumni ancha pasaytiradi.
   await checkRateLimit(`generateProductDescriptionDaily:${request.auth.uid}`, 100, 86400);
 
-  const { productName, category, imageBase64, imageMimeType } = request.data || {};
+  const { productName, category, imageBase64, imageMimeType, imageUrl } = request.data || {};
   const name = (productName || "").trim();
 
   if (!name) {
@@ -98,8 +99,12 @@ async function handleGenerateProductDescription(request) {
     // Agar sotuvchi rasm yuklagan bo'lsa, o'sha rasm ham AI'ga
     // yuboriladi (Gemini multimodal — matn VA rasmni birga tahlil
     // qila oladi) — natijada tavsif haqiqiy mahsulotning ko'rinishiga
-    // (rangi, shakli, turi) asoslanadi, faqat nomga emas.
-    const hasImage = Boolean(imageBase64 && imageMimeType);
+    // (rangi, shakli, turi) asoslanadi, faqat nomga emas. `imageUrl` —
+    // mahsulotni TAHRIRLASHDA, rasm ALLAQACHON Storage'da bo'lganda
+    // (mijoz uni CORS'ga bog'liq bo'lmagan holda serverga yuboradi -
+    // batafsil izoh: `lib/safeFetch.js`dagi `resolveImageBase64`).
+    const imagePayload = await resolveImageBase64({ imageBase64, imageMimeType, imageUrl });
+    const hasImage = Boolean(imagePayload);
     const textPrompt = buildDescriptionPrompt(name, category, hasImage, nicheId);
 
     const contents = hasImage
@@ -108,7 +113,7 @@ async function handleGenerateProductDescription(request) {
             role: "user",
             parts: [
               { text: textPrompt },
-              { inlineData: { mimeType: imageMimeType, data: imageBase64 } },
+              { inlineData: { mimeType: imagePayload.mimeType, data: imagePayload.base64 } },
             ],
           },
         ]
@@ -204,7 +209,7 @@ async function handleGenerateSocialPost(request) {
     throw new HttpsError("permission-denied", "Bu funksiya faqat AI CEO premium mijozlari uchun mavjud.");
   }
 
-  const { productName, description, price, platform, imageBase64, imageMimeType } = request.data || {};
+  const { productName, description, price, platform, imageBase64, imageMimeType, imageUrl } = request.data || {};
   const name = (productName || "").trim();
   if (!name) {
     throw new HttpsError("invalid-argument", "Mahsulot nomi ko'rsatilishi shart.");
@@ -216,7 +221,11 @@ async function handleGenerateSocialPost(request) {
 
   try {
     const ai = createGeminiClient(GEMINI_API_KEY.value());
-    const hasImage = Boolean(imageBase64 && imageMimeType);
+    // `imageUrl` - `handleGenerateProductDescription`dagi BILAN BIR
+    // XIL "Failed to fetch" (CORS) tuzatishi: batafsil izoh
+    // `lib/safeFetch.js`dagi `resolveImageBase64`da.
+    const imagePayload = await resolveImageBase64({ imageBase64, imageMimeType, imageUrl });
+    const hasImage = Boolean(imagePayload);
 
     // 15-NICHE UNIVERSAL PLATFORMA: `nicheId` sotuvchining O'Z
     // Firestore hujjatidan (yuqorida `sellerSnap` orqali allaqachon
@@ -226,7 +235,7 @@ async function handleGenerateSocialPost(request) {
     const textPrompt = `${buildSocialPostPrompt(name, description, price, platformStyle, nicheId)}\n\n${hasImage ? "Ilova qilingan RASMga ham qarab yoz." : ""}`;
 
     const contents = hasImage
-      ? [{ role: "user", parts: [{ text: textPrompt }, { inlineData: { mimeType: imageMimeType, data: imageBase64 } }] }]
+      ? [{ role: "user", parts: [{ text: textPrompt }, { inlineData: { mimeType: imagePayload.mimeType, data: imagePayload.base64 } }] }]
       : textPrompt;
 
     const response = await ai.models.generateContent({

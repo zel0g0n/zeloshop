@@ -26,8 +26,7 @@ const PricingSuggestionsPage = () => {
   // (`useSession` boshida `store` hali `null` bo'lishi mumkin). Buni
   // `useState`ga bir marta "urug'" sifatida berish, keyin `useEffect`
   // orqali sinxronlash — eskirgan/noto'g'ri qiymatni "muzlatib qo'yish"
-  // xavfini keltirib chiqaradi (`StoryAdImageCard.jsx`da ham xuddi shu
-  // naqsh qo'llanilgan). Shuning uchun har renderda faqat OPTIMISTIK
+  // xavfini keltirib chiqaradi. Shuning uchun har renderda faqat OPTIMISTIK
   // ustunlik (`overrideEnabled`, toggle bosilganda) YOKI haqiqiy
   // `store` qiymatidan hisoblanadi — alohida sinxronlash effekti YO'Q.
   const [overrideEnabled, setOverrideEnabled] = useState(null);

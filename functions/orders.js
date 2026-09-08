@@ -464,6 +464,15 @@ async function handleCreateOrder(request) {
           sold: admin.firestore.FieldValue.increment(orderItems[i].quantity),
           soldTodayCount: dailySoldUpdate.soldTodayCount,
           soldTodayDate: dailySoldUpdate.soldTodayDate,
+          // "KAM SOTILAYOTGAN MAHSULOT" AVTOMATLASHTIRISH TRIGGERI
+          // (2026-09, "Buyruq Markazi/Avtomatlashtirish kengaytmasi"):
+          // `functions/automationRules.js`dagi `slow_moving_product`
+          // trigger'i shu maydonni o'qiydi ("oxirgi marta QACHON
+          // sotilgan") — mahsulot yaratilganda ham (`addProduct.js`)
+          // boshlang'ich qiymat sifatida beriladi, shunda yangi
+          // qo'shilgan mahsulot darhol "sotilmayapti" deb belgilanmaydi
+          // (yaratilish vaqtidan hisoblangan muhlat beriladi).
+          lastSoldAtMs: Date.now(),
           // ZAXIRA HARAKATI AUDIT JURNALI (2026-09, "ombor nazorati"):
           // `functions/products.js`dagi `onProductWriteUpdateStockAudit`
           // trigger shu maydonlarni o'qib, `sellers/{id}/stockAuditLog`ga

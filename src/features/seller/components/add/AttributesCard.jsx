@@ -3,6 +3,7 @@ import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { getAttributeKeysForNiche } from "@/config/niches";
 import { getAttributeDefinition, ATTRIBUTE_TYPES } from "@/config/attributeDictionary";
+import CustomSelect from "@/components/ui/CustomSelect";
 
 /**
  * DINAMIK MAHSULOT ATRIBUTLARI (15-niche universal platforma).
@@ -43,20 +44,30 @@ const AttributesCard = ({ attributes, disabled, onAttributesChange }) => {
           const value = attributes?.[key] ?? "";
 
           if (def.type === ATTRIBUTE_TYPES.SELECT) {
+            // FOYDALANUVCHI SO'ROVI (2026-09): brauzerning standart
+            // (native) <select>i o'rniga ilovaning boshqa qismlarida
+            // (masalan `DeliverySettingsPage.jsx`) ALLAQACHON
+            // ishlatiladigan zamonaviy `CustomSelect` komponenti
+            // ishlatiladi — ko'rinishi ilovaning qolgan qismi bilan
+            // mos bo'lishi uchun. "Tanlanmagan" (bo'sh qiymat) ham
+            // avvalgidek RO'YXATNING BIRINCHI, tanlanadigan varianti
+            // sifatida saqlanadi.
+            const selectOptions = [
+              { value: "", label: t("sellerProductForm.attributeNotSet") },
+              ...(def.options || []).map((o) => ({
+                value: o.value,
+                label: t(`productAttributes.${key}.options.${o.value}`),
+              })),
+            ];
             return (
               <div key={key} className="space-y-1">
                 <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 block truncate">{attrLabel}</label>
-                <select
+                <CustomSelect
                   disabled={disabled}
                   value={value}
-                  onChange={(e) => handleChange(key, e.target.value)}
-                  className="w-full h-10 px-2.5 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl font-semibold text-[11px] focus:outline-none focus:ring-1 focus:ring-indigo-500 border border-transparent disabled:opacity-60"
-                >
-                  <option value="">{t("sellerProductForm.attributeNotSet")}</option>
-                  {(def.options || []).map((o) => (
-                    <option key={o.value} value={o.value}>{t(`productAttributes.${key}.options.${o.value}`)}</option>
-                  ))}
-                </select>
+                  onChange={(v) => handleChange(key, v)}
+                  options={selectOptions}
+                />
               </div>
             );
           }
