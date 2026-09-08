@@ -14,24 +14,32 @@ const MorePage = ({ onNavigate }) => {
     {
       title: "Asosiy boshqaruv",
       items: [
-        { id: 'analitika', name: 'Analitika va Hisobotlar', icon: '📊', desc: 'Savdo grafigi va eng ko‘p sotilgan mahsulotlar' },
-        { id: 'mijozlar', name: 'Mijozlar bazasi', icon: '👥', desc: 'Xaridorlar ro‘yxati va ularning buyurtmalari' },
-        { id: 'tolovlar', name: 'To‘lovlar tarixi', icon: '💳', desc: `Yechib olingan pullar: ${storeInfo.balance}` },
+        { id: 'analitika', name: 'Analitika va Hisobotlar', icon: '📊', desc: 'Savdo grafigi va eng ko'p sotilgan mahsulotlar' },
+        { id: 'mijozlar', name: 'Mijozlar bazasi', icon: '👥', desc: 'Xaridorlar ro'yxati va ularning buyurtmalari' },
+        { id: 'tolovlar', name: 'To'lovlar tarixi', icon: '💳', desc: `Yechib olingan pullar: ${storeInfo.balance}` },
       ]
     },
     {
       title: "Do'kon va Marketing",
       items: [
         { id: 'marketing', name: 'Marketing (Kuponlar)', icon: '🎯', desc: 'Chegirmalar va reklama bannerlarini yaratish' },
-        { id: 'sozlamalar', name: 'Do‘kon sozlamalari', icon: '⚙️', desc: 'Logotip, do‘kon nomi va bio ma’lumotlar' },
-        { id: 'bildirishnomalar', name: 'Bildirishnomalar', icon: '🔔', desc: 'Buyurtma va to‘lov haqidagi xabarlar sozlamasi' },
+        { id: 'sozlamalar', name: 'Do'kon sozlamalari', icon: '⚙️', desc: 'Logotip, do'kon nomi va bio ma'lumotlar' },
+        { id: 'bildirishnomalar', name: 'Bildirishnomalar', icon: '🔔', desc: 'Buyurtma va to'lov haqidagi xabarlar sozlamasi' },
+      ]
+    },
+    {
+      title: "Integratsiyalar va do'kon mo'yon sozlamalari",
+      items: [
+        { id: 'sotuvchi_taklifini_qiing', name: 'Sotuvchi taklifini qiing', icon: '📝', desc: 'Do'st taklif qilish va bonus olish' },
+        { id: 'tariflar', name: 'To'lovlar va Tariflar', icon: '💰', desc: 'Jory rejim va Pro imkoniyatlari' },
+        { id: 'xabarlar_oqimi', name: 'Xabarlar oqimi', icon: '📬', desc: 'AI CEO tasviriyatlari va xulosalari' },
       ]
     },
     {
       title: "Tizim",
       items: [
-        { id: 'profil', name: 'Profil sozlamalari', icon: '👤', desc: 'Shaxsiy ma’lumotlar va xavfsizlik' },
-        { id: 'til', name: 'Ilova tili', icon: '🌐', desc: 'O‘zbekcha (Lotin)' },
+        { id: 'profil', name: 'Profil sozlamalari', icon: '👤', desc: 'Shaxsiy ma'lumotlar va xavfsizlik' },
+        { id: 'til', name: 'Ilova tili', icon: '🌐', desc: 'O'zbekcha (Lotin)' },
       ]
     }
   ];
@@ -41,7 +49,7 @@ const MorePage = ({ onNavigate }) => {
       
       {/* 1. HEADER */}
       <div className="p-4 bg-white sticky top-0 shadow-sm z-10">
-        <h1 className="text-xl font-black text-gray-900 tracking-tight">Ko‘proq</h1>
+        <h1 className="text-xl font-black text-gray-900 tracking-tight">Ko'proq</h1>
       </div>
 
       {/* 2. SOTUVCHI PROFILI KARTASI (Dizayndagi 11. Profil qismiga mos) */}
