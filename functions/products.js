@@ -137,7 +137,10 @@ async function handleGenerateProductDescription(request) {
   }
 }
 
-exports.generateProductDescription = onCall({ secrets: [GEMINI_API_KEY, SENTRY_DSN], region: "asia-south1" }, withSentry(handleGenerateProductDescription));
+// 2026-09 audit: standart (60s) `timeoutSeconds` o'rniga 90s - bu
+// funksiya rasmni (URL bo'lsa, avval yuklab olib) Gemini'ga multimodal
+// (matn+rasm) so'rov sifatida yuboradi, oddiy matnli chaqiruvdan sekinroq.
+exports.generateProductDescription = onCall({ secrets: [GEMINI_API_KEY, SENTRY_DSN], region: "asia-south1", timeoutSeconds: 90 }, withSentry(handleGenerateProductDescription));
 
 /**
  * AI CEO — 3-BOSQICH: IJTIMOIY TARMOQ POSTI GENERATORI.
@@ -257,7 +260,8 @@ async function handleGenerateSocialPost(request) {
   }
 }
 
-exports.generateSocialPost = onCall({ secrets: [GEMINI_API_KEY, SENTRY_DSN], region: "asia-south1" }, withSentry(handleGenerateSocialPost));
+// `generateProductDescription`dagi BIR XIL sabab - rasm bo'lsa, multimodal so'rov.
+exports.generateSocialPost = onCall({ secrets: [GEMINI_API_KEY, SENTRY_DSN], region: "asia-south1", timeoutSeconds: 90 }, withSentry(handleGenerateSocialPost));
 
 /**
  * AKSIYA (faol chegirma) SONI HISOBLAGICHI (`sellers/{id}.activeDiscountCount`)

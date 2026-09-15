@@ -51,7 +51,15 @@ function withSentry(handler) {
       return await handler(...args);
     } catch (err) {
       if (initialized) {
-        Sentry.captureException(err, { extra: { uid: args[0]?.auth?.uid || null } });
+        // KENGAYTIRISH (2026-09-14): ba'zi xatolar (masalan Atmos
+        // validatsiya xatolari) diagnostika uchun qo'shimcha kontekst
+        // (masalan yuborilgan to'liq JSON payload) qo'shib qo'yishi
+        // mumkin - `err.extraContext` (oddiy obyekt) orqali. Bu Sentry
+        // "Additional Data" bo'limida to'liq (xato XABARIGA qo'shilgan,
+        // KESILADIGAN matndan farqli o'laroq) ko'rinadi.
+        Sentry.captureException(err, {
+          extra: { uid: args[0]?.auth?.uid || null, ...(err?.extraContext || {}) },
+        });
       }
       throw err; // MUHIM: xatoni Sentry'ga yuborgandan KEYIN ham,
       // asl xatti-harakat o'zgarmasligi uchun QAYTA TASHLANADI -

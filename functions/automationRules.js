@@ -3,6 +3,7 @@ const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { admin, db, BOT_TOKEN } = require("./lib/admin");
 const { sendTelegramMessage, buildSellerAppLink } = require("./lib/helpers");
 const { getSellerCustomBotToken, sendCustomerNotification } = require("./lib/customerNotify");
+const { personalizeMessage } = require("./lib/messagePersonalization");
 const { incrementDailyStat } = require("./lib/dailyStats");
 const { processBatched } = require("./lib/batchProcess");
 const { getEffectiveTariffPlan } = require("./lib/tariffs");
@@ -90,17 +91,6 @@ const MAX_CUSTOMER_MESSAGES_PER_RULE_RUN = 50;
 const LOW_STOCK_COOLDOWN_DAYS = 7;
 
 const formatMoney = (n) => `${Math.round(n).toLocaleString()} so'm`;
-
-/**
- * Sotuvchi yozgan xabar shabloni ichidagi `{ism}` o'rniga mijozning
- * ismini (to'liq ismning BIRINCHI so'zi) qo'yadi — HAQIQIY, oddiy
- * shaxsiylashtirish (mock EMAS). Ism topilmasa, xushmuomala umumiy
- * murojaat bilan almashtiriladi.
- */
-function personalizeMessage(template, fullName) {
-  const firstName = (fullName || "").trim().split(/\s+/)[0] || "";
-  return String(template || "").split("{ism}").join(firstName || "Hurmatli mijoz");
-}
 
 function clampNumber(value, fallback, min, max) {
   const n = Number.isFinite(Number(value)) ? Math.round(Number(value)) : fallback;

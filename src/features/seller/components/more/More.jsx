@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTelegramWebApp } from '@/config/telegram';
 import {
-  BarChart3, Users, CreditCard, Zap, Truck, Tag,
+  BarChart3, Users, CreditCard, Truck, Tag,
   Globe, Lock, Headphones, LogOut, ChevronRight, Store, Moon, Sun, Bot, Gift, Inbox, UserRoundCog, Crown, Workflow, Settings,
 } from 'lucide-react';
 import { useSession } from '@/context/SessionContext';
@@ -73,7 +73,11 @@ const MorePage = () => {
     {
       title: t("more.groupIntegration"),
       items: [
-        { id: 'tolov-tizimlari', name: t("more.paymentSystemsName"), desc: t("more.paymentSystemsDesc"), icon: Zap, onClick: () => navigate('/seller/payment-settings') },
+        // 2026-09: "To'lov tizimlari" alohida menyu bandi sifatida OLIB
+        // TASHLANDI (foydalanuvchi so'rovi) — to'lov tizimlari sozlamasi
+        // "Tariflar" bandi orqali ochiladigan sahifada ("To'lov va
+        // Tariflar", `PaymentAndTariffsPage.jsx`) tab sifatida hamon
+        // mavjud, shuning uchun funksionallik yo'qolmagan.
         { id: 'yetkazib-berish', name: t("more.deliveryName"), desc: t("more.deliveryDesc"), icon: Truck, onClick: () => navigate('/seller/delivery-settings') },
         { id: 'xodimlar', name: t("more.staffName"), desc: t("more.staffDesc"), icon: UserRoundCog, onClick: () => navigate('/seller/staff') },
         { id: 'connections', name: t("more.connectionsName"), desc: t("more.connectionsDesc"), icon: Bot, onClick: () => navigate('/seller/connections') },

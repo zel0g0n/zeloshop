@@ -533,7 +533,7 @@ async function processSellerDigest(sellerDoc, { periodStart, periodEnd, prevPeri
   if (seller.aiCeoEnabled !== true) return;
   if (seller.aiCeoDigestEnabled === false) return;
 
-  const [periodOrdersSnap, prevOrdersSnap, productsSnap, customBotSnap] = await Promise.all([
+  const [periodOrdersSnap, prevOrdersSnap, productsSnap] = await Promise.all([
     db.collection("orders").where("sellerId", "==", sellerId)
       .where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(periodStart))
       .where("createdAt", "<", admin.firestore.Timestamp.fromMillis(periodEnd))
@@ -543,7 +543,6 @@ async function processSellerDigest(sellerDoc, { periodStart, periodEnd, prevPeri
       .where("createdAt", "<", admin.firestore.Timestamp.fromMillis(periodStart))
       .get(),
     db.collection("products").where("sellerId", "==", sellerId).get(),
-    db.collection("sellers").doc(sellerId).collection("private").doc("customerBot").get(),
   ]);
 
   const periodOrders = periodOrdersSnap.docs.map((d) => d.data());
@@ -559,8 +558,14 @@ async function processSellerDigest(sellerDoc, { periodStart, periodEnd, prevPeri
   const stats = buildDigestStats(periodOrders, prevPeriodOrders, costPriceMap);
   const digestText = await generateDigestText(stats, periodLabel, seller.storeName || "Do'kon");
 
-  const token = customBotSnap.exists && customBotSnap.data().botToken ? customBotSnap.data().botToken : BOT_TOKEN.value();
-  await sendTelegramMessage(token, sellerId, `AI CEO — ${periodLabel}\n\n${digestText}`);
+  // MUHIM (2026-09, foydalanuvchi so'rovi): AI CEO — bu SOTUVCHI uchun
+  // tizim funksiyasi, sotuvchining shaxsiy boti esa faqat MIJOZLAR bilan
+  // ishlashi kerak (`lib/customerNotify.js`dagi izohga qarang). Shu
+  // sababli bu xabar HAR DOIM platforma boti (`BOT_TOKEN`, zeloshop_bot)
+  // orqali yuboriladi - sotuvchining shaxsiy bot tokeni ATAYLAB
+  // ishlatilmaydi (oldin shaxsiy bot ulangan bo'lsa, AI CEO hisoboti
+  // NOTO'G'RI ravishda o'sha orqali yuborilardi).
+  await sendTelegramMessage(BOT_TOKEN.value(), sellerId, `AI CEO — ${periodLabel}\n\n${digestText}`);
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -999,8 +1004,28 @@ async function craftActionPlan(signals, storeName, nicheId) {
 }
 
 const CRM_SEGMENT_TACTICS = {
+  // Z-Pro CRM (`useCustomerSegments`, oddiy 4-segment) — ESKI kalitlar,
+  // O'ZGARTIRILMAYDI: `telegramApproval.js`dagi kunlik "bir tugmali
+  // tasdiqlash" digesti (`collectAttentionSegmentClientIds`) va Z-Pro
+  // sotuvchining CRM Hub'dagi asosiy auditoriya tanlovi ALI SHU ikki
+  // kalitga tayanadi.
   vip: "Bu — ENG QIMMATLI mijozlar guruhi (eng yuqori umumiy xarid summasiga ega). Vazifang: ularni QADRLASH, ular uchun MAXSUS/eksklyuziv his qildiruvchi ohangda yozish - uzoq muddatli sodiqlikni mustahkamlash uchun.",
   churn: "Bu — 30 kundan ortiq xarid qilmagan, \"uxlab qolgan\" mijozlar guruhi. Vazifang: ularni BOSIM O'TKAZMASDAN, iliq va samimiy \"sizni sog'indik\" ohangida QAYTARISH - ular haqida qayg'urayotganingizni bildirib.",
+
+  // Z-Biznes "Mijozlar Razvedkasi" (`lib/customerIntelligence.js`dagi
+  // `PRIMARY_SEGMENT_KEYS`/`TAG_KEYS`) — YANGI kalitlar (2026-09,
+  // foydalanuvchi so'rovi: "Mijozlarga xabar yuborish" qismini shu
+  // 7-segment+2-belgi tasnifiga moslashtirish). `vip` kalit ikkala
+  // tizimda BIR XIL ma'noni anglatgani uchun yuqoridagi bitta yozuv
+  // ikkalasiga ham xizmat qiladi - qayta yozilmagan.
+  high_value: "Bu — yuqori qiymatli, lekin hali VIP darajasiga yetmagan mijozlar guruhi. Vazifang: ularni VIP DARAJASIGA KO'TARILISHGA undash - masalan, keyingi xariddan keyin qanday imtiyozlar kutayotganini ishonarli tarzda ko'rsatib.",
+  sleeping: "Bu — juda uzoq vaqtdan beri (90 kundan ortiq) xarid qilmagan, \"chuqur uyquda\" mijozlar guruhi. Vazifang: ularni QATTIQ BOSIM o'tkazmasdan, samimiy \"sizni sog'indik, nima o'zgardi\" ohangida, jalb qiluvchi (masalan yangi mahsulot/aksiya haqida) xabar bilan qayta faollashtirish.",
+  churn_risk: "Bu — 30-90 kun oralig'ida xarid qilmagan, ketish xavfi bor mijozlar guruhi. Vazifang: ular ALI ketmasdan, iliq eslatma bilan qaytarish - \"sizni sog'indik\" ohangida, bosim o'tkazmasdan.",
+  at_risk: "Bu — o'z ODATIY xarid ritmidan orqada qolgan (qayta xarid vaqti allaqachon o'tgan) mijozlar guruhi. Vazifang: tabiiy, foydali eslatma tarzida yozish - \"vaqti keldi\" ohangida, ularning avvalgi xaridini yodga solib.",
+  new: "Bu — hali FAQAT bitta buyurtma qilgan, yangi mijozlar guruhi. Vazifang: ularni ILIQ kutib olish va IKKINCHI xaridga undash - birinchi tanishuv tajribasi yaxshi o'tganini his qildirib.",
+  returning: "Bu — muntazam qaytib xarid qiluvchi, sodiq mijozlar guruhi. Vazifang: ularga RAHMAT bildirish va sodiqlikni yanada mustahkamlash - masalan, ularni qadrlayotganingizni bildirib.",
+  discount_hunter: "Bu — buyurtmalarining ko'pchiligini promokod/chegirma bilan qiladigan mijozlar guruhi. Vazifang: ularga ANIQ, JOZIBALI taklif ohangida yozish - ular chegirma kutayotganini bilib, shu bilan ishlashing.",
+  high_intent: "Bu — hozirda faol savatchasi yoki sevimlilar ro'yxatida mahsuloti bor, lekin hali xaridni YAKUNLAMAGAN mijozlar guruhi. Vazifang: ularni XARIDNI YAKUNLASHGA undash - masalan, savatchasi \"kutayotganini\" eslatib, biroz shoshilinchlik hissi bilan (lekin yolg'on chegirma va'da qilmasdan).",
 };
 
 function buildCrmCampaignPrompt(segment, segmentCount, storeName, topProductName, nicheId) {
@@ -1091,10 +1116,16 @@ async function handleGenerateCrmCampaign(request) {
   }
 }
 
-exports.generateAnalyticsInsight = onCall({ secrets: [GEMINI_API_KEY], region: "asia-south1" }, handleGenerateAnalyticsInsight);
-exports.generateWinBackMessage = onCall({ secrets: [GEMINI_API_KEY], region: "asia-south1" }, handleGenerateWinBackMessage);
-exports.generateCrmCampaign = onCall({ secrets: [GEMINI_API_KEY], region: "asia-south1" }, handleGenerateCrmCampaign);
-exports.generateDailyAiCeoReport = onCall({ region: "asia-south1", secrets: [SENTRY_DSN, GEMINI_API_KEY] }, withSentry(handleGenerateDailyReport));
+// MUHIM (2026-09 audit, "kichik kamchiliklar"): Gemini chaqiruvi bo'lgan
+// funksiyalar standart (60s) `timeoutSeconds`da qolgan edi - og'ir
+// hisoblashda (masalan bir nechta parallel Firestore so'rovi + Gemini)
+// bu chegaraga yetib qolish xavfi bor edi. Endi har biriga o'z og'irligiga
+// mos, aniq qiymat berildi (bitta oddiy Gemini chaqiruvi - 60s, bir nechta
+// parallel so'rov + shartli Gemini chaqiruvi - 120s).
+exports.generateAnalyticsInsight = onCall({ secrets: [GEMINI_API_KEY], region: "asia-south1", timeoutSeconds: 60 }, handleGenerateAnalyticsInsight);
+exports.generateWinBackMessage = onCall({ secrets: [GEMINI_API_KEY], region: "asia-south1", timeoutSeconds: 60 }, handleGenerateWinBackMessage);
+exports.generateCrmCampaign = onCall({ secrets: [GEMINI_API_KEY], region: "asia-south1", timeoutSeconds: 60 }, handleGenerateCrmCampaign);
+exports.generateDailyAiCeoReport = onCall({ region: "asia-south1", secrets: [SENTRY_DSN, GEMINI_API_KEY], timeoutSeconds: 120 }, withSentry(handleGenerateDailyReport));
 
 // Bu `onCall`/`onSchedule` bilan o'ralmagan, oddiy funksiya eksporti
 // (xuddi pastdagi `_testables` kabi) - Firebase deploy vaqtida Cloud

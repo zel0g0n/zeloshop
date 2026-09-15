@@ -1,0 +1,316 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 40,
+      "w": 390,
+      "h": 1550,
+      "title": "Main"
+    },
+    {
+      "file": "Products.dc.html",
+      "x": 450,
+      "y": 40,
+      "w": 390,
+      "h": 1550,
+      "title": "Products"
+    },
+    {
+      "file": "ProductAnalytics.dc.html",
+      "x": 900,
+      "y": 40,
+      "w": 390,
+      "h": 2050,
+      "title": "ProductAnalytics"
+    },
+    {
+      "file": "ProductDraftReview.dc.html",
+      "x": 1350,
+      "y": 40,
+      "w": 390,
+      "h": 1050,
+      "title": "ProductDraftReview"
+    },
+    {
+      "file": "AddProduct.dc.html",
+      "x": 1800,
+      "y": 40,
+      "w": 390,
+      "h": 1750,
+      "title": "AddProduct"
+    },
+    {
+      "file": "EditProduct.dc.html",
+      "x": 2250,
+      "y": 40,
+      "w": 390,
+      "h": 1750,
+      "title": "EditProduct"
+    },
+    {
+      "file": "Orders.dc.html",
+      "x": 0,
+      "y": 2270,
+      "w": 390,
+      "h": 1050,
+      "title": "Orders"
+    },
+    {
+      "file": "YandexDelivery.dc.html",
+      "x": 450,
+      "y": 2270,
+      "w": 390,
+      "h": 1350,
+      "title": "YandexDelivery"
+    },
+    {
+      "file": "OrderAnalytics.dc.html",
+      "x": 900,
+      "y": 2270,
+      "w": 390,
+      "h": 1950,
+      "title": "OrderAnalytics"
+    },
+    {
+      "file": "More.dc.html",
+      "x": 1350,
+      "y": 2270,
+      "w": 390,
+      "h": 2450,
+      "title": "More"
+    },
+    {
+      "file": "PaymentSettings.dc.html",
+      "x": 1800,
+      "y": 2270,
+      "w": 390,
+      "h": 1350,
+      "title": "PaymentSettings"
+    },
+    {
+      "file": "Tariffs.dc.html",
+      "x": 2250,
+      "y": 2270,
+      "w": 390,
+      "h": 1750,
+      "title": "Tariffs"
+    },
+    {
+      "file": "Connections.dc.html",
+      "x": 0,
+      "y": 4900,
+      "w": 390,
+      "h": 1150,
+      "title": "Connections"
+    },
+    {
+      "file": "Support.dc.html",
+      "x": 450,
+      "y": 4900,
+      "w": 390,
+      "h": 750,
+      "title": "Support"
+    },
+    {
+      "file": "PnL.dc.html",
+      "x": 900,
+      "y": 4900,
+      "w": 390,
+      "h": 1550,
+      "title": "PnL"
+    },
+    {
+      "file": "ProfitDeepDive.dc.html",
+      "x": 1350,
+      "y": 4900,
+      "w": 390,
+      "h": 750,
+      "title": "ProfitDeepDive"
+    },
+    {
+      "file": "CrmHub.dc.html",
+      "x": 1800,
+      "y": 4900,
+      "w": 390,
+      "h": 1750,
+      "title": "CrmHub"
+    },
+    {
+      "file": "DeliverySettings.dc.html",
+      "x": 2250,
+      "y": 4900,
+      "w": 390,
+      "h": 1350,
+      "title": "DeliverySettings"
+    },
+    {
+      "file": "CourierManagement.dc.html",
+      "x": 0,
+      "y": 6830,
+      "w": 390,
+      "h": 950,
+      "title": "CourierManagement"
+    },
+    {
+      "file": "StaffManagement.dc.html",
+      "x": 450,
+      "y": 6830,
+      "w": 390,
+      "h": 1550,
+      "title": "StaffManagement"
+    },
+    {
+      "file": "StoreSettings.dc.html",
+      "x": 900,
+      "y": 6830,
+      "w": 390,
+      "h": 1350,
+      "title": "StoreSettings"
+    },
+    {
+      "file": "CategoryManagement.dc.html",
+      "x": 1350,
+      "y": 6830,
+      "w": 390,
+      "h": 950,
+      "title": "CategoryManagement"
+    },
+    {
+      "file": "BannerSettings.dc.html",
+      "x": 1800,
+      "y": 6830,
+      "w": 390,
+      "h": 950,
+      "title": "BannerSettings"
+    },
+    {
+      "file": "AiCeoInfo.dc.html",
+      "x": 2250,
+      "y": 6830,
+      "w": 390,
+      "h": 2850,
+      "title": "AiCeoInfo"
+    },
+    {
+      "file": "MarketingCoupons.dc.html",
+      "x": 0,
+      "y": 9860,
+      "w": 390,
+      "h": 1750,
+      "title": "MarketingCoupons"
+    },
+    {
+      "file": "CreatePromotion.dc.html",
+      "x": 450,
+      "y": 9860,
+      "w": 390,
+      "h": 1350,
+      "title": "CreatePromotion"
+    },
+    {
+      "file": "PrivacySecurity.dc.html",
+      "x": 900,
+      "y": 9860,
+      "w": 390,
+      "h": 950,
+      "title": "PrivacySecurity"
+    },
+    {
+      "file": "SellerReferral.dc.html",
+      "x": 1350,
+      "y": 9860,
+      "w": 390,
+      "h": 1550,
+      "title": "SellerReferral"
+    },
+    {
+      "file": "BundleManagement.dc.html",
+      "x": 1800,
+      "y": 9860,
+      "w": 390,
+      "h": 1350,
+      "title": "BundleManagement"
+    },
+    {
+      "file": "AutomationRules.dc.html",
+      "x": 2250,
+      "y": 9860,
+      "w": 390,
+      "h": 1050,
+      "title": "AutomationRules"
+    },
+    {
+      "file": "PricingSuggestions.dc.html",
+      "x": 0,
+      "y": 11790,
+      "w": 390,
+      "h": 1150,
+      "title": "PricingSuggestions"
+    },
+    {
+      "file": "CommandCenter.dc.html",
+      "x": 450,
+      "y": 11790,
+      "w": 390,
+      "h": 1750,
+      "title": "CommandCenter"
+    },
+    {
+      "file": "Inbox.dc.html",
+      "x": 900,
+      "y": 11790,
+      "w": 390,
+      "h": 850,
+      "title": "Inbox"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "sec-1",
+      "x": 0,
+      "y": 0,
+      "w": 500,
+      "text": "1. Bosh sahifa · Mahsulotlar · Mahsulot qo'shish/tahrirlash"
+    },
+    {
+      "id": "sec-2",
+      "x": 0,
+      "y": 2230,
+      "w": 500,
+      "text": "2. Buyurtmalar · Yetkazish · Analitika · Ko'proq menyu · To'lov · Tariflar"
+    },
+    {
+      "id": "sec-3",
+      "x": 0,
+      "y": 4860,
+      "w": 500,
+      "text": "3. Ulanishlar · Yordam · Moliya (P&L) · CRM · Yetkazib berish sozlamalari"
+    },
+    {
+      "id": "sec-4",
+      "x": 0,
+      "y": 6790,
+      "w": 500,
+      "text": "4. Kuryer/Xodim boshqaruvi · Do'kon/Toifa/Banner sozlamalari · AI CEO hisobot"
+    },
+    {
+      "id": "sec-5",
+      "x": 0,
+      "y": 9820,
+      "w": 500,
+      "text": "5. Marketing, promo-kod, aksiya, xavfsizlik, referal, bandl, avtomatlashtirish"
+    },
+    {
+      "id": "sec-6",
+      "x": 0,
+      "y": 11750,
+      "w": 500,
+      "text": "6. AI narx tavsiyalari · Buyruq markazi · Xabarlar oqimi"
+    }
+  ],
+  "launch": {
+    "view": "focused",
+    "file": "Main.dc.html"
+  }
+}

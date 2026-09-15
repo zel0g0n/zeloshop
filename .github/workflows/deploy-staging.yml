@@ -1,0 +1,69 @@
+name: Deploy — Staging
+
+# `develop` branch'iga PUSH qilinganda ishga tushadi (masalan, bir PR
+# shu branch'ga birlashtirilganda). Avval testlar (`tests.yml`)
+# ishga tushadi - ular MUVAFFAQIYATLI o'tmasa, `deploy` bosqichi
+# UMUMAN boshlanmaydi (`needs: test`).
+#
+# SOZLASH TALAB QILADI (bitta marta, qo'lda) - batafsili
+# `CI_CD_VA_STAGING_SOZLASH.md`da:
+#   1) Alohida "staging" Firebase loyihasi yaratilgan bo'lishi kerak.
+#   2) GitHub repo → Settings → Secrets and variables → Actions:
+#      - Secret: FIREBASE_SERVICE_ACCOUNT_STAGING (xizmat hisobi JSON kaliti)
+#      - Variable: STAGING_FIREBASE_PROJECT_ID (masalan "commerce-zelo-staging")
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch: {} # qo'lda ham ishga tushirish mumkin (GitHub "Actions" bo'limidan)
+
+# Bir vaqtning o'zida ikkita deploy IKKI MARTA ishlamasligi uchun -
+# navbatdagi ishga tushirish oldingisi tugagunicha kutadi.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Testlar (deploy'dan OLDIN gate)
+    uses: ./.github/workflows/tests.yml
+
+  deploy:
+    name: Firebase'ga deploy (staging)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodni olish
+        uses: actions/checkout@v4
+
+      - name: Node.js 20 sozlash
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Frontend paketlari va build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Backend (functions) paketlari
+        run: npm ci
+        working-directory: functions
+
+      - name: Google Cloud'ga autentifikatsiya
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_STAGING }}
+
+      - name: Firebase CLI o'rnatish
+        run: npm install -g firebase-tools
+
+      # MUHIM: `firestore:rules`/`firestore:indexes` ham shu yerda -
+      # staging'dagi xavfsizlik qoidalari VA indexlar ham production
+      # bilan bir xil, sinxron bo'lib turishi kerak.
+      - name: Deploy (Hosting + Functions + Firestore qoidalari/indexlari)
+        run: |
+          firebase deploy \
+            --only hosting,functions,firestore:rules,firestore:indexes \
+            --project "${{ vars.STAGING_FIREBASE_PROJECT_ID }}" \
+            --non-interactive

@@ -3,6 +3,7 @@ const { admin, db } = require("./lib/admin");
 const { checkRateLimit } = require("./lib/rateLimit");
 const { sendTelegramMessage, buildSellerAppLink } = require("./lib/helpers");
 const { buildDailyReport } = require("./aiCeo");
+const { isTariffPastDue } = require("./lib/tariffs");
 
 /**
  * Telegram bot "menyu" - platforma botida ("ZeloShop") ilgari faqat
@@ -56,6 +57,18 @@ const { buildDailyReport } = require("./aiCeo");
  * tasdiqlash bosqichida (bekor qilingan/hali tasdiqlanmagan urinishlar
  * chegaraga hisoblanmasligi uchun); (3) hisobot tugmasi ham engil
  * chegaralanadi (soatiga 20 marta).
+ *
+ * TO'LOV MUDDATI TEKSHIRUVI (2026-09, "barcha teshiklarni yop"): bu
+ * uchta tugma — MUHIM TUZATISHDAN OLDIN — sotuvchi paneli (`SellerLayout.jsx`)
+ * to'lov muddati o'tganda bloklansa ham, Mini App'ni UMUMAN OCHMASDAN
+ * ishlardi: "Yangi buyurtmalar" buyurtma sonini, "AI CEO hisobotlari"
+ * esa TO'LIQ moliyaviy hisobotni to'g'ridan-to'g'ri CHATGA yozib
+ * berardi — bu, panel to'sig'ini butunlay chetlab o'tishga imkon
+ * berardi. Endi HAR UCHALASI (`handleNewOrdersButton`, `handleReportButton`,
+ * `handleAddProductButton`) avval `isTariffPastDue` (`lib/tariffs.js`)
+ * tekshiradi va, agar to'lov muddati o'tgan bo'lsa, hech qanday
+ * biznes ma'lumotini oshkor qilmasdan, faqat to'lov sahifasiga
+ * yo'naltiruvchi xabar (`sendPastDueReply`) yuboradi.
  */
 
 const MENU_NEW_ORDERS_TEXT = "🆕 Yangi buyurtmalar";
@@ -217,6 +230,23 @@ async function sendReply(token, chatId, text, keyboard) {
 }
 
 /**
+ * To'lov muddati o'tgan sotuvchi menyu tugmalaridan birini bossa —
+ * hech qanday biznes ma'lumotini (buyurtma soni, moliyaviy hisobot)
+ * bermasdan, faqat to'lov sahifasiga olib boruvchi (Mini App `web_app`)
+ * tugma bilan qisqa xabar yuboradi. Doimiy "reply keyboard" ataylab
+ * QAYTA YUBORILMAYDI — u avvalgi xabarlardan chatda ALLAQACHON
+ * ko'rinib turibdi (Telegram reply keyboard'lari o'chirilmaguncha
+ * ko'rinishda qoladi), shuning uchun qayta yuborish shart emas.
+ */
+async function sendPastDueReply(token, chatId) {
+  await sendTelegramMessage(
+    token, chatId,
+    "⏳ Tarif to'lovi talab qilinadi. Bu funksiyadan foydalanish uchun avval to'lovni amalga oshiring.",
+    { inlineKeyboard: [[{ text: "💳 To'lovni amalga oshirish", web_app: { url: buildSellerAppLink("/seller/tariffs") } }]] }
+  );
+}
+
+/**
  * "🆕 Yangi buyurtmalar" tugmasi bosilganda - "new" holatdagi
  * buyurtmalar sonini (`count()` - hujjatlarning o'zini o'qimasdan,
  * arzon) tekshiradi. Mavjud bo'lsa, ilovaning "Buyurtmalar" sahifasini
@@ -229,6 +259,12 @@ async function sendReply(token, chatId, text, keyboard) {
  */
 async function handleNewOrdersButton(token, sellerId, chatId) {
   try {
+    const sellerSnap = await db.collection("sellers").doc(sellerId).get();
+    if (sellerSnap.exists && isTariffPastDue(sellerSnap.data())) {
+      await sendPastDueReply(token, chatId);
+      return;
+    }
+
     const countSnap = await db.collection("orders")
       .where("sellerId", "==", sellerId)
       .where("status", "==", "new")
@@ -257,6 +293,10 @@ async function handleReportButton(token, sellerId, chatId) {
   const sellerSnap = await db.collection("sellers").doc(sellerId).get();
   if (!sellerSnap.exists || sellerSnap.data().aiCeoEnabled !== true) {
     await sendReply(token, chatId, "Bu funksiya faqat AI CEO premium mijozlari uchun mavjud.", buildMainMenuKeyboard());
+    return;
+  }
+  if (isTariffPastDue(sellerSnap.data())) {
+    await sendPastDueReply(token, chatId);
     return;
   }
 
@@ -293,6 +333,10 @@ async function handleAddProductButton(token, sellerId, chatId) {
   const sellerSnap = await db.collection("sellers").doc(sellerId).get();
   if (!sellerSnap.exists || sellerSnap.data().aiCeoEnabled !== true) {
     await sendReply(token, chatId, "Bu funksiya faqat AI CEO premium mijozilari uchun mavjud.", buildMainMenuKeyboard());
+    return;
+  }
+  if (isTariffPastDue(sellerSnap.data())) {
+    await sendPastDueReply(token, chatId);
     return;
   }
 
@@ -522,7 +566,7 @@ module.exports = {
   buildMainMenuKeyboard, buildPhotoCollectionKeyboard, buildConfirmationKeyboard, pickLargestPhoto,
   formatDailyReportForTelegram, handleTelegramMessage,
   _testables: {
-    downloadTelegramPhoto, uploadPhotoToStorage, formatHourLabel,
+    downloadTelegramPhoto, uploadPhotoToStorage, formatHourLabel, sendPastDueReply,
     handleReportButton, handleAddProductButton, handlePhotoMessage, handleCancelButton,
     handleNewOrdersButton, handleFinishButton, handleConfirmButton,
   },

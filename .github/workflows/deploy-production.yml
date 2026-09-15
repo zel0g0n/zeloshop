@@ -1,0 +1,70 @@
+name: Deploy — Production
+
+# `main` branch'iga PUSH qilinganda ishga tushadi. `develop` bilan bir
+# xil naqsh: avval testlar (`tests.yml`), FAQAT ular muvaffaqiyatli
+# o'tsa - haqiqiy, JONLI `commerce-zelo` loyihasiga deploy qilinadi.
+#
+# TAVSIYA (qo'llanmada batafsil): GitHub repo Settings → Branches →
+# `main` uchun "branch protection" qoidasi qo'shing - shunda hech kim
+# (o'zingiz ham) `main`ga to'g'ridan-to'g'ri push QILA OLMAYDI, faqat
+# Pull Request orqali, va PR faqat CI (`ci.yml`) YASHIL bo'lgandagina
+# birlashtirilishi (merge) mumkin bo'ladi. Shu qoida bo'lmasa, bu
+# workflow baribir ishlayveradi, lekin "tasodifan noto'g'ri kodni
+# to'g'ridan-to'g'ri production'ga push qilib qo'yish" xavfi qoladi.
+#
+# SOZLASH TALAB QILADI (bitta marta, qo'lda) - batafsili
+# `CI_CD_VA_STAGING_SOZLASH.md`da:
+#   GitHub repo → Settings → Secrets and variables → Actions:
+#   - Secret: FIREBASE_SERVICE_ACCOUNT_PROD (xizmat hisobi JSON kaliti)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {} # qo'lda ham ishga tushirish mumkin (GitHub "Actions" bo'limidan)
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Testlar (deploy'dan OLDIN gate)
+    uses: ./.github/workflows/tests.yml
+
+  deploy:
+    name: Firebase'ga deploy (production — commerce-zelo)
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production # GitHub "Environments" himoyasi (ixtiyoriy, qo'llanmaga qarang)
+    steps:
+      - name: Kodni olish
+        uses: actions/checkout@v4
+
+      - name: Node.js 20 sozlash
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Frontend paketlari va build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Backend (functions) paketlari
+        run: npm ci
+        working-directory: functions
+
+      - name: Google Cloud'ga autentifikatsiya
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PROD }}
+
+      - name: Firebase CLI o'rnatish
+        run: npm install -g firebase-tools
+
+      - name: Deploy (Hosting + Functions + Firestore qoidalari/indexlari)
+        run: |
+          firebase deploy \
+            --only hosting,functions,firestore:rules,firestore:indexes \
+            --project commerce-zelo \
+            --non-interactive

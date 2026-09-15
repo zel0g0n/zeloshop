@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { getTelegramWebApp } from "@/config/telegram";
 import {
   ShoppingBag, Globe, LogOut, TrendingUp,
-  Heart, Moon, Sun, Shield, Info, Gift
+  Heart, Moon, Sun, Shield, Info, Gift, FileText
 } from "lucide-react";
 import CabinetMenu from "@/features/shop/components/cabinet/CabinetMenu";
 import CabinetHeader from "@/features/shop/components/cabinet/CabinetHeader";
@@ -42,6 +42,7 @@ const ProfilePage = () => {
       items: [
         { id: "store-info", title: t("cabinet.storeInfo"), icon: <Info size={18} />, path: `/store-info` },
         { id: "privacy", title: t("cabinet.privacy"), icon: <Shield size={18} />, path: `/privacy` },
+        { id: "terms", title: t("cabinet.terms"), icon: <FileText size={18} />, path: `/terms` },
       ]
     }
   ], [favorites.length, t, language, isDark]);

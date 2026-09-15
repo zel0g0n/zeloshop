@@ -22,6 +22,7 @@ const OrdersPage = lazy(() => import('@/pages/client/OrdersPage'))
 const ReferralPage = lazy(() => import('@/pages/client/ReferralPage'))
 const StoreInfoPage = lazy(() => import('@/pages/client/StoreInfoPage'))
 const PrivacyPolicyPage = lazy(() => import('@/pages/client/PrivacyPolicyPage'))
+const TermsOfServicePage = lazy(() => import('@/pages/client/TermsOfServicePage'))
 const MySpendingPage = lazy(() => import('@/pages/client/MySpendingPage'))
 const NotificationsInfoPage = lazy(() => import('@/pages/client/NotificationsInfoPage'))
 const CourierTrackingPage = lazy(() => import('@/pages/client/CourierTrackingPage'))
@@ -43,6 +44,7 @@ export const ShopRoutes = () => {
       <Route path="/referral" element={<ReferralPage />} />
       <Route path="/store-info" element={<StoreInfoPage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms" element={<TermsOfServicePage />} />
       <Route path="/my-spending" element={<MySpendingPage />} />
       <Route path="/notifications" element={<NotificationsInfoPage />} />
       <Route path="/orders/:orderId/track" element={<CourierTrackingPage />} />

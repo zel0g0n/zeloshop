@@ -1,34 +1,30 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import {
-  ArrowLeft, Search, Star, AlertTriangle, RefreshCw, Users, Sparkles, ChevronRight,
-  X, Phone, MessageCircle, Send, UploadCloud, Trash2, Link2, Loader2,
-  TrendingUp, Ticket, Bot, Wand2,
+  ArrowLeft, Star, Gem, Moon, AlertTriangle, Clock, Sparkles, RefreshCw as ReturningIcon,
+  UploadCloud, Trash2, Link2, Loader2, TrendingUp, Users, RefreshCw, Ticket, Bot, Wand2, Send, Percent, Flame, ListFilter, Target, X,
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useCustomerSegments } from "@/hooks/seller/useCustomerSegments";
+import useCustomerIntelligence from "@/hooks/seller/useCustomerIntelligence";
 import { useCoupons } from "@/hooks/seller/useCoupons";
 import { useUploadImage } from "@/hooks/storage/useUploadStorage";
 import { sendCrmNotification } from "@/services/crm/sendNotification";
-import { getCustomerNote, saveCustomerNote } from "@/services/crm/customerNotes";
-import { getCustomerOrderHistory } from "@/services/orders/getOrderData";
 import { generateCrmCampaign } from "@/services/ai/aiCeoInsights";
 import Toast from "@/components/ui/Toast";
 import CustomSelect from "@/components/ui/CustomSelect";
 import StoreLinkPicker from "@/features/seller/components/shared/StoreLinkPicker";
-import { GridSkeleton } from "@/components/ui/Skeleton";
 import { useLanguage } from "@/context/LanguageContext";
-import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
+import { filterClassifiedCustomers } from "@/utils/customerIntelligence";
+import BiznesBadge from "@/components/ui/BiznesBadge";
 import CustomerIntelligencePanel from "@/features/seller/components/crm/CustomerIntelligencePanel";
 
-const SEGMENT_ICONS = { all: Users, vip: Star, churn: AlertTriangle, regular: RefreshCw, new: Sparkles };
-
-const BADGE_STYLE = {
-  vip: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
-  churn: "bg-rose-500/15 text-rose-400 border border-rose-500/30",
-  regular: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
-  new: "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30",
+const SEGMENT_ICONS = {
+  all: Users, vip: Star, high_value: Gem, sleeping: Moon, churn_risk: AlertTriangle,
+  at_risk: Clock, new: Sparkles, returning: ReturningIcon,
 };
+const TAG_ICONS = { discount_hunter: Percent, high_intent: Flame };
 
 // Retention asosidagi CRM markazi va Telegram orqali broadcast marketing
 // vositasi.
@@ -40,18 +36,34 @@ const BADGE_STYLE = {
 // ishonchli usul. Broadcast xabarlari haqiqiy Telegram Bot API orqali
 // yuboriladi, simulyatsiya emas.
 //
+// 2026-09 UX TUZATISHI (foydalanuvchi so'rovi): OLDIN bu sahifada Z-Pro
+// (`useCustomerSegments`) qidiruv+tab+ro'yxati VA `CustomerIntelligencePanel`
+// (Z-Biznes) o'zining alohida ro'yxati BIR SAHIFADA ketma-ket, ikki marta
+// ko'rsatilardi. Endi mijozlar RO'YXATI/QIDIRUV/TAFSILOT — FAQAT
+// `CustomerIntelligencePanel`da (yagona joy); bu sahifa esa faqat YUQORI
+// KO'RSATKICHLAR (Jami mijozlar/LTV/Retention — bularning hisob-kitobi
+// `useCustomerSegments`dan, tarifdan qat'i nazar to'g'ri) va XABAR
+// YUBORISH TERMINALINI o'z ichiga oladi.
+//
 // Bu sahifa boshqa barcha sotuvchi sahifalari kabi yorug'/qorong'i
 // mavzuga moslashuvchan.
 const CrmHub = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const { t } = useLanguage();
   const { sellerId, store } = useSession();
   const { customers, counts, averageLtv, retentionRate, loading, isApproximate } = useCustomerSegments();
-  // AI CEO faqat premium ("aiCeoEnabled") sotuvchilar uchun ko'rinadi va
-  // faqat aniq taktikasi bor segmentlar (VIP, "uxlab qolgan mijozlar")
-  // uchun ishlaydi — "Barchasi" auditoriyasi uchun yagona to'g'ri taktika
-  // yo'q, shuning uchun bu holatda taklif qilinmaydi.
+  const isBiznes = getEffectiveTariffPlan(store) === "biznes";
+  // "Mijozlar Razvedkasi" (Z-Biznes) ma'lumoti ENDI shu yerda, ota
+  // komponentda, BIR MARTA olinadi — pastdagi `CustomerIntelligencePanel`
+  // (ro'yxat/qidiruv uchun) VA quyidagi "Xabar yuborish terminali"
+  // (Biznes auditoriya tanlovi uchun, 3-band) IKKALASI ham shu BIR XIL
+  // natijani ishlatadi, ikki marta server so'rovi yubormaslik uchun.
+  const intelligence = useCustomerIntelligence(isBiznes);
+  // AI CEO faqat premium ("aiCeoEnabled") sotuvchilar uchun ko'rinadi —
+  // bu Z-Pro va Z-Biznesning ikkalasida ham bo'lishi mumkin bo'lgan,
+  // tarifdan MUSTAQIL bayroq (masalan tarif sinovi orqali yoqilgan).
   const aiCeoEnabled = store?.aiCeoEnabled === true;
   const { coupons } = useCoupons(sellerId);
   const { uploadImage, loading: uploadingBanner, progress: uploadProgress } = useUploadImage();
@@ -60,42 +72,72 @@ const CrmHub = () => {
     [coupons]
   );
 
-  const SEGMENT_META = {
-    all: { label: t("crmHub.segmentAll"), icon: SEGMENT_ICONS.all },
-    vip: { label: t("crmHub.segmentVip"), icon: SEGMENT_ICONS.vip },
-    churn: { label: t("crmHub.segmentChurn"), icon: SEGMENT_ICONS.churn },
-    regular: { label: t("crmHub.segmentRegular"), icon: SEGMENT_ICONS.regular },
-    new: { label: t("crmHub.segmentNew"), icon: SEGMENT_ICONS.new },
-  };
-  const BADGE_LABEL = { vip: t("crmHub.badgeVip"), churn: t("crmHub.badgeChurn"), regular: t("crmHub.badgeRegular"), new: t("crmHub.badgeNew") };
   const AUDIENCE_OPTIONS = [
     { value: "all", label: t("crmHub.audienceAll") },
     { value: "vip", label: t("crmHub.audienceVip") },
     { value: "churn", label: t("crmHub.audienceChurn") },
   ];
+  const SEGMENT_SELECT_OPTIONS = ["all", "vip", "high_value", "sleeping", "churn_risk", "at_risk", "new", "returning"].map((key) => ({
+    value: key,
+    label: `${t(`customerIntelligence.segment.${key}`)} (${intelligence.data ? (key === "all" ? intelligence.data.counts.all : intelligence.data.counts[key] || 0) : 0})`,
+    icon: SEGMENT_ICONS[key],
+  }));
+  const TAG_SELECT_OPTIONS = [
+    { value: "none", label: t("customerIntelligence.tagNone"), icon: ListFilter },
+    ...["discount_hunter", "high_intent"].map((key) => ({
+      value: key,
+      label: `${t(`customerIntelligence.tag.${key}`)} (${intelligence.data?.tagCounts?.[key] || 0})`,
+      icon: TAG_ICONS[key],
+    })),
+  ];
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activeSegment, setActiveSegment] = useState("all");
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [customerNote, setCustomerNote] = useState("");
-
-  useEscapeToClose(() => setSelectedCustomer(null), Boolean(selectedCustomer));
-  const [noteLoading, setNoteLoading] = useState(false);
-  const [noteSaving, setNoteSaving] = useState(false);
-  const [noteToast, setNoteToast] = useState(null);
-  const [customerOrders, setCustomerOrders] = useState([]);
-  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
-
-  // Agar URL'da `?audience=vip` (yoki "churn") parametri bo'lsa, forma
-  // o'sha segment bilan ochiladi — sotuvchi qayta tanlashi shart emas.
+  // Bugungi rejalar markazidan (`AiCeoInfoPage.jsx`) `?audience=vip`
+  // yoki `?audience=churn` bilan kelingan bo'lsa, forma o'sha auditoriya
+  // bilan ochiladi — bu havola Z-Pro VA Z-Biznes sotuvchisiga BIR XIL
+  // ishlaydi (kunlik AI CEO hisoboti tarifdan mustaqil). Z-Biznes uchun
+  // "churn" -> "churn_risk" segmentiga mos keladi (yangi 7-segment
+  // tasnifidagi ekvivalenti).
   const [audience, setAudience] = useState(() => {
     const fromUrl = searchParams.get("audience");
     return fromUrl === "vip" || fromUrl === "churn" ? fromUrl : "all";
   });
+  const [audienceSegment, setAudienceSegment] = useState(() => {
+    const fromUrl = searchParams.get("audience");
+    if (fromUrl === "vip") return "vip";
+    if (fromUrl === "churn") return "churn_risk";
+    return "all";
+  });
+  const [audienceTag, setAudienceTag] = useState("none");
+
+  // MAXSUS (ANIQ) AUDITORIYA — Biznes Buyruq Markazidagi xulosalardan
+  // ("qayta xarid vaqti kelgan mijozlar" kabi) "Xabar yubor" tugmasi
+  // bosilganda shu yerga navigatsiya HOLATI (`location.state`) orqali
+  // keladi (2026-09, foydalanuvchi so'rovi bo'yicha qo'shilgan haqiqiy
+  // "buyruq"). Bu — na Z-Pro'ning 3 tugmali, na Z-Biznesning segment/
+  // belgi tanlovi bilan mos kelmaydigan, ANIQ hisoblangan `clientId`
+  // ro'yxati (masalan mijozning o'z tarixidagi xarid oralig'iga
+  // asoslangan heuristika) — shuning uchun uni soxta ravishda biror
+  // nomlangan segmentga "moslashtirib qo'yish" (HALOLLIK qoidasiga zid
+  // bo'lardi) o'rniga, alohida, aniq belgilangan auditoriya sifatida
+  // saqlaymiz va u faol bo'lganda segment/belgi tanlovlarini vaqtincha
+  // almashtiradi (pastda "Bekor qilish" bilan tozalanadi).
+  const [customAudience, setCustomAudience] = useState(() => {
+    const incoming = location.state?.customAudience;
+    if (incoming && Array.isArray(incoming.clientIds) && incoming.clientIds.length > 0) {
+      return {
+        clientIds: incoming.clientIds,
+        label: incoming.label || "",
+        initialTitle: incoming.initialTitle || "",
+        initialMessage: incoming.initialMessage || "",
+      };
+    }
+    return null;
+  });
+
   const [bannerFile, setBannerFile] = useState(null);
   const [bannerPreview, setBannerPreview] = useState(null);
-  const [title, setTitle] = useState("");
-  const [message, setMessage] = useState("");
+  const [title, setTitle] = useState(() => customAudience?.initialTitle || "");
+  const [message, setMessage] = useState(() => customAudience?.initialMessage || "");
   const [couponCode, setCouponCode] = useState("");
   const [buttonText, setButtonText] = useState("");
   const [buttonUrl, setButtonUrl] = useState("");
@@ -113,84 +155,31 @@ const CrmHub = () => {
   const [aiSuggestError, setAiSuggestError] = useState(null);
   const [aiReasoning, setAiReasoning] = useState(null);
 
-  // Mijoz kartochkasi bosilganda, o'sha mijoz haqidagi saqlangan
-  // izohni serverdan yuklaydi (barcha mijozlarning izohini oldindan
-  // yuklab olish o'rniga — bu, ko'p mijozli do'konlar uchun
-  // samaraliroq).
-  useEffect(() => {
-    if (!selectedCustomer || !sellerId) return;
-    let cancelled = false;
-    setNoteLoading(true);
-    getCustomerNote(sellerId, selectedCustomer.clientId)
-      .then((note) => { if (!cancelled) setCustomerNote(note); })
-      .catch(() => { if (!cancelled) setCustomerNote(""); })
-      .finally(() => { if (!cancelled) setNoteLoading(false); });
-    return () => { cancelled = true; };
-  }, [selectedCustomer, sellerId]);
-
-  // Mijozning to'liq xarid tarixi ro'yxat bilan birga (barcha mijozlar
-  // uchun oldindan) yuklanmaydi — mijoz yig'ma yozuvi
-  // (`useCustomerSegments`) faqat jamlangan sonlarni (LTV, buyurtmalar
-  // soni) o'z ichiga oladi. Shuning uchun, xuddi izohlar (Notes) kabi,
-  // kartochka bosilganda faqat o'sha bitta mijoz uchun, talab bo'yicha
-  // yuklanadi.
-  useEffect(() => {
-    if (!selectedCustomer || !sellerId) {
-      setCustomerOrders([]);
-      setCustomerOrdersLoading(false);
-      return;
-    }
-    setCustomerOrdersLoading(true);
-    const unsubscribe = getCustomerOrderHistory(
-      sellerId,
-      selectedCustomer.clientId,
-      (orders) => {
-        setCustomerOrders(orders);
-        setCustomerOrdersLoading(false);
-      },
-      () => {
-        setCustomerOrders([]);
-        setCustomerOrdersLoading(false);
-      }
-    );
-    return () => unsubscribe();
-  }, [selectedCustomer, sellerId]);
-
-  const handleSaveNote = useCallback(async () => {
-    if (!selectedCustomer) return;
-    setNoteSaving(true);
-    try {
-      await saveCustomerNote(sellerId, selectedCustomer.clientId, customerNote);
-      setNoteToast(t("crmHub.noteSaved"));
-    } catch {
-      setNoteToast(t("crmHub.noteSaveFailed"));
-    } finally {
-      setNoteSaving(false);
-    }
-  }, [sellerId, selectedCustomer, customerNote]);
-
-  const visibleCustomers = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
-    return customers.filter((c) => {
-      const matchesSegment = activeSegment === "all" || c.segment === activeSegment;
-      if (!matchesSegment) return false;
-      if (!query) return true;
-      return (
-        c.fullName.toLowerCase().includes(query) ||
-        (c.phone || "").toLowerCase().includes(query)
-      );
-    });
-  }, [customers, activeSegment, searchQuery]);
-
   const audienceTargetIds = useMemo(() => {
+    if (customAudience) return customAudience.clientIds;
+    if (isBiznes) {
+      return filterClassifiedCustomers(intelligence.data?.customers, {
+        segment: audienceSegment,
+        tag: audienceTag === "none" ? null : audienceTag,
+      }).map((c) => c.clientId);
+    }
     if (audience === "all") return customers.map((c) => c.clientId);
     return customers.filter((c) => c.segment === audience).map((c) => c.clientId);
-  }, [customers, audience]);
+  }, [customAudience, isBiznes, intelligence.data, audienceSegment, audienceTag, audience, customers]);
 
-  // AI CEO faqat "vip"/"churn" auditoriyasi tanlanganda ishlatilishi
-  // mumkin — bularning har biri uchun aniq, isbotlangan taktika mavjud
-  // (qarang: `functions/aiCeo.js`dagi `CRM_SEGMENT_TACTICS`).
-  const canUseAiSuggestion = aiCeoEnabled && (audience === "vip" || audience === "churn");
+  // AI CEO — Z-Biznesda YANGI 7-segment+2-belgi tasnifidagi HAR QANDAY
+  // aniq tanlov (segment YOKI belgi, "barchasi" bo'lmagan) uchun ishlaydi
+  // (barchasi uchun `functions/aiCeo.js`dagi `CRM_SEGMENT_TACTICS`da
+  // taktika bor). Belgi tanlangan bo'lsa, u SEGMENTdan ko'ra ANIQROQ
+  // xulq-atvor signali bo'lgani uchun ustuvor olinadi. Z-Pro'da esa
+  // avvalgidek FAQAT vip/churn uchun.
+  const effectiveAiSegment = isBiznes ? (audienceTag !== "none" ? audienceTag : audienceSegment) : audience;
+  // Maxsus auditoriya nomlangan segment/belgi EMAS — `CRM_SEGMENT_TACTICS`
+  // (AI taktikasi) faqat nomlangan kalitlar uchun mavjud, shuning uchun
+  // maxsus auditoriya faol bo'lganda AI tavsiyasi ATAYLAB o'chiriladi
+  // (sotuvchi bu holatda matnni o'zi yozadi yoki yuqoridan kelgan
+  // andozani tahrirlaydi).
+  const canUseAiSuggestion = aiCeoEnabled && !customAudience && effectiveAiSegment !== "all";
 
   const handleAiSuggest = useCallback(async () => {
     if (!canUseAiSuggestion) return;
@@ -199,7 +188,7 @@ const CrmHub = () => {
     setAiReasoning(null);
     try {
       const result = await generateCrmCampaign({
-        segment: audience,
+        segment: effectiveAiSegment,
         segmentCount: audienceTargetIds.length,
         storeName: store?.storeName,
       });
@@ -211,17 +200,20 @@ const CrmHub = () => {
     } finally {
       setAiSuggestLoading(false);
     }
-  }, [canUseAiSuggestion, audience, audienceTargetIds.length, store, t]);
+  }, [canUseAiSuggestion, effectiveAiSegment, audienceTargetIds.length, store, t]);
 
   // `?autoAi=1` parametri bilan kelingan bo'lsa ("Bugungi rejalar"
-  // markazidan bitta tugma bilan), mijozlar ro'yxati yuklangandan keyin
-  // (aniq sonini bilish uchun) AI tavsiyasi avtomatik, bir marta ishga
-  // tushadi — sotuvchi bu yerga kelib yana bitta tugma bosishi shart
-  // emas.
+  // markazidan bitta tugma bilan), tegishli mijozlar ma'lumoti
+  // yuklangandan keyin (aniq sonini bilish uchun) AI tavsiyasi
+  // avtomatik, bir marta ishga tushadi — sotuvchi bu yerga kelib yana
+  // bitta tugma bosishi shart emas. Z-Biznesda "tegishli ma'lumot" —
+  // `intelligence` (Mijozlar Razvedkasi), Z-Pro'da — yuqoridagi
+  // `useCustomerSegments`.
+  const relevantDataLoading = isBiznes ? (intelligence.loading && !intelligence.data) : loading;
   const autoAiTriggeredRef = useRef(false);
   useEffect(() => {
     if (autoAiTriggeredRef.current) return;
-    if (loading) return;
+    if (relevantDataLoading) return;
     if (searchParams.get("autoAi") !== "1") return;
     if (!canUseAiSuggestion) return;
     autoAiTriggeredRef.current = true;
@@ -231,7 +223,7 @@ const CrmHub = () => {
     // oddiy holat sinxronizatsiyasi emas.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     handleAiSuggest();
-  }, [loading, canUseAiSuggestion, searchParams, handleAiSuggest]);
+  }, [relevantDataLoading, canUseAiSuggestion, searchParams, handleAiSuggest]);
 
   const handleBannerSelect = useCallback((file) => {
     if (!file) return;
@@ -311,7 +303,9 @@ const CrmHub = () => {
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-base font-black text-slate-900 dark:text-white">{t("crmHub.title")}</h1>
+          <h1 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+            {t("crmHub.title")} {isBiznes && <BiznesBadge size="xs" />}
+          </h1>
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t("crmHub.subtitle")}</p>
         </div>
       </div>
@@ -346,91 +340,17 @@ const CrmHub = () => {
           </div>
         )}
 
-        {/* MIJOZLAR RAZVEDKASI (Z-Biznes, 9-band) — Z-Pro'ning yuqoridagi
-            4-segmentli oddiy CRM'idan ATAYLAB alohida, qo'shimcha panel
-            (batafsil izoh: `CustomerIntelligencePanel.jsx`). Biznes
-            tarifi bo'lmagan sotuvchiga upsell ko'rinishini o'zi ko'rsatadi. */}
-        <CustomerIntelligencePanel />
-
-        {/* SEARCH & SEGMENTATION */}
-        <div className="space-y-2.5">
-          <div className="relative">
-            <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 dark:text-slate-500">
-              <Search size={15} />
-            </span>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={t("crmHub.searchPlaceholder")}
-              className="w-full h-11 pl-9 pr-4 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {Object.entries(SEGMENT_META).map(([key, meta]) => {
-              const Icon = meta.icon;
-              const isActive = activeSegment === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setActiveSegment(key)}
-                  className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl transition-colors ${
-                    isActive
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                      : "bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-800"
-                  }`}
-                >
-                  <Icon size={13} />
-                  <span className="text-[11px] font-bold whitespace-nowrap">{meta.label} ({counts[key]})</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* CUSTOMER LIST */}
-        <div className="space-y-2">
-          {loading && <GridSkeleton count={3} />}
-
-          {!loading && visibleCustomers.length === 0 && (
-            <p className="text-center text-xs text-slate-400 dark:text-slate-500 py-8">{t("crmHub.noCustomers")}</p>
-          )}
-
-          {!loading && visibleCustomers.map((c) => {
-            const initial = (c.fullName || "?").trim().charAt(0).toUpperCase();
-            return (
-              <div
-                key={c.clientId}
-                onClick={() => setSelectedCustomer(c)}
-                className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3 shadow-md hover:border-indigo-500/50 transition cursor-pointer flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-10 h-10 rounded-full bg-indigo-500/15 text-indigo-400 font-black text-sm flex items-center justify-center shrink-0">
-                    {initial}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{c.fullName}</p>
-                      {c.segment !== "all" && (
-                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md shrink-0 ${BADGE_STYLE[c.segment]}`}>
-                          {BADGE_LABEL[c.segment]}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                      {c.orderCount} {t("crmHub.orderCountSuffix")} · {c.daysSinceLastOrder} {t("crmHub.daysAgoSuffix")}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs font-black text-emerald-400">{c.ltv.toLocaleString()} so'm</span>
-                  <ChevronRight size={16} className="text-slate-400 dark:text-slate-500" />
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        {/* MIJOZLAR RO'YXATI/QIDIRUV/TAFSILOT — YAGONA joy (2026-09 UX
+            tuzatishi: avval bu yerda IKKINCHI, dublikat ro'yxat ham bor
+            edi — olib tashlandi, batafsil izoh yuqorida). Biznes
+            bo'lmagan tarifda panel o'zi "yangilang" devorini ko'rsatadi. */}
+        <CustomerIntelligencePanel
+          data={intelligence.data}
+          loading={intelligence.loading}
+          error={intelligence.error}
+          refetch={intelligence.refetch}
+          isBiznes={isBiznes}
+        />
 
         {/* TELEGRAM BROADCAST TERMINAL */}
         <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 space-y-3.5">
@@ -438,32 +358,68 @@ const CrmHub = () => {
 
           <div className="space-y-1.5">
             <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{t("crmHub.audienceLabel")}</label>
-            <div className="grid grid-cols-3 gap-1.5">
-              {AUDIENCE_OPTIONS.map((opt) => (
+            {/* MAXSUS AUDITORIYA (masalan Buyruq Markazidan "qayta xarid
+                vaqti kelgan mijozlar" kabi aniq hisoblangan ro'yxat)
+                faol bo'lsa — oddiy segment/belgi tanlovi o'rniga shu
+                chip ko'rsatiladi, "Bekor qilish" bilan oddiy tanlovga
+                qaytish mumkin. */}
+            {customAudience ? (
+              <div className="flex items-center justify-between gap-2 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl px-3 py-2.5">
+                <div className="min-w-0 flex items-center gap-2">
+                  <Target size={14} className="text-indigo-500 shrink-0" />
+                  <span className="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 truncate">{customAudience.label}</span>
+                </div>
                 <button
-                  key={opt.value}
                   type="button"
-                  onClick={() => setAudience(opt.value)}
-                  className={`h-10 rounded-xl text-[10px] font-bold transition-colors px-1 ${
-                    audience === opt.value ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30" : "bg-[#F4F5F9] dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-800"
-                  }`}
+                  onClick={() => setCustomAudience(null)}
+                  className="shrink-0 w-6 h-6 rounded-lg bg-white/70 dark:bg-slate-900/50 text-indigo-500 dark:text-indigo-400 flex items-center justify-center active:scale-95 transition-transform"
+                  aria-label={t("crmHub.customAudienceClear")}
                 >
-                  {opt.label}
+                  <X size={13} />
                 </button>
-              ))}
-            </div>
+              </div>
+            ) : isBiznes ? (
+              /* Z-Biznes: to'liq 7-segment+2-belgi auditoriya tanlovi
+                 (2026-09, foydalanuvchi so'rovi: "Mijozlarga xabar
+                 yuborish qismini Biznes tarifga moslashtir") — ikkala
+                 filtr BIRGALIKDA ishlaydi (masalan "VIP + chegirma
+                 ovchisi"). */
+              <div className="grid grid-cols-2 gap-1.5">
+                <CustomSelect value={audienceSegment} onChange={setAudienceSegment} options={SEGMENT_SELECT_OPTIONS} />
+                <CustomSelect value={audienceTag} onChange={setAudienceTag} options={TAG_SELECT_OPTIONS} />
+              </div>
+            ) : (
+              /* Z-Pro: avvalgi 3 tugmali oddiy tanlov, o'zgarishsiz. */
+              <div className="grid grid-cols-3 gap-1.5">
+                {AUDIENCE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setAudience(opt.value)}
+                    className={`h-10 rounded-xl text-[10px] font-bold transition-colors px-1 ${
+                      audience === opt.value ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30" : "bg-[#F4F5F9] dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-800"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-slate-400 dark:text-slate-500">
+              {t("crmHub.audienceCountHint", { count: audienceTargetIds.length })}
+            </p>
           </div>
 
           <form onSubmit={handleSend} className="space-y-2.5">
 
             {/* AI CEO "senior sotuv menejeri" tavsiyasi. Faqat premium
                 ("aiCeoEnabled") sotuvchilar ko'radi. Bosilganda, tanlangan
-                segment uchun Gemini orqali tayyor sarlavha va xabar
+                segment/belgi uchun Gemini orqali tayyor sarlavha va xabar
                 yaratiladi hamda pastdagi (mavjud) maydonlarga to'g'ridan-
                 to'g'ri joylanadi — sotuvchi ko'rib chiqadi, xohlasa
                 tahrirlaydi va o'zi pastdagi "Yuborish" tugmasini bosadi.
                 AI hech qachon o'zi xabar yubormaydi. */}
-            {aiCeoEnabled && (
+            {aiCeoEnabled && !customAudience && (
               <div className="bg-indigo-50/60 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 rounded-xl p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0">
@@ -480,8 +436,10 @@ const CrmHub = () => {
                     {t("crmHub.aiSuggestButton")}
                   </button>
                 </div>
-                {audience === "all" && (
-                  <p className="text-[10px] text-indigo-500/80 dark:text-indigo-400/70">{t("crmHub.aiSuggestSelectSegmentHint")}</p>
+                {effectiveAiSegment === "all" && (
+                  <p className="text-[10px] text-indigo-500/80 dark:text-indigo-400/70">
+                    {isBiznes ? t("crmHub.aiSuggestSelectSegmentHintBiznes") : t("crmHub.aiSuggestSelectSegmentHint")}
+                  </p>
                 )}
                 {aiSuggestError && <p className="text-[10px] text-rose-500 font-semibold">{aiSuggestError}</p>}
                 {aiReasoning && (
@@ -546,6 +504,11 @@ const CrmHub = () => {
               onChange={(e) => setMessage(e.target.value)}
               className="w-full p-3 bg-[#F4F5F9] dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none disabled:opacity-60"
             />
+            {/* HAQIQIY shaxsiylashtirish (mock EMAS) — `automationRules.js`dagi
+                avtomatlashtirish qoidalarida ishlatilgan BIR XIL `{ism}`
+                naqshi (2026-09, foydalanuvchi so'rovi: "haqiqiy
+                productlarda ishlatiladigan top funksiyalardan qo'sh"). */}
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 -mt-1">{t("crmHub.personalizeHint")}</p>
 
             {activeCoupons.length > 0 && (
               <CustomSelect
@@ -630,96 +593,7 @@ const CrmHub = () => {
         </div>
       </div>
 
-      {/* CUSTOMER DETAIL MODAL */}
-      {selectedCustomer && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setSelectedCustomer(null)} />
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 rounded-t-3xl p-4 pb-8 max-h-[85vh] overflow-y-auto animate-fade-in">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-full bg-indigo-500/15 text-indigo-400 font-black text-base flex items-center justify-center">
-                  {(selectedCustomer.fullName || "?").trim().charAt(0).toUpperCase()}
-                </div>
-                <div>
-                  <p className="text-sm font-black text-slate-900 dark:text-white">{selectedCustomer.fullName}</p>
-                  {selectedCustomer.segment !== "regular" && (
-                    <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${BADGE_STYLE[selectedCustomer.segment]}`}>
-                      {BADGE_LABEL[selectedCustomer.segment]}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <button type="button" onClick={() => setSelectedCustomer(null)} className="p-1.5 text-slate-500 dark:text-slate-400">
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              {selectedCustomer.phone && (
-                <a href={`tel:${selectedCustomer.phone}`} className="h-10 bg-[#F4F5F9] dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                  <Phone size={13} /> {t("crmHub.callBtn")}
-                </a>
-              )}
-              <a href={`tg://user?id=${selectedCustomer.clientId}`} className="h-10 bg-[#F4F5F9] dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                <MessageCircle size={13} /> {t("crmHub.telegramBtn")}
-              </a>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 mb-4">
-              <div className="bg-[#F4F5F9] dark:bg-slate-800 rounded-xl p-3">
-                <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">{t("crmHub.totalSpent")}</p>
-                <p className="text-sm font-black text-emerald-400">{selectedCustomer.ltv.toLocaleString()} so'm</p>
-              </div>
-              <div className="bg-[#F4F5F9] dark:bg-slate-800 rounded-xl p-3">
-                <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">{t("crmHub.ordersLabel")}</p>
-                <p className="text-sm font-black text-slate-900 dark:text-white">{selectedCustomer.orderCount} ta</p>
-              </div>
-            </div>
-
-            {/* ADMIN IZOHI (Notes) */}
-            <div className="mb-4">
-              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">{t("crmHub.noteLabel")}</label>
-              <textarea
-                rows="2"
-                disabled={noteLoading}
-                placeholder={noteLoading ? t("crmHub.noteLoadingPlaceholder") : t("crmHub.notePlaceholder")}
-                value={customerNote}
-                onChange={(e) => setCustomerNote(e.target.value)}
-                className="w-full p-2.5 bg-[#F4F5F9] dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none disabled:opacity-60"
-              />
-              <button
-                type="button"
-                onClick={handleSaveNote}
-                disabled={noteSaving || noteLoading}
-                className="mt-1.5 text-[10px] font-bold text-indigo-400 disabled:opacity-50"
-              >
-                {noteSaving ? t("crmHub.noteSaving") : t("crmHub.noteSaveBtn")}
-              </button>
-            </div>
-
-            <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">{t("crmHub.purchaseHistory")}</h4>
-            <div className="space-y-2">
-              {customerOrdersLoading && <GridSkeleton count={2} />}
-              {!customerOrdersLoading && customerOrders.length === 0 && (
-                <p className="text-center text-xs text-slate-400 dark:text-slate-500 py-4">{t("crmHub.noOrdersYet")}</p>
-              )}
-              {!customerOrdersLoading && customerOrders.map((o) => (
-                <div key={o.id} className="bg-[#F4F5F9] dark:bg-slate-800 rounded-xl p-3 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500">#{o.id.slice(0, 6)}</p>
-                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{Number(o.totalAmount || 0).toLocaleString()} so'm</p>
-                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{o.createdAt ? new Date(o.createdAt).toLocaleDateString("uz-UZ") : ""}</p>
-                  </div>
-                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 capitalize">{t(`orderStatus.${o.status}`)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {sendToast && <Toast message={sendToast} onDone={() => setSendToast(null)} />}
-      {noteToast && <Toast message={noteToast} onDone={() => setNoteToast(null)} duration={1500} />}
       {showLinkPicker && (
         <StoreLinkPicker onSelect={(option) => setButtonUrl(option.externalUrl)} onClose={() => setShowLinkPicker(false)} />
       )}

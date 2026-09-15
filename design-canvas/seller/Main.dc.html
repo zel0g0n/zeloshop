@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+*{box-sizing:border-box;}
+body{margin:0;background:#F4F5F9;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#0F172A;}
+a{color:#4F46E5;text-decoration:none;}
+.scr{width:390px;min-height:100%;position:relative;padding-bottom:120px;background:#F4F5F9;}
+.hdr{position:sticky;top:0;background:#fff;padding:16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #F1F5F9;z-index:5;}
+.icn-btn{width:32px;height:32px;border-radius:10px;display:flex;align-items:center;justify-content:center;background:#F8FAFC;color:#475569;flex-shrink:0;}
+.h1{font-size:15px;font-weight:900;color:#1E293B;letter-spacing:-0.01em;margin:0;}
+.sub{font-size:10px;font-weight:800;color:#94A3B8;text-transform:uppercase;letter-spacing:0.04em;margin-top:2px;}
+.bodywrap{padding:14px;display:flex;flex-direction:column;gap:12px;}
+.card{background:#fff;border:1px solid #F1F5F9;border-radius:16px;padding:14px;}
+.lbl{font-size:10px;font-weight:900;color:#94A3B8;text-transform:uppercase;letter-spacing:0.05em;}
+.btn-primary{height:44px;border-radius:12px;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:6px;border:none;background:#4F46E5;color:#fff;}
+.chip{padding:9px 13px;border-radius:11px;font-size:11px;font-weight:800;background:#fff;color:#64748B;border:1px solid #E2E8F0;white-space:nowrap;display:flex;align-items:center;gap:6px;}
+.chip-active{background:#4F46E5;color:#fff;border-color:#4F46E5;}
+.i{stroke:currentColor;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+.navbar{position:absolute;left:16px;right:16px;bottom:16px;height:64px;border-radius:24px;background:#5346E0;box-shadow:0 10px 30px rgba(83,70,224,.35);display:flex;align-items:center;justify-content:space-around;padding:0 6px;}
+.navitem{display:flex;flex-direction:column;align-items:center;justify-content:center;color:rgba(255,255,255,.75);width:44px;height:44px;border-radius:14px;}
+.navitem.active{color:#fff;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.55);}
+.kpi{background:#fff;border:1px solid #F1F5F9;border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:6px;}
+.kpi-ic{width:28px;height:28px;border-radius:9px;display:flex;align-items:center;justify-content:center;}
+.ordrow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #F8FAFC;}
+</style>
+</helmet>
+<div class="scr">
+  <div class="hdr">
+    <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;">
+      <p class="h1" style="display:flex;align-items:center;gap:7px;">Zamira Kids Store
+        <span style="font-size:8px;font-weight:900;background:#ECFDF5;color:#059669;padding:2px 6px;border-radius:6px;letter-spacing:0.04em;">● LIVE</span>
+      </p>
+    </div>
+    <div class="icn-btn" style="background:#EEF2FF;color:#4F46E5;position:relative;">
+      <svg class="i" width="16" height="16" viewBox="0 0 24 24"><rect x="4" y="9" width="16" height="10" rx="2"/><path d="M12 2v4"/><circle cx="9" cy="14" r="1.1" fill="currentColor"/><circle cx="15" cy="14" r="1.1" fill="currentColor"/></svg>
+      <span style="position:absolute;top:-2px;right:-2px;width:7px;height:7px;border-radius:50%;background:#F59E0B;"></span>
+    </div>
+    <div class="icn-btn"><svg class="i" width="16" height="16" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
+    <div class="icn-btn"><svg class="i" width="16" height="16" viewBox="0 0 24 24"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="M8.2 10.8l7.6-4.4M8.2 13.2l7.6 4.4"/></svg></div>
+  </div>
+
+  <div class="bodywrap">
+    <div style="display:flex;gap:8px;">
+      <div class="chip chip-active" style="flex:1;justify-content:center;">Bugun</div>
+      <div class="chip" style="flex:1;justify-content:center;">Hafta</div>
+      <div class="chip" style="flex:1;justify-content:center;">Oy</div>
+    </div>
+
+    <div class="card" style="background:#EEF2FF;border-color:#E0E7FF;display:flex;align-items:center;gap:10px;">
+      <div style="width:34px;height:34px;border-radius:10px;background:#4F46E5;color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+        <svg class="i" width="17" height="17" viewBox="0 0 24 24"><path d="M12 2l1.8 5.4L19 9l-5.2 1.6L12 16l-1.8-5.4L5 9l5.2-1.6z"/></svg>
+      </div>
+      <div style="flex:1;">
+        <p style="font-size:12px;font-weight:800;color:#312E81;margin:0;">Birinchi mahsulotingizni qo'shing</p>
+        <p style="font-size:10px;color:#6366F1;margin:2px 0 0;">Do'koningizni ishga tushiring — 2 qadam qoldi</p>
+      </div>
+      <svg class="i" width="14" height="14" viewBox="0 0 24 24" style="color:#818CF8;flex-shrink:0;"><path d="M9 18l6-6-6-6"/></svg>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+      <div class="kpi">
+        <div class="kpi-ic" style="background:#ECFDF5;color:#059669;"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2H6a2 2 0 00-2 2v2"/></svg></div>
+        <p class="lbl" style="margin:0;">Savdo</p>
+        <p style="font-size:16px;font-weight:900;margin:0;">2 450 000 so'm</p>
+        <p style="font-size:10px;color:#059669;font-weight:700;margin:0;">Sof foyda: 780 000 so'm (32%)</p>
+      </div>
+      <div class="kpi">
+        <div class="kpi-ic" style="background:#EEF2FF;color:#4F46E5;"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg></div>
+        <p class="lbl" style="margin:0;">Buyurtmalar</p>
+        <p style="font-size:16px;font-weight:900;margin:0;">18 ta</p>
+        <p style="font-size:10px;color:#D97706;font-weight:700;margin:0;">3 tasi kutilmoqda</p>
+      </div>
+      <div class="kpi">
+        <div class="kpi-ic" style="background:#FFF7ED;color:#EA580C;"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg></div>
+        <p class="lbl" style="margin:0;">Konversiya</p>
+        <p style="font-size:16px;font-weight:900;margin:0;">3.4%</p>
+        <p style="font-size:10px;color:#94A3B8;margin:0;">214 tashrif</p>
+      </div>
+      <div class="kpi">
+        <div class="kpi-ic" style="background:#FFF1F2;color:#E11D48;"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg></div>
+        <p class="lbl" style="margin:0;">Ombor</p>
+        <p style="font-size:16px;font-weight:900;margin:0;">86 faol</p>
+        <p style="font-size:10px;color:#E11D48;font-weight:700;margin:0;">4 tasi kam qoldi</p>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;overflow:hidden;">
+      <div class="chip chip-active"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M12 3l1.8 5.4L19 10l-5.2 1.6L12 17l-1.8-5.4L5 10l5.2-1.6z"/></svg>AI bilan qo'shish</div>
+      <div class="chip"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg>Buyurtmalar</div>
+      <div class="chip"><svg class="i" width="13" height="13" viewBox="0 0 24 24"><path d="M3 11v2a2 2 0 002 2h1l3 5V6l-3 5H5a2 2 0 00-2 2z"/></svg>Aksiya</div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+        <p class="lbl" style="margin:0;">So'nggi buyurtmalar</p>
+        <a href="#" style="font-size:10px;font-weight:800;">Barchasi →</a>
+      </div>
+      <div class="ordrow">
+        <div style="width:34px;height:34px;border-radius:10px;background:#F8FAFC;display:flex;align-items:center;justify-content:center;color:#64748B;flex-shrink:0;"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg></div>
+        <div style="flex:1;min-width:0;">
+          <p style="font-size:12px;font-weight:800;margin:0;">#1042 · Xaridor: Malika</p>
+          <p style="font-size:10px;color:#94A3B8;margin:1px 0 0;">6 daqiqa oldin</p>
+        </div>
+        <div style="text-align:right;">
+          <p style="font-size:12px;font-weight:900;margin:0;">185 000 so'm</p>
+          <span class="badge" style="background:#FFFBEB;color:#D97706;font-size:9px;font-weight:900;padding:2px 6px;border-radius:6px;">Yangi</span>
+        </div>
+      </div>
+      <div class="ordrow" style="border-bottom:none;">
+        <div style="width:34px;height:34px;border-radius:10px;background:#F8FAFC;display:flex;align-items:center;justify-content:center;color:#64748B;flex-shrink:0;"><svg class="i" width="15" height="15" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg></div>
+        <div style="flex:1;min-width:0;">
+          <p style="font-size:12px;font-weight:800;margin:0;">#1041 · Xaridor: Nomsiz</p>
+          <p style="font-size:10px;color:#94A3B8;margin:1px 0 0;">44 daqiqa oldin</p>
+        </div>
+        <div style="text-align:right;">
+          <p style="font-size:12px;font-weight:900;margin:0;">92 000 so'm</p>
+          <span class="badge" style="background:#ECFDF5;color:#059669;font-size:9px;font-weight:900;padding:2px 6px;border-radius:6px;">Yetkazildi</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="navbar">
+    <div class="navitem active"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></div>
+    <div class="navitem"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/></svg></div>
+    <div class="navitem"><svg class="i" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></div>
+    <div class="navitem"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></div>
+    <div class="navitem"><svg class="i" width="22" height="22" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.65 1.65 0 00-1.8-.3 1.65 1.65 0 00-1 1.5V21a2 2 0 01-4 0v-.1A1.65 1.65 0 008 19.4a1.65 1.65 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.5-1H3a2 2 0 010-4h.1A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1A1.65 1.65 0 008 4.6a1.65 1.65 0 001-1.5V3a2 2 0 014 0v.1a1.65 1.65 0 001 1.5 1.65 1.65 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.5 1H21a2 2 0 010 4h-.1a1.65 1.65 0 00-1.5 1z"/></svg></div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -347,9 +347,20 @@ describe("sendFavoriteReminders", () => {
 });
 
 describe("sendRepurchaseReminders", () => {
+  // 2026-09: kategoriya-asoslangan iste'mol tsikli (`lib/
+  // replenishmentCycles.js`) - endi tsikl BUYURTMA ICHIDAGI mahsulot
+  // kategoriyasiga qarab hisoblanadi ("Yuz parvarishi" = 30 kun),
+  // OLDINGI qat'iy "hamma uchun 30 kun"dan farqli. Testlar uchun
+  // "Krem" mahsuloti izchil ravishda "Yuz parvarishi" kategoriyasida
+  // deb belgilanadi (haqiqiy hayotdagi kabi - yuz kremi).
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const dueOrderItem = (overrides = {}) => ({ name: "Krem", quantity: 1, category: "Yuz parvarishi", ...overrides });
+  // 31 kun oldin - 30 kunlik tsikldan O'TGAN (eslatmaga loyiq).
+  const dueCreatedAt = { toMillis: () => Date.now() - 31 * DAY_MS };
+
   test("mijoz O'SHA BUYURTMADAN KEYIN qayta buyurtma bergan bo'lsa, eslatma YUBORMAYDI", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: true,
     });
     const { sendRepurchaseReminders } = loadModule(db);
@@ -362,7 +373,7 @@ describe("sendRepurchaseReminders", () => {
 
   test("allaqachon eslatma yuborilgan buyurtmani O'TKAZIB YUBORADI", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", repurchaseReminderSent: true, orders: [{ name: "Krem" }] } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", repurchaseReminderSent: true, orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
     });
     const { sendRepurchaseReminders } = loadModule(db);
@@ -370,9 +381,9 @@ describe("sendRepurchaseReminders", () => {
     expect(db.__updateCalls.length).toBe(0);
   });
 
-  test("haqiqiy, qayta buyurtma BERILMAGAN holatda - eslatma yuboradi", async () => {
+  test("haqiqiy, qayta buyurtma BERILMAGAN holatda - eslatma yuboradi, tsikl kuni audit uchun yoziladi", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: {},
     });
@@ -380,11 +391,60 @@ describe("sendRepurchaseReminders", () => {
     await sendRepurchaseReminders();
     expect(db.__updateCalls.length).toBe(1);
     expect(db.__updateCalls[0].data.repurchaseReminderSent).toBe(true);
+    expect(db.__updateCalls[0].data.repurchaseCycleDaysUsed).toBe(30);
+  });
+
+  test("KATEGORIYASI 'muntazam tugaydigan' deb tanilmagan (masalan kiyim) buyurtma - eslatma UMUMAN YUBORILMAYDI, darhol 'loyiq emas' deb belgilanadi", async () => {
+    const db = buildMockDb({
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Ko'ylak", quantity: 1, category: "Ko'ylaklar" }], createdAt: dueCreatedAt } }],
+      newerOrderExists: false,
+      sellerData: {},
+    });
+    const { sendRepurchaseReminders, __sendTelegramMessageMock } = loadModule(db);
+    await sendRepurchaseReminders();
+    expect(__sendTelegramMessageMock).not.toHaveBeenCalled();
+    expect(db.__updateCalls[0].data).toMatchObject({ repurchaseReminderSent: true, repurchaseReminderSkippedReason: "no_consumable_category" });
+  });
+
+  test("HALI O'Z tsikliga yetmagan buyurtma (masalan 10 kun oldin, 30 kunlik tsikl) - eslatma YUBORILMAYDI VA belgilanmaydi (ertaga qayta tekshiriladi)", async () => {
+    const db = buildMockDb({
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: { toMillis: () => Date.now() - 10 * DAY_MS } } }],
+      newerOrderExists: false,
+      sellerData: {},
+    });
+    const { sendRepurchaseReminders, __sendTelegramMessageMock } = loadModule(db);
+    await sendRepurchaseReminders();
+    expect(__sendTelegramMessageMock).not.toHaveBeenCalled();
+    expect(db.__updateCalls.length).toBe(0);
+  });
+
+  test("bir nechta TURLI kategoriyadagi mahsulot bo'lsa - ENG QISQA tsikl tanlanadi", async () => {
+    const db = buildMockDb({
+      // "Shaxsiy gigiena" (20 kun) + "Parfyumeriya" (90 kun) - eng
+      // qisqasi (20 kun) tanlanishi kerak.
+      orderDocs: [{
+        id: "order-1",
+        data: {
+          sellerId: "s1", clientId: "c1",
+          orders: [
+            { name: "Sovun", quantity: 1, category: "Shaxsiy gigiena" },
+            { name: "Atir", quantity: 1, category: "Parfyumeriya" },
+          ],
+          createdAt: { toMillis: () => Date.now() - 25 * DAY_MS }, // 25 kun: 20dan katta, 90dan kichik
+        },
+      }],
+      newerOrderExists: false,
+      sellerData: {},
+    });
+    const { sendRepurchaseReminders, __sendTelegramMessageMock } = loadModule(db);
+    await sendRepurchaseReminders();
+    expect(__sendTelegramMessageMock).toHaveBeenCalledTimes(1); // 25 kun >= 20 (eng qisqa) - due
+    expect(db.__updateCalls[0].data.repurchaseCycleDaysUsed).toBe(20);
   });
 
   test("sotuvchida shaxsiy bot ULANGAN bo'lsa, eslatma BIRINCHI NAVBATDA o'sha bot orqali yuboriladi (v39.6)", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: {},
       customBotData: { botToken: "sellers-own-bot-token" },
@@ -397,7 +457,7 @@ describe("sendRepurchaseReminders", () => {
 
   test("sotuvchida shaxsiy bot bo'lmasa, platforma (zaxira) tokeni ishlatiladi", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: {},
     });
@@ -412,7 +472,7 @@ describe("sendRepurchaseReminders", () => {
   test("aiCeoEnabled=false bo'lsa (standart holat) - AI CHAQIRILMAYDI, oddiy shablon yuboriladi", async () => {
     const generateContentMock = jest.fn();
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: {}, // aiCeoEnabled/aiCeoAutoWinBackEnabled ikkalasi ham yo'q
     });
@@ -420,14 +480,14 @@ describe("sendRepurchaseReminders", () => {
     await sendRepurchaseReminders();
     expect(generateContentMock).not.toHaveBeenCalled();
     expect(__sendTelegramMessageMock).toHaveBeenCalledWith(
-      expect.any(String), "c1", expect.stringContaining("Bir oy oldin buyurtma bergan")
+      expect.any(String), "c1", expect.stringContaining("Avval buyurtma bergan")
     );
   });
 
   test("aiCeoEnabled=true, lekin aiCeoAutoWinBackEnabled YOQILMAGAN bo'lsa - AI baribir chaqirilmaydi (opt-in, opt-out EMAS)", async () => {
     const generateContentMock = jest.fn();
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true }, // aiCeoAutoWinBackEnabled ATAYLAB yo'q
     });
@@ -439,7 +499,7 @@ describe("sendRepurchaseReminders", () => {
   test("aiCeoEnabled=true VA aiCeoAutoWinBackEnabled=true bo'lsa - AI matnini ishlatadi va hisoblagichni oshiradi", async () => {
     const generateContentMock = jest.fn().mockResolvedValue({ text: "AI CEO yozgan maxsus, iliq xabar." });
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", customer: { fullName: "Ali" }, orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", customer: { fullName: "Ali" }, orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true, aiCeoAutoWinBackEnabled: true, storeName: "Zelo" },
     });
@@ -454,14 +514,14 @@ describe("sendRepurchaseReminders", () => {
   test("AI xato bersa - JIM QOLADI va oddiy shablon bilan baribir yuboradi (eslatma HECH QACHON AI xatosi tufayli buzilmaydi)", async () => {
     const generateContentMock = jest.fn().mockRejectedValue(new Error("Gemini vaqtincha ishlamayapti"));
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true, aiCeoAutoWinBackEnabled: true },
     });
     const { sendRepurchaseReminders, __sendTelegramMessageMock } = loadModule(db, { generateContentMock });
     await expect(sendRepurchaseReminders()).resolves.not.toThrow();
     expect(__sendTelegramMessageMock).toHaveBeenCalledWith(
-      expect.any(String), "c1", expect.stringContaining("Bir oy oldin buyurtma bergan")
+      expect.any(String), "c1", expect.stringContaining("Avval buyurtma bergan")
     );
   });
 
@@ -470,7 +530,7 @@ describe("sendRepurchaseReminders", () => {
   // qaytarish xabari uchun.
   test("aiCeoEnabled=true bo'lsa - natija kuzatuvga OLINADI (AI o'chiq bo'lsa ham, aiGenerated:false bilan)", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true },
     });
@@ -482,7 +542,7 @@ describe("sendRepurchaseReminders", () => {
 
   test("aiCeoEnabled=false (standart holat) bo'lsa - natija kuzatuvga UMUMAN OLINMAYDI", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: {},
     });
@@ -494,7 +554,7 @@ describe("sendRepurchaseReminders", () => {
   test("oldingi AI xabarlarning HAQIQIY natijasi (yetarli namuna bilan) YANGI xabar promptiga qo'shiladi", async () => {
     const generateContentMock = jest.fn().mockResolvedValue({ text: "AI CEO yozgan maxsus, iliq xabar." });
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true, aiCeoAutoWinBackEnabled: true, storeName: "Zelo" },
       learningSummaryData: { winbackAiSent: 10, winbackAiConverted: 4 }, // 40% - yaxshi natija
@@ -512,7 +572,7 @@ describe("sendRepurchaseReminders", () => {
   // `aiCeoAutoDiscount.js`).
   test("aiCeoAutoDiscountEnabled=true VA natija ISBOTLANGAN past bo'lsa - HAQIQIY chegirma promokodi yaratiladi va xabarga qo'shiladi", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true, aiCeoAutoWinBackEnabled: true, aiCeoAutoDiscountEnabled: true, storeName: "Zelo" },
       learningSummaryData: { winbackAiSent: 10, winbackAiConverted: 1 }, // 10% - past, isbotlangan
@@ -536,7 +596,7 @@ describe("sendRepurchaseReminders", () => {
   test("aiCeoAutoDiscountEnabled=true, lekin natija HALI yaxshi (ISBOTLANMAGAN past) bo'lsa - chegirma YARATILMAYDI", async () => {
     const generateContentMock = jest.fn().mockResolvedValue({ text: "AI CEO yozgan maxsus, iliq xabar." });
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true, aiCeoAutoWinBackEnabled: true, aiCeoAutoDiscountEnabled: true, storeName: "Zelo" },
       learningSummaryData: { winbackAiSent: 10, winbackAiConverted: 4 }, // 40% - yaxshi natija
@@ -549,7 +609,7 @@ describe("sendRepurchaseReminders", () => {
 
   test("aiCeoAutoDiscountEnabled=false (standart holat) bo'lsa - past natija bo'lsa ham chegirma YARATILMAYDI", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true, aiCeoAutoWinBackEnabled: true, storeName: "Zelo" }, // aiCeoAutoDiscountEnabled ATAYLAB yo'q
       learningSummaryData: { winbackAiSent: 10, winbackAiConverted: 1 },
@@ -561,7 +621,7 @@ describe("sendRepurchaseReminders", () => {
 
   test("aiCeoAutoWinBackEnabled YOQILMAGAN bo'lsa (faqat aiCeoAutoDiscountEnabled yoqilgan) - bog'liqlik tufayli chegirma YARATILMAYDI", async () => {
     const db = buildMockDb({
-      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } }],
+      orderDocs: [{ id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } }],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true, aiCeoAutoDiscountEnabled: true }, // aiCeoAutoWinBackEnabled ATAYLAB yo'q
       learningSummaryData: { winbackAiSent: 10, winbackAiConverted: 1 },
@@ -583,8 +643,8 @@ describe("sendRepurchaseReminders", () => {
     const generateContentMock = jest.fn().mockResolvedValue({ text: "AI CEO yozgan maxsus, iliq xabar." });
     const db = buildMockDb({
       orderDocs: [
-        { id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [{ name: "Krem", quantity: 1 }], createdAt: 1000 } },
-        { id: "order-2", data: { sellerId: "s1", clientId: "c2", orders: [{ name: "Sovun", quantity: 1 }], createdAt: 1000 } },
+        { id: "order-1", data: { sellerId: "s1", clientId: "c1", orders: [dueOrderItem()], createdAt: dueCreatedAt } },
+        { id: "order-2", data: { sellerId: "s1", clientId: "c2", orders: [dueOrderItem({ name: "Sovun" })], createdAt: dueCreatedAt } },
       ],
       newerOrderExists: false,
       sellerData: { aiCeoEnabled: true, aiCeoAutoWinBackEnabled: true, aiCeoAutoDiscountEnabled: true, storeName: "Zelo" },

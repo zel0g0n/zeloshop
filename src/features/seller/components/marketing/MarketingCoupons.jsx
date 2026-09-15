@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Tag, Plus, Trash2, Percent, Wallet, Gift, ShoppingCart, Heart, RotateCcw, Star, Cake, Trophy, Megaphone } from "lucide-react";
+import { ArrowLeft, Tag, Plus, Trash2, Percent, Wallet, Gift, ShoppingCart, Heart, RotateCcw, Star, Cake, Trophy, Megaphone, Crown } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useCoupons } from "@/hooks/seller/useCoupons";
 import { usePartnerCodeStats } from "@/hooks/seller/usePartnerCodeStats";
@@ -9,7 +9,6 @@ import StatusModal from "@/components/ui/StatusModal";
 import CustomSelect from "@/components/ui/CustomSelect";
 import { useLanguage } from "@/context/LanguageContext";
 import { getTariffLimits, getEffectiveTariffPlan } from "@/utils/tariffLimits";
-import BiznesBadge from "@/components/ui/BiznesBadge";
 
 const MarketingCoupons = () => {
   const navigate = useNavigate();
@@ -559,8 +558,8 @@ const MarketingCoupons = () => {
             <div className="pt-3 mt-1 border-t border-slate-100 dark:border-slate-800 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
+                  <Crown size={12} className="text-amber-500" />
                   <h4 className="text-[11px] font-black text-slate-600 dark:text-slate-300">{t("marketing.birthday.vipTitle")}</h4>
-                  <BiznesBadge size="xs" />
                 </div>
                 <button
                   type="button"

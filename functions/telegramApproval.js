@@ -7,25 +7,36 @@ const { todayDocId, trackCrmMessageRecipients, logNotification } = require("./li
 const { collectAttentionSegmentClientIds, craftCrmCampaign } = require("./aiCeo");
 const { handleTelegramMessage } = require("./telegramBotMenu");
 const { checkRateLimit } = require("./lib/rateLimit");
-const { createPendingAction, approveAction, rejectAction } = require("./lib/aiApprovalEngine");
+const { createPendingAction, approveAction, rejectAction, runQueuedAction } = require("./lib/aiApprovalEngine");
 const { executeAdCampaign } = require("./lib/aiActionExecutors");
 // 50-100+ faol sotuvchida ketma-ket ishlov berish standart 60s
 // `onSchedule` timeout'idan oshib ketishi mumkin edi - batafsil
 // izoh: `lib/batchProcess.js`.
 const { processBatched } = require("./lib/batchProcess");
 const { isDuplicateUpdate } = require("./lib/webhookDedup");
-const { withSentry, SENTRY_DSN } = require("./lib/sentry");
+const { withSentry, initSentry, Sentry, SENTRY_DSN } = require("./lib/sentry");
 
 /**
- * AI CEO — 3-qism: Telegram orqali "bir tugmali tasdiqlash".
+ * AI CEO — 3-qism: kunlik CRM kampaniyasi (VIP/"uxlab qolgan" mijozlar).
  *
- * Sotuvchi Mini App'ni ochmasdan, to'g'ridan-to'g'ri o'z Telegram
- * chatida AI CEO tayyorlagan (VIP yoki "uxlab qolgan" mijozlar uchun)
- * tayyor kampaniya matnini ko'radi va bitta tugma bosib ("✅
- * Tasdiqlash va yuborish") uni yuboradi - yoki "❌ Bekor qilish" bosib
- * rad etadi. Bu, Tier-2 ("AI tayyorlaydi, sotuvchi bir marta
- * tasdiqlaydi") darajasining Mini App'ni ochishni talab qilmaydigan
- * shakli.
+ * 2026-09gacha: Tier-2 ("AI tayyorlaydi, sotuvchi bir marta
+ * tasdiqlaydi") - sotuvchi Mini App'ni ochmasdan, to'g'ridan-to'g'ri
+ * Telegram chatida AI CEO tayyorlagan kampaniya matnini ko'rib, bitta
+ * tugma bilan tasdiqlar yoki rad etardi.
+ *
+ * 2026-09, sotuvchi qarori ("AI CEO mustaqil yuborsin, men faqat
+ * natijani ko'raman"): bu harakat turi (`crmCampaign`) moliyaviy
+ * majburiyatsiz (faqat tayyor xabar) bo'lgani uchun LOW xavf deb qayta
+ * tasniflandi (`lib/aiActionRegistry.js`) va endi Tier-3 ("AI mustaqil
+ * bajaradi") darajasida - sotuvchi TASDIQ SO'RALMAYDI,
+ * `processSellerApprovalDigest` harakatni "system" nomidan darhol ijro
+ * etadi (`lib/aiApprovalEngine.js`dagi `runQueuedAction`) va sotuvchiga
+ * FAQAT NATIJA xabari (necha mijozga yetib borgani) yuboriladi. Tugmali
+ * ("✅ Tasdiqlash va yuborish" / "❌ Bekor qilish") oqim VA shu
+ * webhook'dagi ishlov berish kodi ATAYLAB OLIB TASHLANMAGAN - deploy
+ * paytida allaqachon yuborilgan, hali javob kutayotgan ESKI xabarlar
+ * "osilib" qolmasligi uchun zaxira sifatida ishlaydi (quyida,
+ * `processSellerApprovalDigest`dagi izohga qarang).
  *
  * Nega `onRequest` (kodning boshqa hamma joyida faqat `onCall`
  * ishlatiladi): Telegram Bot API "webhook" mexanizmi xom HTTP
@@ -126,15 +137,51 @@ async function processSellerApprovalDigest(sellerDoc) {
 
       // Rasmiy Approval Engine orqali (`lib/aiApprovalEngine.js`) -
       // sxema validatsiyasi, risk darajasi, holat mashinasi va audit
-      // logi bilan, lekin XATTI-HARAKATI o'zgarmagan (har doim MEDIUM
-      // xavf -> WAITING_APPROVAL -> eski `status: "pending"` maydoni
-      // ham to'ldiriladi, orqaga mos).
-      await createPendingAction(db, admin, {
+      // logi bilan. `crmCampaign` endi LOW xavf (2026-09 qarori) -
+      // shuning uchun bu hujjat WAITING_APPROVAL EMAS, to'g'ridan-
+      // to'g'ri QUEUED holatida yaratiladi (`created.requiresApproval
+      // === false`).
+      const created = await createPendingAction(db, admin, {
         sellerId,
         actionType: "crmCampaign",
         payload: { segment: key, title: draft.title, message: draft.message, targetClientIds: ids, dateId },
       });
 
+      if (!created.requiresApproval) {
+        // AVTOMATIK IJRO — sotuvchi tasdig'ini KUTMASDAN, "system"
+        // nomidan darhol yuboradi (`runQueuedAction` - xuddi
+        // `resolvePendingAction`dagi tasdiqlash yo'li bilan BIR XIL
+        // `executeCrmCampaignSend` executor'i orqali). Sotuvchiga esa
+        // TASDIQLASH SO'ROVI emas, faqat NATIJA xabari yuboriladi.
+        const result = await runQueuedAction(db, admin, {
+          sellerId,
+          actionId: created.actionId,
+          executors: {
+            crmCampaign: (ctx) => executeCrmCampaignSend({
+              sellerId: ctx.sellerId,
+              targetClientIds: ctx.actionDoc.targetClientIds || [],
+              title: ctx.actionDoc.title,
+              message: ctx.actionDoc.message,
+            }),
+          },
+        });
+
+        if (result.ok && result.executed) {
+          const sent = result.result?.sent ?? 0;
+          const total = result.result?.total ?? ids.length;
+          const notifyText = `🤖 *AI CEO avtomatik yubordi*\n\n${SEGMENT_TITLES[key] || key} (${total} ta) uchun tayyor kampaniya avtomatik yuborildi:\n\n*${draft.title}*\n${draft.message}\n\n✅ Yetib bordi: ${sent}/${total}`;
+          await sendTelegramMessage(token, sellerId, notifyText);
+        } else if (result.ok && result.failed) {
+          console.error(`AI CEO avtomatik CRM ijrosi xato (sotuvchi ${sellerId}, segment ${key}):`, result.error);
+        }
+        continue;
+      }
+
+      // Orqaga moslik zaxirasi: bu shoxobcha endi amalda yetib
+      // bo'lmaydi (crmCampaign endi hech qachon WAITING_APPROVAL
+      // yaratmaydi), lekin deploy vaqtida ALLAQACHON WAITING_APPROVAL
+      // holatida yaratilgan (eski mantiq ostidagi) hujjat bo'lsa, o'sha
+      // "osilib" qolmasligi uchun eski tugmali oqim saqlanadi.
       const { text, inlineKeyboard } = buildApprovalMessage({
         segment: key, segmentCount: ids.length, title: draft.title, message: draft.message,
         reasoning: draft.reasoning, dateId,
@@ -287,9 +334,16 @@ async function resolvePendingAction({ sellerId, actionId, approve }) {
  * webhook'lar uchun Telegram bu yangilanish turini umuman
  * yubormaydi).
  */
+// XAVFSIZLIK/MONITORING (2026-09 audit, "o'rtacha darajadagi
+// kamchiliklar"): bu faylda `withSentry`/`SENTRY_DSN` allaqachon
+// import qilingan va boshqa (onCall) funksiyalarda ishlatilgan edi,
+// lekin aynan shu webhook'ning o'ziga hech qachon qo'llanilmagan
+// edi — `courierBot.js`/`staffBot.js` bilan bir xil bo'shliq, bir xil
+// tuzatish naqshi (batafsil izoh: o'sha fayllarda).
 exports.telegramCallbackWebhook = onRequest(
-  { region: "asia-south1", secrets: [BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, GEMINI_API_KEY] },
-  async (req, res) => {
+  { region: "asia-south1", secrets: [BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, GEMINI_API_KEY, SENTRY_DSN] },
+  withSentry(async (req, res) => {
+    initSentry();
     // Xavfsizlik: bu yagona `onRequest` (kodning qolgan qismi faqat
     // `onCall` ishlatadi) — shuning uchun manba tekshiruvi shu yerda,
     // qo'lda amalga oshirilishi shart.
@@ -314,6 +368,7 @@ exports.telegramCallbackWebhook = onRequest(
         await handleTelegramMessage(BOT_TOKEN.value(), message);
       } catch (err) {
         console.error("Telegram xabarini (bot menyusi) qayta ishlashda xatolik:", err);
+        Sentry.captureException(err);
       }
       res.status(200).send("ok");
       return;
@@ -373,12 +428,13 @@ exports.telegramCallbackWebhook = onRequest(
       res.status(200).send("ok");
     } catch (err) {
       console.error("Telegram callback_query qayta ishlashda xatolik:", err);
+      Sentry.captureException(err);
       // Xato bo'lsa ham 200 qaytaramiz - Telegram'ning cheksiz qayta
       // urinishiga yo'l qo'ymaslik uchun (xato allaqachon logga
       // yozildi, keyinroq diagnostika qilinadi).
       res.status(200).send("ok");
     }
-  }
+  })
 );
 
 /**

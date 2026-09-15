@@ -69,7 +69,7 @@ module.exports = { incrementDailyStat, trackCrmMessageRecipients, todayDocId, lo
  * Telegram xabari sababsiz yetib bormasa ham, sotuvchi yoki xaridor
  * buni ilova ichida ko'rib, muammoni aniqlay oladi.
  */
-async function logNotification({ sellerId, clientId, type, title, message, delivered = true }) {
+async function logNotification({ sellerId, clientId, type, title, message, delivered = true, meta = null }) {
   if (!sellerId || !clientId) return;
   try {
     await db.collection("notificationLogs").add({
@@ -80,6 +80,11 @@ async function logNotification({ sellerId, clientId, type, title, message, deliv
       message,
       delivered,
       sentAt: admin.firestore.FieldValue.serverTimestamp(),
+      // Ixtiyoriy, kelajakda haqiqiy konversiya tahlili uchun (masalan
+      // "qaysi bosqich/qaysi iste'mol tsikli ko'proq xarid keltirdi") -
+      // faqat berilgan hollarda qo'shiladi, eski chaqiruvchilar
+      // (`meta` uzatmaydiganlar) hech narsa o'zgarmaydi.
+      ...(meta && typeof meta === "object" ? { meta } : {}),
     });
   } catch (err) {
     console.error(`Bildirishnoma jurnaliga yozishda xatolik (${type}, mijoz ${clientId}):`, err);

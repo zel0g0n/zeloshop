@@ -208,7 +208,13 @@ service cloud.firestore {
                     "tariffPlan", "tariffTrialActive", "tariffTrialPlan",
                     "tariffTrialStartedAt", "tariffTrialExpiresAt", "tariffTrialsUsed",
                     "aiCeoGrantedViaTariff", "activeDiscountCount", "couponCount",
-                    "tariffCountersBackfilledAt"]) &&
+                    "tariffCountersBackfilledAt",
+                    // ATMOS TO'LOV TIZIMI (2026-09): `tariffPaidUntil` va h.k. —
+                    // FAQAT `functions/atmosPayments.js` (Admin SDK) yozadi.
+                    // Aks holda sotuvchi brauzer konsolidan o'zining to'lov
+                    // muddatini cheksizga o'zgartirib qo'yishi mumkin edi.
+                    "tariffPaidUntil", "tariffLastPaymentAt", "tariffPaymentReminderSentAt",
+                    "aiCeoGrantedViaPaidTariff"]) &&
          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(["heroBanners"]) ||
           request.resource.data.get("heroBanners", []).size() <= tariffBannerLimit(tariffEffectivePlan(resource.data))) &&
          // VIP TUG'ILGAN KUN BONUSI (2026-09, "katta bizneslar uchun"
@@ -604,6 +610,19 @@ service cloud.firestore {
     // ham FAQAT `updateCourierOrderStatus` Cloud Function orqali,
     // Admin SDK bilan, quyidagi `allow update` qoidasidan MUSTASNO
     // holda amalga oshiriladi).
+    // --- ATMOS TARIF TO'LOVLARI (2026-09, `functions/atmosPayments.js`) ---
+    // Hujjat ID'si — Atmos tranzaksiya raqami. O'QISH: faqat shu
+    // to'lovning egasi (yoki admin) — sotuvchi checkout'dan qaytgach
+    // holatni tekshirishi uchun. YOZISH: HAR DOIM `false` — faqat
+    // Cloud Function (Admin SDK, `createTariffPayment`/
+    // `atmosPaymentCallback`) yaratadi/yangilaydi, chunki bu yerga
+    // "paid" holatini mijoz tomonidan qo'lda yozib qo'yish to'lovsiz
+    // tarifni faollashtirishga imkon berardi.
+    match /atmosPayments/{transactionId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.sellerId == request.auth.uid);
+      allow write: if false;
+    }
+
     match /orders/{orderId} {
       // XODIMLAR QO'SHILDI: `permissions.manageOrders` huquqiga ega
       // FAOL xodim, o'zi ishlaydigan do'konning barcha buyurtmalarini

@@ -1,34 +1,46 @@
-import { useState, useCallback } from "react";
-import { Check, Sparkles, Send, Zap, Clock } from "lucide-react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Check, Sparkles, Send, Zap, Clock, CreditCard, AlertTriangle, Loader2 } from "lucide-react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase/config";
 import { useSession } from "@/context/SessionContext";
 import StatusModal from "@/components/ui/StatusModal";
 import { useLanguage } from "@/context/LanguageContext";
 import startTariffTrial from "@/services/tariffs/startTariffTrial";
+import createTariffPayment from "@/services/tariffs/createTariffPayment";
+import getTariffPaymentStatus from "@/services/tariffs/getTariffPaymentStatus";
 import {
-  TARIFF_LIMITS, TRIAL_DAYS, getEffectiveTariffPlan, getNextTrialTier,
+  TARIFF_LIMITS, TRIAL_DAYS, TARIFF_MONTHLY_PRICE_SOM, getEffectiveTariffPlan, getNextTrialTier,
   hasUsedTrial, hasActiveTrial, getTrialExpiresAtMs, normalizeTariffPlan,
+  isBillingRequired, isTariffPastDue, isTariffPurchasable, getPaidUntilMs, getGraceExpiresAtMs,
 } from "@/utils/tariffLimits";
 
-// Platforma o'zining to'lov yig'ish tizimiga ega emas — arxitektura
-// ataylab markazlashtirilmagan: har bir sotuvchi o'z Click/Payme
-// hisobini ulaydi, pul to'g'ridan-to'g'ri sotuvchiga tushadi. Shuning
-// uchun bu yerda "sotib olish" tugmasi yo'q — soxta to'lov oqimi
-// yaratish o'rniga, sotuvchi qiziqishi admin'ga xabar sifatida
-// yuboriladi (mavjud `contactAdmin` Cloud Function, o'zgartirilmagan).
+// UZS narxini "199 000 so'm/oy" shaklida formatlaydi — loyihada
+// allaqachon qabul qilingan konvensiya (`Checkout.jsx`, `CartPage.jsx`
+// va h.k. — valyuta HAR DOIM "so'm" bilan, UI tilidan qat'i nazar).
+function formatSomPerMonth(amountSom) {
+  return `${amountSom.toLocaleString()} so'm/oy`;
+}
+
+// MUHIM (2026-09, "tarif to'lov tizimini ishga tushirish" bo'limi):
+// bu yerdagi "sotib olish" — FAQAT TARIF (Z-Start/Z-Pro) to'lovi,
+// Atmos orqali (`functions/atmosPayments.js`). MAHSULOT/CHECKOUT
+// to'lovi bilan ADASHTIRMASLIK kerak — u hamon eski, decentralizatsiya-
+// lashgan strukturada qoladi (har bir sotuvchi o'z Click/Payme
+// hisobini ulaydi, pul to'g'ridan-to'g'ri sotuvchiga tushadi — bu
+// yerda hech narsa o'zgarmadi). Tarif puli esa ZeloShop'ning O'ZIGA
+// tegishli (xizmat haqi) — shuning uchun markazlashtirilgan, avtomatik
+// Atmos to'lovi mantiqan va huquqiy jihatdan toza.
 //
-// 2026-09 (tarif tanlashni to'liq ishga tushirish bo'limi): sahifa
-// endi Z-Tariflar artefaktida (`/tmp/artifacts/z-tariflar.html`)
-// FOYDALANUVCHI BILAN TASDIQLANGAN 3 bosqichli tuzilmani ko'rsatadi -
-// Z-Start (bepul) / Z-Pro (199 000 so'm/oy) / Z-Biznes (≈349 000
-// so'm/oy, narx hali yakunlanmagan). Endi bu — FAQAT ko'rsatish EMAS:
-// xodim/banner/aksiya/promo kod limitlari VA AI CEO'ga kirish HAQIQIY
-// `sellers.tariffPlan`ga bog'liq (`firestore.rules` + Cloud
-// Functions). Sotuvchi bu yerdan 7 kunlik BEPUL SINOVNI o'zi
-// boshlashi mumkin (har bir tarif faqat bir marta) - HAQIQIY (pullik)
-// tarifga o'tish esa hamon admin bilan bog'lanish orqali (real
-// markazlashtirilgan to'lov tizimi hali yo'q).
+// Z-Biznes hamon "ishlab chiqilmoqda" (narx yakunlanmagan) — shuning
+// uchun HAMON faqat "qiziqish bildirish" (`contactAdmin`) orqali.
+//
+// Z-Start ENDI PULLIK (49 000 so'm/oy), LEKIN FAQAT shu o'zgarish
+// joriy etilgan sanadan KEYIN ro'yxatdan o'tgan (yangi) sotuvchilarga
+// — oldingi (bepul Start'da ishlayotgan) sotuvchilar "grandfather"
+// qilinadi (`isBillingRequired`, batafsil izoh: `functions/lib/tariffs.js`).
+// Yangi sotuvchilar uchun ham — ro'yxatdan o'tgandan keyingi BIRINCHI
+// 7 kun avtomatik bepul (tugma bosish shart emas).
 const PLAN_ORDER = ["start", "pro", "biznes"];
 
 const PLANS = [
@@ -131,6 +143,7 @@ function formatDaysRemaining(expiresAtMs) {
 const TariffsSection = () => {
   const { t } = useLanguage();
   const { store, patchStore } = useSession();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const basePlan = normalizeTariffPlan(store?.tariffPlan);
   const effectivePlan = getEffectiveTariffPlan(store);
@@ -139,12 +152,126 @@ const TariffsSection = () => {
   const nextTrialTier = getNextTrialTier(basePlan);
   const trialDaysLeft = activeTrial ? formatDaysRemaining(getTrialExpiresAtMs(store)) : 0;
 
+  // ATMOS TO'LOVI (2026-09) — batafsil izoh: yuqoridagi fayl sarlavhasi.
+  const billingRequired = isBillingRequired(store);
+  const pastDue = isTariffPastDue(store);
+  const paidUntilMs = getPaidUntilMs(store);
+  const graceExpiresAtMs = getGraceExpiresAtMs(store);
+  // Sotuvchi hali BIR MARTA ham to'lamagan (hali "sinov" darchasida) —
+  // shu holatda muddat ko'rsatkichi to'lov emas, bepul davr tugashini
+  // ko'rsatadi.
+  const daysUntilDue = billingRequired
+    ? formatDaysRemaining(paidUntilMs > 0 ? paidUntilMs : graceExpiresAtMs)
+    : null;
+
   const [sendingId, setSendingId] = useState(null);
   const [sentPlanId, setSentPlanId] = useState(null);
   const [showSentModal, setShowSentModal] = useState(false);
   const [trialStarting, setTrialStarting] = useState(false);
   const [trialError, setTrialError] = useState(null);
   const [error, setError] = useState(null);
+
+  const [payingId, setPayingId] = useState(null);
+  const [payError, setPayError] = useState(null);
+  const [awaitingCheckoutPlanId, setAwaitingCheckoutPlanId] = useState(null);
+  const [paymentResultModal, setPaymentResultModal] = useState(null); // {variant, title, message}
+  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
+  const pollAttemptsRef = useRef(0);
+
+  const handlePayNow = useCallback(
+    async (plan) => {
+      setPayingId(plan.id);
+      setPayError(null);
+      try {
+        const { checkoutUrl } = await createTariffPayment(plan.id);
+        setAwaitingCheckoutPlanId(plan.id);
+        // Loyihada allaqachon qabul qilingan konvensiya — tashqi
+        // havolalar `window.open(..., "_blank")` orqali ochiladi
+        // (`ShareStoreModal.jsx`, `ConnectionsPage.jsx` va h.k.).
+        window.open(checkoutUrl, "_blank");
+      } catch (err) {
+        setPayError(err.message || t("tariffs.paymentStartError"));
+      } finally {
+        setPayingId(null);
+      }
+    },
+    [t]
+  );
+
+  // Checkout'dan qaytgach (`?atmosTxn=...`) — to'lov holatini
+  // tekshiradi. Webhook AVTORITET manba (Firestore'ni to'g'ridan-to'g'ri
+  // yangilaydi) — bu yerdagi so'rov faqat TEZKOR fikr-mulohaza (UI
+  // darhol yangilansin) uchun, shuning uchun kechiksa/muvaffaqiyatsiz
+  // bo'lsa ham jiddiy muammo emas (sotuvchi sahifani qayta ochganda
+  // baribir to'g'ri holatni ko'radi, `verifyTelegramAuth` qayta
+  // chaqirilganda).
+  useEffect(() => {
+    const transactionId = searchParams.get("atmosTxn");
+    if (!transactionId) return;
+
+    let cancelled = false;
+    pollAttemptsRef.current = 0;
+    setCheckingPaymentStatus(true);
+
+    const cleanUrl = () => {
+      const next = new URLSearchParams(searchParams);
+      next.delete("atmosTxn");
+      setSearchParams(next, { replace: true });
+    };
+
+    const poll = async () => {
+      try {
+        const result = await getTariffPaymentStatus(transactionId);
+        if (cancelled) return;
+
+        if (result.status === "paid") {
+          patchStore({
+            tariffPlan: result.plan,
+            tariffPaidUntil: result.paidUntilMs,
+          });
+          setPaymentResultModal({
+            variant: "success",
+            title: t("tariffs.paymentSuccessTitle"),
+            message: t("tariffs.paymentSuccessMessage", { plan: t(`tariffs.plan${result.plan.charAt(0).toUpperCase()}${result.plan.slice(1)}Name`) }),
+          });
+          setCheckingPaymentStatus(false);
+          cleanUrl();
+          return;
+        }
+
+        pollAttemptsRef.current += 1;
+        if (pollAttemptsRef.current < 5) {
+          setTimeout(poll, 2500);
+        } else {
+          setPaymentResultModal({
+            variant: "info",
+            title: t("tariffs.paymentPendingTitle"),
+            message: t("tariffs.paymentPendingMessage"),
+          });
+          setCheckingPaymentStatus(false);
+          cleanUrl();
+        }
+      } catch (err) {
+        if (cancelled) return;
+        setPaymentResultModal({
+          variant: "info",
+          title: t("tariffs.paymentPendingTitle"),
+          message: err.message || t("tariffs.paymentPendingMessage"),
+        });
+        setCheckingPaymentStatus(false);
+        cleanUrl();
+      }
+    };
+
+    poll();
+    return () => {
+      cancelled = true;
+    };
+    // Faqat `atmosTxn` o'zgarganda ishga tushishi kerak — `searchParams`/
+    // `setSearchParams` har renderda yangi obyekt bo'lishi mumkin,
+    // ularni dependency qilish cheksiz tsiklga olib kelardi.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams.get("atmosTxn")]);
 
   const handleExpressInterest = useCallback(
     async (plan) => {
@@ -197,10 +324,33 @@ const TariffsSection = () => {
   return (
     <>
       <div className="p-4 space-y-3">
+        {pastDue && (
+          <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 p-3.5 rounded-2xl flex items-center gap-2.5">
+            <AlertTriangle size={16} className="text-rose-600 dark:text-rose-400 shrink-0" />
+            <p className="text-xs font-semibold text-rose-700 dark:text-rose-300 leading-relaxed">{t("tariffs.pastDueBanner")}</p>
+          </div>
+        )}
+
+        {!pastDue && billingRequired && daysUntilDue !== null && daysUntilDue <= 3 && (
+          <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 p-3.5 rounded-2xl flex items-center gap-2.5">
+            <Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 leading-relaxed">
+              {t(paidUntilMs > 0 ? "tariffs.dueSoonBanner" : "tariffs.graceSoonBanner", { days: daysUntilDue })}
+            </p>
+          </div>
+        )}
+
         {activeTrial && (
           <div className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 p-3.5 rounded-2xl flex items-center gap-2.5">
             <Clock size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
             <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 leading-relaxed">{trialBannerText}</p>
+          </div>
+        )}
+
+        {checkingPaymentStatus && (
+          <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700 p-3.5 rounded-2xl flex items-center gap-2.5">
+            <Loader2 size={16} className="text-slate-500 dark:text-slate-400 shrink-0 animate-spin" />
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-relaxed">{t("tariffs.paymentChecking")}</p>
           </div>
         )}
 
@@ -211,11 +361,21 @@ const TariffsSection = () => {
           const isAlreadyIncluded = planIndex < currentPlanIndex;
           const isSent = sentPlanId === plan.id;
           const isSending = sendingId === plan.id;
+          const isPaying = payingId === plan.id;
 
           // "Sinash" tugmasi FAQAT shu tarif - sotuvchining KEYINGI
           // tarifi bo'lsa (bir pog'ona yuqori), faol sinov yo'q bo'lsa,
           // VA bu tarif ILGARI sinalmagan bo'lsa ko'rsatiladi.
           const canTrialThis = plan.id === nextTrialTier && !activeTrial && !hasUsedTrial(store, plan.id);
+
+          // HAQIQIY TO'LOV (Atmos) — bu tarif to'g'ridan-to'g'ri
+          // sotib olinishi mumkinmi. `isCurrent`dan QAT'I NAZAR
+          // ko'rsatiladi (renewal/oldindan to'lash uchun ham kerak) —
+          // faqat sotuvchi ALLAQACHON yuqoriroq tarifda bo'lsa (masalan
+          // Z-Biznes'dagi sotuvchiga Z-Pro to'lovi ma'nosiz) yashiriladi.
+          // Z-Start uchun esa FAQAT billing talab qilinadigan (yangi)
+          // sotuvchilarga (grandfather qilinganlar uchun hamon bepul).
+          const canPayThis = isTariffPurchasable(plan.id) && !isAlreadyIncluded && (plan.id !== "start" || billingRequired);
 
           return (
             <div key={plan.id} className={`rounded-[24px] p-5 border ${classes.card}`}>
@@ -237,7 +397,14 @@ const TariffsSection = () => {
                 )}
               </div>
 
-              <p className={`text-lg font-black mb-1 ${classes.price}`}>{t(`tariffs.${plan.priceKey}`)}</p>
+              <p className={`text-lg font-black mb-1 ${classes.price}`}>
+                {plan.id === "start" && billingRequired
+                  ? formatSomPerMonth(TARIFF_MONTHLY_PRICE_SOM.start)
+                  : t(`tariffs.${plan.priceKey}`)}
+              </p>
+              {plan.id === "start" && billingRequired && (
+                <p className={`text-[10px] font-bold mb-1.5 ${classes.muted}`}>{t("tariffs.startGraceNote", { days: TRIAL_DAYS })}</p>
+              )}
 
               {plan.periodKeys && (
                 <div className="flex flex-col gap-0.5 mb-2.5">
@@ -275,7 +442,25 @@ const TariffsSection = () => {
                 </button>
               )}
 
-              {!isCurrent && !isAlreadyIncluded && (
+              {canPayThis && (
+                <button
+                  type="button"
+                  onClick={() => handlePayNow(plan)}
+                  disabled={isPaying}
+                  className={`w-full h-11 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-70 ${classes.btn}`}
+                >
+                  {isPaying ? (
+                    <><Loader2 size={13} className="animate-spin" /> {t("tariffs.paymentStarting")}</>
+                  ) : (
+                    <><CreditCard size={13} /> {isCurrent ? t("tariffs.payRenewButton") : t("tariffs.payButton")}</>
+                  )}
+                </button>
+              )}
+              {canPayThis && awaitingCheckoutPlanId === plan.id && (
+                <p className={`text-[10px] font-semibold mt-1.5 text-center ${classes.muted}`}>{t("tariffs.checkoutOpenedHint")}</p>
+              )}
+
+              {!canPayThis && !isCurrent && !isAlreadyIncluded && (
                 <button
                   type="button"
                   onClick={() => handleExpressInterest(plan)}
@@ -294,6 +479,7 @@ const TariffsSection = () => {
         })}
 
         {trialError && <p className="text-[11px] text-rose-500 font-semibold text-center">{trialError}</p>}
+        {payError && <p className="text-[11px] text-rose-500 font-semibold text-center">{payError}</p>}
         {error && <p className="text-[11px] text-rose-500 font-semibold text-center">{error}</p>}
 
         <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 p-3.5 rounded-2xl">
@@ -309,6 +495,15 @@ const TariffsSection = () => {
           title={t("tariffs.sentModalTitle")}
           message={t("tariffs.sentModalMessage", { storeName: store?.storeName || t("tariffs.defaultStoreName") })}
           onClose={() => setShowSentModal(false)}
+        />
+      )}
+
+      {paymentResultModal && (
+        <StatusModal
+          variant={paymentResultModal.variant}
+          title={paymentResultModal.title}
+          message={paymentResultModal.message}
+          onClose={() => setPaymentResultModal(null)}
         />
       )}
     </>

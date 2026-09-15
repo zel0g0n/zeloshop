@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, ShieldAlert, Lightbulb, TrendingUp, TrendingDown, Wallet,
   ShoppingCart, Percent, Users, Target, HandCoins, Trophy, AlertTriangle, UserRoundCog,
-  Megaphone, UserPlus, Repeat, Loader2, ImageOff, Send,
+  Megaphone, UserPlus, Repeat, Loader2, ImageOff, Send, Bot, ChevronRight,
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
@@ -28,6 +28,9 @@ import { computeCampaignStats, getBestCampaign } from "@/utils/campaignStats";
 import {
   computeProductDeclineInsights, computeReorderDueCustomers, computeNewCustomerTrend,
 } from "@/utils/businessInsights";
+import { useAiCeoPendingActions } from "@/hooks/useAiCeoPendingActions";
+import { useRespondToAiCeoAction } from "@/hooks/useRespondToAiCeoAction";
+import AiCeoActionCard from "@/features/seller/components/shared/AiCeoActionCard";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const money = (n) => `${Math.round(n).toLocaleString()} so'm`;
@@ -65,6 +68,24 @@ const PERIODS = [
  * arifmetik tendentsiya hisob-kitoblari (davr-bilan-davrni solishtirish,
  * mijozning o'z tarixidagi o'rtacha xarid oralig'i). Batafsil izoh:
  * `src/utils/businessInsights.js`.
+ *
+ * HAQIQIY "BUYRUQLAR" (2026-09, foydalanuvchi so'rovi: "Buyruqlar
+ * markazi qani buyruqlar beradi, bu yerda hisobotdan bo'lak hech narsa
+ * yo'qku"): oldin bu sahifa 100% PASSIV (faqat o'qish uchun) dashboard
+ * edi - biror amal bajarish imkoni yo'q edi, holbuki HAQIQIY, tasdiqlash
+ * kutayotgan AI CEO harakatlari (`aiCeoPendingActions`) allaqachon
+ * mavjud edi, lekin ular FAQAT "Bildirishnomalar" (Inbox) bo'limida
+ * ko'rinardi. Endi bu ikkalasi BOG'LANDI:
+ * 1) Tasdiq kutayotgan AI CEO harakatlari endi shu yerda ham
+ *    ko'rinadi va to'g'ridan-to'g'ri shu yerdan tasdiqlanadi/rad
+ *    etiladi (`InboxPage.jsx` bilan BIR XIL komponent/hook -
+ *    `AiCeoActionCard`/`useRespondToAiCeoAction` - ikki joyda
+ *    mantiqiy nusxa yo'q).
+ * 2) Har bir amaliy xulosaga (mahsulot sotuvi pasaygan, qayta xarid
+ *    vaqti kelgan mijozlar) HAQIQIY, bir tugmali amal qo'shildi -
+ *    mahsulot uchun to'g'ridan-to'g'ri tahrirlash sahifasiga o'tish,
+ *    yoki mijozlarga CRM orqali (aniq shu ro'yxatga, mock EMAS)
+ *    haqiqiy xabar yuborish formasini ochish.
  */
 const BusinessCommandCenterPage = () => {
   const navigate = useNavigate();
@@ -117,6 +138,16 @@ const BusinessCommandCenterPage = () => {
   const { expenses, loading: expensesLoading } = useExpenses(sellerId);
   const { campaigns, loading: campaignsLoading } = useCampaigns(sellerId);
 
+  // HAQIQIY "buyruqlar" — tasdiq kutayotgan AI CEO harakatlari, `Inbox`
+  // bilan BIR XIL manba/komponent (batafsil izoh: yuqoridagi fayl
+  // sharhi). `useAiCeoPendingActions` ATAYLAB status bo'yicha
+  // filtrlanmagan hammasini qaytaradi (izoh: shu hook faylida) — shu
+  // yerda faqat hali hal qilinmagan ("pending") holatdagilarni
+  // ko'rsatamiz.
+  const { actions: aiCeoActions, loading: aiCeoActionsLoading } = useAiCeoPendingActions(sellerId);
+  const pendingAiCeoActions = useMemo(() => aiCeoActions.filter((a) => a.status === "pending"), [aiCeoActions]);
+  const { respondingId, respondErrors, handleRespond } = useRespondToAiCeoAction(t);
+
   const [staffList, setStaffList] = useState([]);
   useEffect(() => {
     if (!sellerId || !isBiznes) return undefined;
@@ -165,7 +196,7 @@ const BusinessCommandCenterPage = () => {
 
   const conversionRate = visitorCount > 0 ? (orderSummary.deliveredCount / visitorCount) * 100 : null;
 
-  const { customers: segmentedCustomers, averageLtv, retentionRate } = useMemo(
+  const { averageLtv, retentionRate } = useMemo(
     () => computeCustomerSegments(crmCustomers),
     [crmCustomers]
   );
@@ -208,11 +239,43 @@ const BusinessCommandCenterPage = () => {
     () => computeNewCustomerTrend(rollupDays, rangeStart, rangeEnd),
     [rollupDays, rangeStart, rangeEnd]
   );
-  const reorderDueCustomers = useMemo(() => computeReorderDueCustomers(segmentedCustomers), [segmentedCustomers]);
+  // MUHIM TUZATISH (2026-09): bu yerda ILGARI `segmentedCustomers`
+  // (=`computeCustomerSegments(...).customers`) ishlatilardi — lekin
+  // o'sha funksiya qaytargan obyektlarda `firstOrderAtMs` maydoni UMUMAN
+  // YO'Q (faqat `clientId/fullName/phone/ltv/orderCount/lastOrderAtMs/
+  // daysSinceLastOrder/segment` bor). `computeReorderDueCustomers` esa
+  // aynan shu maydonga tayanadi — natijada bu ro'yxat HAR DOIM BO'SH
+  // bo'lgan (jim xato, "qayta xarid vaqti kelgan mijozlar" xulosasi
+  // hech qachon chiqmagan). Xom `crmCustomers`da (`useCrmOrders`)
+  // `firstOrderAtMs` bor — shu yerda TO'G'RI manba shu.
+  const reorderDueCustomers = useMemo(() => computeReorderDueCustomers(crmCustomers), [crmCustomers]);
   const productDeclines = useMemo(
     () => computeProductDeclineInsights(currentProductStats, previousProductStats, { limit: 2 }),
     [currentProductStats, previousProductStats]
   );
+
+  // HAQIQIY "buyruq" — har bir amaliy xulosaga mos, bir tugmali amal
+  // (2026-09, foydalanuvchi so'rovi). Mahsulot pasayishi -> aynan shu
+  // mahsulotni tahrirlash sahifasiga (narx/aksiya o'zgartirish uchun).
+  // Qayta xarid vaqti kelgan mijozlar -> CRM Xabar yuborish terminaliga,
+  // AYNAN shu (haqiqiy hisoblangan, mock EMAS) mijozlar ro'yxati bilan
+  // oldindan to'ldirilgan holda (`CrmHub.jsx`dagi `customAudience`
+  // qo'llab-quvvatlashi orqali).
+  const handleViewDecliningProduct = useCallback((productId) => {
+    navigate(`/seller/products/${productId}/edit`);
+  }, [navigate]);
+  const handleMessageReorderDueCustomers = useCallback(() => {
+    navigate("/seller/crm", {
+      state: {
+        customAudience: {
+          clientIds: reorderDueCustomers.map((c) => c.clientId),
+          label: t("commandCenter.reorderDueAudienceLabel"),
+          initialTitle: t("commandCenter.reorderDueDefaultTitle"),
+          initialMessage: t("commandCenter.reorderDueDefaultMessage"),
+        },
+      },
+    });
+  }, [navigate, reorderDueCustomers, t]);
 
   const insights = useMemo(() => {
     const list = [];
@@ -222,6 +285,8 @@ const BusinessCommandCenterPage = () => {
         icon: TrendingDown,
         tone: "rose",
         text: t("commandCenter.insightProductDecline", { name: d.name, days: period.days, percent: Math.abs(d.changePercent) }),
+        actionLabel: t("commandCenter.actionViewProduct"),
+        onAction: () => handleViewDecliningProduct(d.id),
       });
     });
     if (reorderDueCustomers.length > 0) {
@@ -230,6 +295,8 @@ const BusinessCommandCenterPage = () => {
         icon: Repeat,
         tone: "indigo",
         text: t("commandCenter.insightReorderDue", { count: reorderDueCustomers.length }),
+        actionLabel: t("commandCenter.actionMessageReorderDue"),
+        onAction: handleMessageReorderDueCustomers,
       });
     }
     if (newCustomerTrend.changePercent !== null && Math.abs(newCustomerTrend.changePercent) >= 15) {
@@ -245,7 +312,7 @@ const BusinessCommandCenterPage = () => {
       });
     }
     return list;
-  }, [productDeclines, reorderDueCustomers, newCustomerTrend, period.days, t]);
+  }, [productDeclines, reorderDueCustomers, newCustomerTrend, period.days, t, handleViewDecliningProduct, handleMessageReorderDueCustomers]);
 
   const loading = rollupsLoading || ordersLoading || productsLoading || customersLoading || expensesLoading || campaignsLoading;
 
@@ -328,6 +395,40 @@ const BusinessCommandCenterPage = () => {
         </div>
       </div>
 
+      {/* TASDIQ KUTAYOTGAN BUYRUQLAR — sahifaning HAQIQIY "buyruq" qismi
+          (2026-09, foydalanuvchi so'rovi). Boshqa ma'lumotlardan
+          MUSTAQIL, o'zining tez jonli tinglovchisi bor — shuning uchun
+          pastdagi og'ir tahlil hisob-kitoblari yuklanishini kutmaydi. */}
+      <div className="px-4 pt-3">
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs space-y-2.5">
+          <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500">
+            <Bot size={13} />
+            <h3 className="text-xs font-black uppercase tracking-wider">{t("commandCenter.pendingActionsTitle")}</h3>
+          </div>
+          {aiCeoActionsLoading ? (
+            <div className="flex items-center justify-center py-6 text-slate-400 dark:text-slate-500">
+              <Loader2 size={16} className="animate-spin" />
+            </div>
+          ) : pendingAiCeoActions.length === 0 ? (
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 leading-relaxed">{t("commandCenter.noPendingActions")}</p>
+          ) : (
+            <div className="space-y-2.5">
+              {pendingAiCeoActions.map((action) => (
+                <AiCeoActionCard
+                  key={action.id}
+                  id={action.id}
+                  action={action}
+                  t={t}
+                  onRespond={handleRespond}
+                  responding={respondingId === action.id}
+                  respondError={respondErrors[action.id]}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center py-16 text-slate-400 dark:text-slate-500">
           <Loader2 size={22} className="animate-spin" />
@@ -357,7 +458,23 @@ const BusinessCommandCenterPage = () => {
                       <span className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${toneClass}`}>
                         <Icon size={13} />
                       </span>
-                      <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{insight.text}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">{insight.text}</p>
+                        {/* HAQIQIY "buyruq" tugmasi — har bir xulosaga mos
+                            keladigan, real amalni boshlaydigan (mahsulotni
+                            tahrirlash yoki CRM orqali aynan shu mijozlarga
+                            xabar yuborish) navigatsiya. */}
+                        {insight.actionLabel && (
+                          <button
+                            type="button"
+                            onClick={insight.onAction}
+                            className="mt-1.5 inline-flex items-center gap-0.5 text-[10px] font-black text-indigo-600 dark:text-indigo-400 active:scale-95 transition-transform"
+                          >
+                            {insight.actionLabel}
+                            <ChevronRight size={12} />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

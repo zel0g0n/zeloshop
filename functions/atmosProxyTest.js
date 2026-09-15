@@ -4,9 +4,20 @@ const { withSentry, SENTRY_DSN } = require("./lib/sentry");
 
 /**
  * VAQTINCHALIK DIAGNOSTIKA FUNKSIYASI — ATMOS uchun tayyorlangan
- * statik-IP proksi-server (Oracle/GCP VM) ishlab turganini va Cloud
- * Function undan haqiqatan ham shu STATIK IP orqali chiqayotganini
+ * statik-IP proksi-server (GCP e2-micro VM, IP: 35.211.129.224,
+ * "atmos-static-ip" nomi bilan reserve qilingan) ishlab turganini va
+ * Cloud Function undan haqiqatan ham shu STATIK IP orqali chiqayotganini
  * tasdiqlash uchun.
+ *
+ * TARIX (2026-09 tuzatish): bu fayl bir marta — faqat Atmos'ning
+ * OMMAVIY texnik hujjatiga asoslanib ("statik IP shart emas" degan,
+ * NOTO'G'RI chiqqan xulosa bilan) — xato ravishda o'chirilgan edi.
+ * Aslida Atmos (haqiqiy yozishmada) sotuvchidan aniq statik IP'ni
+ * whitelist qilish uchun so'ragan, va bu VM+IP infratuzilmasi
+ * ALLAQACHON qurilib, tashqi tomondan ham (brauzerdan
+ * `http://35.211.129.224:8080/whoami`) tasdiqlangan edi. Shuning
+ * uchun bu fayl qayta tiklandi — ENDI hech qanday "kerak emas" degan
+ * keyingi xulosasiz o'chirilmasin.
  *
  * ISHLASH PRINSIPI: bu funksiya proksi-VM'ning `/whoami` endpoint'iga
  * so'rov yuboradi; VM esa o'z navbatida tashqi "IP aniqlash" xizmatiga
@@ -18,10 +29,16 @@ const { withSentry, SENTRY_DSN } = require("./lib/sentry");
  * tekshiruvi — boshqa admin-only funksiyalar bilan bir xil naqsh,
  * masalan `nicheMigration.js`).
  *
- * MUHIM: ATMOS integratsiyasi PRODUCTION kodga (haqiqiy to'lov
- * so'rovlarini proksi orqali yuborish) o'tkazilgandan so'ng, bu vaqtinchalik
- * fayl butunlay OLIB TASHLANISHI kerak — bu faqat qurish bosqichidagi
- * diagnostika vositasi, doimiy funksionallik emas.
+ * MUHIM: hozircha VM'dagi test-server FAQAT diagnostika uchun (8080-
+ * port butun internetga ochiq, autentifikatsiyasiz) — bu ATMOS'ning
+ * HAQIQIY to'lov so'rovlarini proksi qilish uchun YETARLI EMAS.
+ * Productionga chiqishdan oldin: (1) VM'dagi serverni xavfsizlashtirish
+ * (firewall manbasini cheklash yoki maxfiy token talab qilish), (2)
+ * `lib/atmosClient.js`dagi haqiqiy Atmos so'rovlarini shu proksi orqali
+ * yo'naltirish kerak — bularning ikkalasi ham hali qilinmagan.
+ * Shu ikki qadam bajarilib, ATMOS integratsiyasi to'liq proksi orqali
+ * ishlaydigan bo'lgach, bu VAQTINCHALIK diagnostika fayli olib
+ * tashlanishi mumkin (lekin FAQAT o'shanda, va faqat shu sabab bilan).
  */
 const PROXY_VM_WHOAMI_URL = "http://35.211.129.224:8080/whoami";
 const EXPECTED_STATIC_IP = "35.211.129.224";

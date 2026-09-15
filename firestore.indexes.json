@@ -379,6 +379,56 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "atmosPayments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "sellerId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "plan",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "createdAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sellers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tariffTrialActive",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "tariffTrialExpiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "sellers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "aiCeoGrantedViaReferral",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "aiCeoTrialExpiresAt",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -9,7 +9,13 @@ import { ChevronDown } from "lucide-react";
  *
  * `options` — ikkita shaklni qabul qiladi:
  *   - oddiy satrlar massivi: ["Toshkent", "Andijon", ...]
- *   - { value, label } obyektlar massivi
+ *   - { value, label, icon? } obyektlar massivi — `icon` ixtiyoriy,
+ *     `lucide-react` komponenti (2026-09, foydalanuvchi so'rovi: CRM
+ *     Hub'dagi gorizontal skrol qiluvchi tab-filtrlarni ikonkalarini
+ *     saqlab qolgan holda select dizayniga o'zgartirish uchun
+ *     qo'shildi). Berilmasa, oldingidek FAQAT matn ko'rsatiladi —
+ *     mavjud chaqiruvchilar (masalan promokod tanlash) o'zgarishsiz
+ *     ishlashda davom etadi.
  */
 const CustomSelect = ({ value, onChange, options, placeholder = "Tanlang", disabled, error }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -30,6 +36,7 @@ const CustomSelect = ({ value, onChange, options, placeholder = "Tanlang", disab
     typeof opt === "string" ? { value: opt, label: opt } : opt
   );
   const selectedOption = normalizedOptions.find((opt) => opt.value === value);
+  const SelectedIcon = selectedOption?.icon;
 
   return (
     <div className="relative" ref={dropdownRef}>
@@ -41,7 +48,10 @@ const CustomSelect = ({ value, onChange, options, placeholder = "Tanlang", disab
           isOpen ? "border-blue-500" : error ? "border-rose-400" : "border-gray-100 dark:border-slate-700"
         } ${selectedOption ? "text-gray-800 dark:text-white" : "text-gray-400 dark:text-slate-500"}`}
       >
-        <span className="truncate">{selectedOption?.label || placeholder}</span>
+        <span className="flex items-center gap-2 min-w-0 truncate">
+          {SelectedIcon && <SelectedIcon size={14} className="shrink-0" />}
+          <span className="truncate">{selectedOption?.label || placeholder}</span>
+        </span>
         <ChevronDown
           size={16}
           strokeWidth={2.5}
@@ -51,20 +61,24 @@ const CustomSelect = ({ value, onChange, options, placeholder = "Tanlang", disab
 
       {isOpen && (
         <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-50 bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-slate-100 dark:border-slate-700 py-1.5 max-h-64 overflow-y-auto">
-          {normalizedOptions.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => { onChange(opt.value); setIsOpen(false); }}
-              className={`w-full text-left px-4 py-2.5 text-sm font-semibold ${
-                value === opt.value
-                  ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10"
-                  : "text-slate-700 dark:text-slate-200"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
+          {normalizedOptions.map((opt) => {
+            const OptIcon = opt.icon;
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => { onChange(opt.value); setIsOpen(false); }}
+                className={`w-full flex items-center gap-2 text-left px-4 py-2.5 text-sm font-semibold ${
+                  value === opt.value
+                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-500/10"
+                    : "text-slate-700 dark:text-slate-200"
+                }`}
+              >
+                {OptIcon && <OptIcon size={14} className="shrink-0" />}
+                <span className="truncate">{opt.label}</span>
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

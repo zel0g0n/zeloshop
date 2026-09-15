@@ -121,6 +121,9 @@ async function handleAskProductQuestion(request) {
   }
 }
 
-exports.askProductQuestion = onCall({ region: "asia-south1", secrets: [GEMINI_API_KEY, SENTRY_DSN] }, withSentry(handleAskProductQuestion));
+// 2026-09 audit: standart (60s) chegara aniq belgilandi (izchillik uchun -
+// bitta oddiy Gemini chaqiruvi, ko'p vaqt talab qilmaydi, lekin
+// "standart/tasodifiy" emas, ATAYLAB shu qiymat ekanini bildirish uchun).
+exports.askProductQuestion = onCall({ region: "asia-south1", secrets: [GEMINI_API_KEY, SENTRY_DSN], timeoutSeconds: 60 }, withSentry(handleAskProductQuestion));
 
 exports._testables = { handleAskProductQuestion };

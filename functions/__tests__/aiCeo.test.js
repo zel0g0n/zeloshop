@@ -340,6 +340,25 @@ describe("handleGenerateCrmCampaign", () => {
     const { _testables } = loadAiCeoModuleWithDb({ sellerData: { aiCeoEnabled: true } }, genContent);
     await expect(_testables.handleGenerateCrmCampaign(baseRequest())).rejects.toMatchObject({ code: "internal" });
   });
+
+  // Regressiya (2026-09, foydalanuvchi so'rovi: "Mijozlarga xabar
+  // yuborish" qismini Z-Biznes "Mijozlar Razvedkasi" 7-segment+2-belgi
+  // tasnifiga moslashtirish) — bu YANGI segment/belgi kalitlari ham
+  // ESKI `vip`/`churn` kalitlari kabi qabul qilinishi kerak, aks holda
+  // Biznes sotuvchisi CRM Hub'da yangi auditoriyani tanlab AI CEO
+  // tavsiyasini so'rasa "noto'g'ri segment" xatosiga uchraydi.
+  test.each(["high_value", "sleeping", "churn_risk", "at_risk", "new", "returning", "discount_hunter", "high_intent"])(
+    "YANGI Biznes segment/belgi kaliti ('%s') ham qabul qilinadi",
+    async (segment) => {
+      const genContent = jest.fn().mockResolvedValue({
+        text: "SARLAVHA: Sarlavha\nXABAR: Xabar matni.\nSABAB: Sabab.",
+      });
+      const { _testables } = loadAiCeoModuleWithDb({ sellerData: { aiCeoEnabled: true } }, genContent);
+      const result = await _testables.handleGenerateCrmCampaign(baseRequest({ segment }));
+      expect(genContent).toHaveBeenCalledTimes(1);
+      expect(result.title).toBe("Sarlavha");
+    }
+  );
 });
 
 describe("handleGenerateDailyReport", () => {

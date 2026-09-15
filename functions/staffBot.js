@@ -5,6 +5,7 @@ const { applyStaffOrderAction } = require("./staff");
 const { isDuplicateUpdate } = require("./lib/webhookDedup");
 const { getTariffLimits } = require("./lib/tariffs");
 const { normalizeStaffPermissions } = require("./lib/staffRoles");
+const { withSentry, initSentry, Sentry, SENTRY_DSN } = require("./lib/sentry");
 
 /**
  * Xodim boti — foydalanuvchi BotFather orqali alohida yaratadigan
@@ -183,9 +184,13 @@ async function handleStaffTelegramMessage(token, message) {
   }
 }
 
+// XAVFSIZLIK/MONITORING (2026-09 audit, "o'rtacha darajadagi
+// kamchiliklar"): `courierBot.js`dagi bir xil sabab/naqsh — batafsil
+// izoh o'sha faylda.
 exports.staffBotWebhook = onRequest(
-  { region: "asia-south1", secrets: [STAFF_BOT_TOKEN, STAFF_TELEGRAM_WEBHOOK_SECRET] },
-  async (req, res) => {
+  { region: "asia-south1", secrets: [STAFF_BOT_TOKEN, STAFF_TELEGRAM_WEBHOOK_SECRET, SENTRY_DSN] },
+  withSentry(async (req, res) => {
+    initSentry();
     const providedSecret = req.get("X-Telegram-Bot-Api-Secret-Token");
     if (providedSecret !== STAFF_TELEGRAM_WEBHOOK_SECRET.value()) {
       res.status(401).send("unauthorized");
@@ -206,6 +211,7 @@ exports.staffBotWebhook = onRequest(
         await handleStaffTelegramMessage(token, message);
       } catch (err) {
         console.error("Xodim botiga xabarni qayta ishlashda xatolik:", err);
+        Sentry.captureException(err);
       }
       res.status(200).send("ok");
       return;
@@ -245,6 +251,7 @@ exports.staffBotWebhook = onRequest(
       res.status(200).send("ok");
     } catch (err) {
       console.error("Xodim botining callback_query'sida xatolik:", err);
+      Sentry.captureException(err);
       try {
         await answerCallbackQuery(token, callbackQuery.id, err.message || "Xatolik yuz berdi.");
       } catch {
@@ -252,7 +259,7 @@ exports.staffBotWebhook = onRequest(
       }
       res.status(200).send("ok");
     }
-  }
+  })
 );
 
 /**
@@ -291,8 +298,8 @@ async function handleRegisterStaffBotWebhook(request) {
 }
 
 exports.registerStaffBotWebhook = onCall(
-  { region: "asia-south1", secrets: [STAFF_BOT_TOKEN, STAFF_TELEGRAM_WEBHOOK_SECRET] },
-  handleRegisterStaffBotWebhook
+  { region: "asia-south1", secrets: [STAFF_BOT_TOKEN, STAFF_TELEGRAM_WEBHOOK_SECRET, SENTRY_DSN] },
+  withSentry(handleRegisterStaffBotWebhook)
 );
 
 exports._testables = {

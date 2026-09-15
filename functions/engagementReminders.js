@@ -24,6 +24,10 @@ const { maybeIssueAutoWinBackDiscount } = require("./aiCeoAutoDiscount");
 // izoh: `lib/batchProcess.js`.
 const { processBatched } = require("./lib/batchProcess");
 const { withSentry, SENTRY_DSN } = require("./lib/sentry");
+// Kategoriya-asoslangan iste'mol tsikli (batafsil izoh: `lib/
+// replenishmentCycles.js`) - OLDINGI "hamma uchun qat'iy 30 kun"
+// yondashuvi o'rniga.
+const { pickEffectiveCycleDays, MIN_CYCLE_DAYS, MAX_CYCLE_DAYS } = require("./lib/replenishmentCycles");
 
 /**
  * Xaridorni qaytarish bildirishnomalari - ikkita tizim bildirishnomasi:
@@ -39,8 +43,8 @@ const { withSentry, SENTRY_DSN } = require("./lib/sentry");
 const MAX_FAVORITE_ITEM_NAMES_FOR_AI = 5;
 
 const FAVORITE_REMINDER_DAYS = 3;
-const REPURCHASE_REMINDER_DAYS = 30;
 const formatMoney = (n) => `${Math.round(n).toLocaleString()} so'm`;
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * 1) Sevimlilar eslatmasi — mahsulotni "like" bosib, lekin
@@ -173,14 +177,29 @@ exports.sendFavoriteReminders = onSchedule(
 );
 
 /**
- * 2) Qayta sotib olishga taklif — yetkazib berilgan buyurtmadan
- * REPURCHASE_REMINDER_DAYS kun o'tgach, xaridorga "yana buyurtma
+ * 2) Qayta sotib olishga taklif — yetkazib berilgan buyurtmadagi
+ * mahsulot(lar)ning KATEGORIYASIGA mos "o'rtacha tugash muddati"
+ * (`lib/replenishmentCycles.js`) o'tgach, xaridorga "yana buyurtma
  * berishni xohlaysizmi" degan taklif yuboradi.
  *
- * Dizayn qarori (xarajat va aniqlik muvozanati): faqat o'sha kuni
- * aniq 30 kunga to'lgan buyurtmalar (kichik, kunlik "oyna")
- * tekshiriladi - shu orqali funksiya har kuni faqat cheklangan sonli
- * buyurtmani ko'radi, butun tarixni qayta-qayta skanerlamaydi. Har
+ * MUHIM O'ZGARISH (2026-09, kategoriya-asoslangan tsikl): OLDIN bu
+ * funksiya HAR QANDAY yetkazilgan buyurtma uchun, mahsulot turidan
+ * qat'i nazar, qat'iy 30 kundan keyin ishlardi - bu kiyim/poyabzal/
+ * mebel kabi UZOQ MUDDATLI mahsulot sotib olgan xaridorlar uchun
+ * tegishsiz, bezovta qiluvchi eslatma edi (batafsil izoh: `lib/
+ * replenishmentCycles.js`). Endi har bir buyurtma UNING O'Z
+ * mahsulot(lari) kategoriyasiga qarab (masalan yuz kremi ~30 kun,
+ * shampun ~45 kun) alohida muddatda tekshiriladi; kategoriyasi
+ * "muntazam tugaydigan" deb ANIQ bilinmagan mahsulot (kiyim,
+ * elektronika va h.k.) uchun EslATMA UMUMAN YUBORILMAYDI - noto'g'ri
+ * taxminiy muddat ko'rsatishdan ko'ra yubormaslik afzal.
+ *
+ * Dizayn qarori (xarajat va aniqlik muvozanati): turli buyurtmaning
+ * muddati turlicha bo'lgani uchun, KENG oyna (eng qisqa va eng uzun
+ * kategoriya muddati orasidagi barcha kunlar) so'raladi, so'ng HAR BIR
+ * buyurtma UCHUN ALOHIDA, o'zining kategoriya-muddati kelib-kelmaganini
+ * xotirada (in-memory) tekshiramiz - aks holda bitta umumiy "kesim"
+ * bilan turli uzunlikdagi tsikllarni to'g'ri aniqlab bo'lmas edi. Har
  * bir buyurtma uchun, xaridor o'sha vaqtdan beri qayta buyurtma
  * bermaganini aniq tekshiramiz - aks holda, allaqachon qaytgan
  * mijozga keraksiz, noqulay eslatma yuborilishi mumkin edi.
@@ -215,16 +234,21 @@ exports.sendRepurchaseReminders = onSchedule(
     timeoutSeconds: 300,
   },
   withSentry(async () => {
-    const windowEnd = Date.now() - REPURCHASE_REMINDER_DAYS * 24 * 60 * 60 * 1000;
-    const windowStart = windowEnd - 24 * 60 * 60 * 1000; // bitta kunlik oyna
+    // Turli kategoriya turli muddatga ega bo'lgani uchun, bitta
+    // KENG oyna so'raladi (eng qisqa - eng uzun kategoriya muddati
+    // oralig'idagi barcha kunlar) - har bir buyurtovchi tsikli pastda,
+    // xotirada, ALOHIDA tekshiriladi.
+    const windowStart = Date.now() - (MAX_CYCLE_DAYS + 1) * DAY_MS;
+    const windowEnd = Date.now() - MIN_CYCLE_DAYS * DAY_MS;
 
-    // Xavfsizlik chegarasi - yuqoridagi bilan bir xil sabab.
-    const MAX_ORDERS_PER_RUN = 200;
+    // Xavfsizlik chegarasi - avvalgisidan kattaroq, chunki endi oyna
+    // kengroq (bir necha o'nlab kunlik buyurtmalarni qamrab oladi).
+    const MAX_ORDERS_PER_RUN = 300;
 
     const ordersSnap = await db.collection("orders")
       .where("status", "==", "delivered")
       .where("createdAt", ">=", admin.firestore.Timestamp.fromMillis(windowStart))
-      .where("createdAt", "<", admin.firestore.Timestamp.fromMillis(windowEnd))
+      .where("createdAt", "<=", admin.firestore.Timestamp.fromMillis(windowEnd))
       .limit(MAX_ORDERS_PER_RUN)
       .get();
 
@@ -240,14 +264,55 @@ exports.sendRepurchaseReminders = onSchedule(
     // chegarani buzishi mumkin - shuning uchun GURUH ICHIDA (bir xil
     // sotuvchi) ketma-ket, GURUHLAR orasida (turli sotuvchilar) PARALEL
     // ishlanadi (batafsil izoh: `lib/batchProcess.js`).
+    //
+    // Shu yerda, guruhlashdan OLDIN, ikkita narsa alohida-alohida
+    // "yakunlanadi" (ular ORTIQCHA - hech qachon o'zgarmaydigan -
+    // sabablar bo'lgani uchun, kelajakda qayta tekshirishning hojati
+    // yo'q): (a) kategoriyasi "muntazam tugaydigan" deb tanilmagan
+    // buyurtma (`lib/replenishmentCycles.js`) - HECH QACHON eslatmaga
+    // loyiq bo'lmaydi; (b) hali OʻZ muddatiga yetmagan buyurtma - bu
+    // ENDI EMAS, lekin KEYINGI kunlarda qayta tekshiriladi (belgilanmaydi).
+    const skipUpdates = []; // {ref, data} - "hech qachon loyiq emas" holatlar
     const ordersBySeller = new Map();
+    const now = Date.now();
     ordersSnap.docs.forEach((orderDoc) => {
       const order = orderDoc.data();
       if (order.repurchaseReminderSent) return;
       if (!order.sellerId || !order.clientId || !Array.isArray(order.orders) || order.orders.length === 0) return;
+
+      const categories = order.orders.map((i) => i.category);
+      const effectiveCycleDays = pickEffectiveCycleDays(categories);
+      if (effectiveCycleDays === null) {
+        // Kiyim/poyabzal/elektronika va h.k. - bu kategoriyalar uchun
+        // "tugash muddati" tushunchasi mos emas, shuning uchun HECH
+        // QACHON eslatma yubormaymiz. Buni darhol belgilab qo'yamiz -
+        // aks holda bu buyurtma har kuni, foydasiz qayta o'qilardi.
+        skipUpdates.push(orderDoc.ref);
+        return;
+      }
+
+      const createdAtMs = order.createdAt?.toMillis ? order.createdAt.toMillis() : Number(order.createdAt) || 0;
+      const daysSinceDelivered = (now - createdAtMs) / DAY_MS;
+      if (daysSinceDelivered < effectiveCycleDays) return; // hali vaqti kelmagan - ertaga qayta tekshiriladi
+
       if (!ordersBySeller.has(order.sellerId)) ordersBySeller.set(order.sellerId, []);
-      ordersBySeller.get(order.sellerId).push(orderDoc);
+      // `orderDoc.data()`ni pastda QAYTA chaqirish o'rniga, shu yerda
+      // HISOBLANGAN `effectiveCycleDays`ni to'g'ridan-to'g'ri
+      // birga olib o'tamiz - Firestore Admin SDK'ning `.data()`si har
+      // chaqiruvda YANGI obyekt qaytarishi mumkin, shuning uchun
+      // hisoblangan qiymatni `order` obyektiga "yopishtirib" qo'yishga
+      // suyanib bo'lmaydi.
+      ordersBySeller.get(order.sellerId).push({ orderDoc, effectiveCycleDays });
     });
+
+    if (skipUpdates.length > 0) {
+      await Promise.all(skipUpdates.map((ref) => ref.update({
+        repurchaseReminderSent: true,
+        repurchaseReminderSkippedReason: "no_consumable_category",
+      }).catch((err) => console.error(`Repurchase "loyiq emas" belgilashda xatolik (${ref.id}):`, err))));
+    }
+
+    if (ordersBySeller.size === 0) return;
 
     const result = await processBatched(Array.from(ordersBySeller.entries()), async ([sellerId, orderDocs]) => {
       // Mijozga xabar avval sotuvchining shaxsiy boti orqali
@@ -267,7 +332,7 @@ exports.sendRepurchaseReminders = onSchedule(
       // chegarasi uchun zarur.
       const discountState = { issuedCount: 0 };
 
-      for (const orderDoc of orderDocs) {
+      for (const { orderDoc, effectiveCycleDays } of orderDocs) {
         const order = orderDoc.data();
         try {
           // Mijoz o'sha buyurtmadan keyin qayta buyurtma berganmi -
@@ -286,14 +351,18 @@ exports.sendRepurchaseReminders = onSchedule(
           if (seller.repurchaseReminderEnabled === false) continue;
 
           const itemsList = order.orders.slice(0, 5).map((i) => `• ${i.name} x${i.quantity}`).join("\n");
-          let text = `Bir oy oldin buyurtma bergan mahsulotlaringiz tugab qolgandirmi?\n\n${itemsList}\n\nYana buyurtma berish uchun do'konimizga tashrif buyuring!`;
+          // MUHIM: "Bir oy oldin" endi TO'G'RI KELMAYDI - tsikl
+          // kategoriyaga qarab farq qiladi (`effectiveCycleDays`,
+          // 20-90 kun oralig'ida) - shuning uchun umumiy, muddat
+          // raqamiga bog'lanmagan matn ishlatiladi.
+          let text = `Avval buyurtma bergan mahsulotlaringiz tugab qolgan bo'lishi mumkin!\n\n${itemsList}\n\nYana buyurtma berish uchun do'konimizga tashrif buyuring!`;
           let aiGenerated = false;
 
           if (seller.aiCeoEnabled === true && seller.aiCeoAutoWinBackEnabled === true) {
             try {
               const aiText = await craftWinBackMessage({
                 customerName: order.customer?.fullName,
-                daysSinceLastOrder: REPURCHASE_REMINDER_DAYS,
+                daysSinceLastOrder: effectiveCycleDays,
                 lastProductName: order.orders[0]?.name,
                 storeName: seller.storeName,
                 recentPerformance,
@@ -345,6 +414,12 @@ exports.sendRepurchaseReminders = onSchedule(
           await logNotification({
             sellerId: order.sellerId, clientId: order.clientId, type: "repurchaseReminder",
             title: "Qayta sotib olish taklifi", message: text,
+            // Kelajakda "qaysi tsikl uzunligi ko'proq xarid keltirdi"
+            // kabi HAQIQIY tahlil qilish uchun - real ATMOS
+            // tranzaksiyalari bilan birga, statik taxminiy jadvalni
+            // (`lib/replenishmentCycles.js`) haqiqiy ma'lumot bilan
+            // tekshirish/moslashtirish shu orqali bo'ladi.
+            meta: { cycleDaysUsed: effectiveCycleDays },
           });
           // AI CEO premium sotuvchilar uchun (AI-yozuv
           // yoqilgan-yoqilmaganidan qat'i nazar), bu xabarning haqiqiy
@@ -356,6 +431,7 @@ exports.sendRepurchaseReminders = onSchedule(
           await orderDoc.ref.update({
             repurchaseReminderSent: true,
             repurchaseReminderSentAt: admin.firestore.FieldValue.serverTimestamp(),
+            repurchaseCycleDaysUsed: effectiveCycleDays,
           });
         } catch (err) {
           console.error(`Qayta sotib olish eslatmasi xatosi (${orderDoc.id}):`, err);

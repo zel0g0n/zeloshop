@@ -8,7 +8,30 @@
  * Haqiqiy Firestore/Telegram API'ga ULANMAYDI — barchasi taqlid
  * qilingan (mock). `applyStaffOrderAction`ning O'ZI `staff.test.js`da
  * alohida sinaladi — bu yerda faqat MOCK qilinadi.
+ *
+ * `firebase-functions/v2/https`ni MOCK qilamiz - `courierBot.test.js`
+ * bilan bir xil sabab: quyidagi "Sentry integratsiyasi" testlari
+ * `exports.staffBotWebhook`ni to'g'ridan-to'g'ri chaqira oladi.
  */
+jest.mock("firebase-functions/v2/https", () => ({
+  onRequest: (config, handler) => handler,
+  onCall: (config, handler) => handler,
+  HttpsError: class MockHttpsError extends Error {
+    constructor(code, message) {
+      super(message);
+      this.code = code;
+    }
+  },
+}));
+
+// XAVFSIZLIK/MONITORING (2026-09 audit) — `courierBot.test.js`dagi bilan
+// bir xil naqsh.
+jest.mock("../lib/sentry", () => ({
+  withSentry: (fn) => fn,
+  initSentry: jest.fn(),
+  Sentry: { captureException: jest.fn() },
+  SENTRY_DSN: { value: () => null },
+}));
 
 function buildMockDb({ staff = {}, staffInvites = {}, sellers = {}, admins = {} } = {}) {
   const staffSets = {};
@@ -235,5 +258,56 @@ describe("handleRegisterStaffBotWebhook", () => {
     expect(result.ok).toBe(true);
     expect(result.webhookUrl).toContain("staffBotWebhook");
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+function fakeRes() {
+  const res = { statusCode: null, body: null };
+  res.status = jest.fn((code) => { res.statusCode = code; return res; });
+  res.send = jest.fn((body) => { res.body = body; return res; });
+  return res;
+}
+
+describe("staffBotWebhook — Sentry integratsiyasi (2026-09 audit, 'o'rtacha darajadagi kamchiliklar')", () => {
+  test("noto'g'ri maxfiy token bilan 401 qaytaradi (Sentry chaqirilmaydi)", async () => {
+    const bot = loadStaffBotModule({ db: buildMockDb({}) });
+    const { Sentry } = require("../lib/sentry");
+    const req = { get: () => "noto'g'ri-token", body: {} };
+    const res = fakeRes();
+    await bot.staffBotWebhook(req, res);
+    expect(res.statusCode).toBe(401);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  test("xabarni qayta ishlashda kutilmagan xato — Sentry.captureException chaqiriladi, javob baribir 200", async () => {
+    const handleErr = new Error("kutilmagan DB xatosi");
+    const throwingDb = {
+      collection: () => ({ doc: () => ({ get: async () => { throw handleErr; } }) }),
+    };
+    const bot = loadStaffBotModule({ db: throwingDb });
+    const { Sentry } = require("../lib/sentry");
+    const req = {
+      get: () => "webhook-secret",
+      body: { message: { from: { id: 123 }, chat: { id: 999 }, text: "salom" } },
+    };
+    const res = fakeRes();
+    await bot.staffBotWebhook(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(Sentry.captureException).toHaveBeenCalledWith(handleErr);
+  });
+
+  test("callback_query'da kutilmagan xato — Sentry.captureException chaqiriladi, javob baribir 200", async () => {
+    const actionErr = new Error("amalni bajarib bo'lmadi");
+    const applyStaffOrderActionMock = jest.fn().mockRejectedValue(actionErr);
+    const bot = loadStaffBotModule({ db: buildMockDb({}), applyStaffOrderActionMock });
+    const { Sentry } = require("../lib/sentry");
+    const req = {
+      get: () => "webhook-secret",
+      body: { callback_query: { id: "cbq-1", from: { id: 123 }, message: { chat: { id: 999 }, message_id: 5 }, data: "stf:confirm:order1" } },
+    };
+    const res = fakeRes();
+    await bot.staffBotWebhook(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(Sentry.captureException).toHaveBeenCalledWith(actionErr);
   });
 });

@@ -17,6 +17,12 @@ function buildMockDb({ isAdmin = true } = {}) {
 function loadModule(db) {
   jest.resetModules();
   jest.doMock("../lib/admin", () => ({ db }));
+  jest.doMock("../lib/sentry", () => ({
+    withSentry: (fn) => fn,
+    initSentry: jest.fn(),
+    Sentry: { captureException: jest.fn() },
+    SENTRY_DSN: { value: () => null },
+  }));
   return require("../atmosProxyTest");
 }
 

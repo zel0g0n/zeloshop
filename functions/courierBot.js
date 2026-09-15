@@ -3,6 +3,7 @@ const { admin, db, BOT_TOKEN, COURIER_BOT_TOKEN, COURIER_TELEGRAM_WEBHOOK_SECRET
 const { sendTelegramMessage, answerCallbackQuery, editTelegramMessageText, buildSellerAppLink } = require("./lib/helpers");
 const { applyCourierOrderAction, buildCourierActionKeyboard, COURIER_ACTION_LABELS, handleCourierLiveLocationUpdate } = require("./couriers");
 const { isDuplicateUpdate } = require("./lib/webhookDedup");
+const { withSentry, initSentry, Sentry, SENTRY_DSN } = require("./lib/sentry");
 
 /**
  * Kuryer boti — `zeloshop_kuryer_bot`, `courierBotWebhook`.
@@ -208,9 +209,21 @@ async function handleCourierTelegramMessage(token, message) {
  * `message.location`, keyingi har bir davriy yangilanishda -
  * `edited_message.location`).
  */
+// XAVFSIZLIK/MONITORING (2026-09 audit, "o'rtacha darajadagi
+// kamchiliklar"): oldin bu webhook'da Sentry UMUMAN ULANMAGAN edi -
+// har bir `catch` bloki faqat `console.error` chaqirar edi, ya'ni
+// xato faqat Cloud Logging'da qolar, hech qanday bildirishnoma
+// kelmasdi. Endi ikki qatlamda tuzatildi: (1) `withSentry(...)` -
+// `isDuplicateUpdate`/`req.get(...)` kabi ICHKI try/catch'lardan
+// TASHQARIDA yuz berishi mumkin bo'lgan kutilmagan xatolarni ushlaydi;
+// (2) har bir ICHKI `catch` blokiga aniq `Sentry.captureException(err)`
+// qo'shildi - chunki ular xatoni ATAYLAB yutib yuboradi (mijoz
+// (Telegram) doim 200 javobini olishi kerak), shuning uchun tashqi
+// `withSentry` ularga YETIB BORMAYDI.
 exports.courierBotWebhook = onRequest(
-  { region: "asia-south1", secrets: [COURIER_BOT_TOKEN, COURIER_TELEGRAM_WEBHOOK_SECRET, BOT_TOKEN] },
-  async (req, res) => {
+  { region: "asia-south1", secrets: [COURIER_BOT_TOKEN, COURIER_TELEGRAM_WEBHOOK_SECRET, BOT_TOKEN, SENTRY_DSN] },
+  withSentry(async (req, res) => {
+    initSentry();
     const providedSecret = req.get("X-Telegram-Bot-Api-Secret-Token");
     if (providedSecret !== COURIER_TELEGRAM_WEBHOOK_SECRET.value()) {
       res.status(401).send("unauthorized");
@@ -234,6 +247,7 @@ exports.courierBotWebhook = onRequest(
         await handleCourierLiveLocationMessage(message.from?.id, message.location);
       } catch (err) {
         console.error("Kuryerning (birinchi) jonli joylashuvini qayta ishlashda xatolik:", err);
+        Sentry.captureException(err);
       }
       res.status(200).send("ok");
       return;
@@ -244,6 +258,7 @@ exports.courierBotWebhook = onRequest(
         await handleCourierTelegramMessage(token, message);
       } catch (err) {
         console.error("Kuryer botiga xabarni qayta ishlashda xatolik:", err);
+        Sentry.captureException(err);
       }
       res.status(200).send("ok");
       return;
@@ -255,6 +270,7 @@ exports.courierBotWebhook = onRequest(
         await handleCourierLiveLocationMessage(editedMessage.from?.id, editedMessage.location);
       } catch (err) {
         console.error("Kuryerning jonli joylashuv yangilanishini qayta ishlashda xatolik:", err);
+        Sentry.captureException(err);
       }
       res.status(200).send("ok");
       return;
@@ -302,6 +318,7 @@ exports.courierBotWebhook = onRequest(
       res.status(200).send("ok");
     } catch (err) {
       console.error("Kuryer botining callback_query'sida xatolik:", err);
+      Sentry.captureException(err);
       try {
         await answerCallbackQuery(token, callbackQuery.id, err.message || "Xatolik yuz berdi.");
       } catch {
@@ -309,7 +326,7 @@ exports.courierBotWebhook = onRequest(
       }
       res.status(200).send("ok");
     }
-  }
+  })
 );
 
 /**
@@ -352,8 +369,8 @@ async function handleRegisterCourierBotWebhook(request) {
 }
 
 exports.registerCourierBotWebhook = onCall(
-  { region: "asia-south1", secrets: [COURIER_BOT_TOKEN, COURIER_TELEGRAM_WEBHOOK_SECRET] },
-  handleRegisterCourierBotWebhook
+  { region: "asia-south1", secrets: [COURIER_BOT_TOKEN, COURIER_TELEGRAM_WEBHOOK_SECRET, SENTRY_DSN] },
+  withSentry(handleRegisterCourierBotWebhook)
 );
 
 exports._testables = {

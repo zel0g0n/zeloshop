@@ -7,7 +7,34 @@
  * qilingan (mock). `applyCourierOrderAction`ning O'ZI `couriers.test.js`
  * da alohida sinaladi — bu yerda faqat MOCK qilinadi (kod
  * DUPLIKATSIYASIga yo'l qo'ymaslik uchun).
+ *
+ * `firebase-functions/v2/https`ni MOCK qilamiz - `onRequest(config,
+ * handler)` shunchaki ICHKI handler'ning O'ZINI qaytaradi, shunda
+ * quyidagi "Senty integratsiyasi" testlari `exports.courierBotWebhook`ni
+ * TO'G'RIDAN-TO'G'RI (haqiqiy Cloud Function o'rovchisiz) chaqira oladi -
+ * `telegramApproval.test.js`dagi bir xil naqsh.
  */
+jest.mock("firebase-functions/v2/https", () => ({
+  onRequest: (config, handler) => handler,
+  onCall: (config, handler) => handler,
+  HttpsError: class MockHttpsError extends Error {
+    constructor(code, message) {
+      super(message);
+      this.code = code;
+    }
+  },
+}));
+
+// XAVFSIZLIK/MONITORING (2026-09 audit, "o'rtacha darajadagi
+// kamchiliklar"): `courierBotWebhook` endi `./lib/sentry`ni ishlatadi -
+// quyida `Sentry.captureException` chaqirilganini tekshiruvchi testlar
+// uchun aynan shu mock kerak.
+jest.mock("../lib/sentry", () => ({
+  withSentry: (fn) => fn,
+  initSentry: jest.fn(),
+  Sentry: { captureException: jest.fn() },
+  SENTRY_DSN: { value: () => null },
+}));
 
 function buildMockDb({ couriers = {}, courierInvites = {}, sellers = {}, admins = {} } = {}) {
   const courierSets = {};
@@ -253,5 +280,61 @@ describe("handleRegisterCourierBotWebhook", () => {
     await bot._testables.handleRegisterCourierBotWebhook({ auth: { uid: "u1" } });
     const requestBody = JSON.parse(fetchMock.mock.calls[0][1].body);
     expect(requestBody.allowed_updates).toEqual(["callback_query", "message", "edited_message"]);
+  });
+});
+
+function fakeRes() {
+  const res = { statusCode: null, body: null };
+  res.status = jest.fn((code) => { res.statusCode = code; return res; });
+  res.send = jest.fn((body) => { res.body = body; return res; });
+  return res;
+}
+
+describe("courierBotWebhook — Sentry integratsiyasi (2026-09 audit, 'o'rtacha darajadagi kamchiliklar')", () => {
+  test("noto'g'ri maxfiy token bilan 401 qaytaradi (Sentry chaqirilmaydi)", async () => {
+    const bot = loadCourierBotModule({ db: buildMockDb({}) });
+    const { Sentry } = require("../lib/sentry");
+    const req = { get: () => "noto'g'ri-token", body: {} };
+    const res = fakeRes();
+    await bot.courierBotWebhook(req, res);
+    expect(res.statusCode).toBe(401);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  test("xabarni qayta ishlashda kutilmagan xato — Sentry.captureException chaqiriladi, javob baribir 200", async () => {
+    const handleErr = new Error("kutilmagan DB xatosi");
+    // `db.collection("couriers").doc(id).get()` xato tashlashi uchun -
+    // `handleCourierTelegramMessage` shu orqali chaqiriladi ("salom"
+    // matni, ulangan bo'lmagan yo'lda emas, balki to'g'ridan-to'g'ri
+    // ICHKI DB xatosini simulyatsiya qilish uchun eng oddiy usul -
+    // `db` o'rniga xato tashlaydigan versiya beramiz).
+    const throwingDb = {
+      collection: () => ({ doc: () => ({ get: async () => { throw handleErr; } }) }),
+    };
+    const bot = loadCourierBotModule({ db: throwingDb });
+    const { Sentry } = require("../lib/sentry");
+    const req = {
+      get: () => "webhook-secret",
+      body: { message: { from: { id: 123 }, chat: { id: 999 }, text: "salom" } },
+    };
+    const res = fakeRes();
+    await bot.courierBotWebhook(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(Sentry.captureException).toHaveBeenCalledWith(handleErr);
+  });
+
+  test("callback_query'da kutilmagan xato — Sentry.captureException chaqiriladi, javob baribir 200", async () => {
+    const actionErr = new Error("amalni bajarib bo'lmadi");
+    const applyCourierOrderActionMock = jest.fn().mockRejectedValue(actionErr);
+    const bot = loadCourierBotModule({ db: buildMockDb({}), applyCourierOrderActionMock });
+    const { Sentry } = require("../lib/sentry");
+    const req = {
+      get: () => "webhook-secret",
+      body: { callback_query: { id: "cbq-1", from: { id: 123 }, message: { chat: { id: 999 }, message_id: 5 }, data: "cor:picked_up:order1" } },
+    };
+    const res = fakeRes();
+    await bot.courierBotWebhook(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(Sentry.captureException).toHaveBeenCalledWith(actionErr);
   });
 });

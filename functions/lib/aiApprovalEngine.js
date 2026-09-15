@@ -222,6 +222,85 @@ async function approveAction(db, admin, { sellerId, actionId, approvedBy, execut
 }
 
 /**
+ * QUEUED holatidagi (avtomatik ijroga ruxsat etilgan, LOW xavfli)
+ * harakatni DARHOL, INSON TASDIG'INI KUTMASDAN ijro etadi.
+ *
+ * `approveAction`dan FARQI: `approveAction` — inson (sotuvchi/admin)
+ * TASDIQLAGAN `WAITING_APPROVAL` harakat uchun (WAITING_APPROVAL ->
+ * APPROVED -> QUEUED -> RUNNING zanjiri, `loadResolvableAction` orqali
+ * FAQAT WAITING_APPROVAL holatini qabul qiladi). Bu funksiya esa
+ * `createPendingAction`ning O'ZI (xavf siyosati asosida) TO'G'RIDAN-
+ * TO'G'RI `QUEUED` holatida yaratgan harakat uchun (inson aralashuvisiz)
+ * — faqat qolgan `QUEUED -> RUNNING -> COMPLETED/FAILED` qismini bajaradi.
+ *
+ * 2026-09, sotuvchi qarori: AI CEO'ning `crmCampaign` (CRM segment
+ * xabarnomasi, moliyaviy majburiyatsiz, LOW xavf) harakatlari endi shu
+ * yo'l bilan — sotuvchi tasdig'isiz — ijro etiladi, sotuvchi esa faqat
+ * NATIJANI (Telegram xabari + Inbox/Buyruq Markazidagi "executed"
+ * kartochka) ko'radi. Moliyaviy ta'sirga ega harakat turlari (masalan
+ * `adCampaign`) bu yo'ldan HECH QACHON o'tmaydi (ular hech qachon LOW
+ * xavf bo'lmaydi, shuning uchun har doim `approveAction` orqali, inson
+ * tasdig'i bilan boradi).
+ */
+async function runQueuedAction(db, admin, { sellerId, actionId, executors = {} }) {
+  if (!sellerId) throw new Error("runQueuedAction: sellerId majburiy");
+
+  const ref = db.collection("sellers").doc(sellerId).collection("aiCeoPendingActions").doc(actionId);
+  const snap = await ref.get();
+  if (!snap.exists) return { ok: false, reason: "not_found" };
+
+  const actionDoc = snap.data();
+  const currentState = resolveCurrentState(actionDoc);
+  if (currentState !== ACTION_STATES.QUEUED) {
+    return { ok: false, reason: "not_queued", actionDoc };
+  }
+  const actionType = actionDoc.type || actionDoc.actionType || "crmCampaign";
+
+  assertTransition(ACTION_STATES.QUEUED, ACTION_STATES.RUNNING);
+
+  const executor = executors[actionType];
+  if (!executor) {
+    assertTransition(ACTION_STATES.RUNNING, ACTION_STATES.FAILED);
+    assertTransition(ACTION_STATES.FAILED, ACTION_STATES.FAILED_FINAL);
+    const error = `"${actionType}" uchun ijro funksiyasi ro'yxatga olinmagan`;
+    await ref.update({ status: "failed", state: ACTION_STATES.FAILED_FINAL, failedAt: admin.firestore.FieldValue.serverTimestamp(), failureReason: error });
+    await writeAuditLog(db, admin, {
+      sellerId, who: "system", what: "Ijro funksiyasi topilmadi (avtomatik ijro)", actionId, actionType,
+      oldState: ACTION_STATES.QUEUED, newState: ACTION_STATES.FAILED_FINAL, failure: error,
+    });
+    return { ok: true, executed: false, failed: true, action: actionDoc, error };
+  }
+
+  try {
+    const result = await executor({ sellerId, payload: actionDoc, actionDoc });
+    assertTransition(ACTION_STATES.RUNNING, ACTION_STATES.COMPLETED);
+    await ref.update({
+      status: "executed",
+      state: ACTION_STATES.COMPLETED,
+      approvedBy: "system",
+      executedAt: admin.firestore.FieldValue.serverTimestamp(),
+      result: result || null,
+    });
+    await writeAuditLog(db, admin, {
+      sellerId, who: "system", what: `"${actionType}" avtomatik ijro etildi (LOW xavf - sotuvchi tasdig'isiz)`, actionId, actionType,
+      oldState: ACTION_STATES.QUEUED, newState: ACTION_STATES.COMPLETED,
+      approval: { approvedBy: "system" }, execution: result || null,
+    });
+    return { ok: true, executed: true, action: actionDoc, result };
+  } catch (err) {
+    assertTransition(ACTION_STATES.RUNNING, ACTION_STATES.FAILED);
+    assertTransition(ACTION_STATES.FAILED, ACTION_STATES.FAILED_FINAL);
+    const errorMessage = err.message || "Noma'lum ijro xatosi";
+    await ref.update({ status: "failed", state: ACTION_STATES.FAILED_FINAL, failedAt: admin.firestore.FieldValue.serverTimestamp(), failureReason: errorMessage });
+    await writeAuditLog(db, admin, {
+      sellerId, who: "system", what: `"${actionType}" avtomatik ijrosida xatolik`, actionId, actionType,
+      oldState: ACTION_STATES.QUEUED, newState: ACTION_STATES.FAILED_FINAL, failure: errorMessage,
+    });
+    return { ok: true, executed: false, failed: true, action: actionDoc, error: errorMessage };
+  }
+}
+
+/**
  * Kutilayotgan harakatni RAD ETADI (hech narsa ijro etilmaydi).
  */
 async function rejectAction(db, admin, { sellerId, actionId, rejectedBy }) {
@@ -249,5 +328,6 @@ module.exports = {
   createPendingAction,
   approveAction,
   rejectAction,
+  runQueuedAction,
   loadResolvableAction,
 };

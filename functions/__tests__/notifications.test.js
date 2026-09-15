@@ -14,7 +14,7 @@
  * orqali amalga oshiriladi.
  */
 
-function buildMockDb({ customerBotToken = null, verifiedClientIds = [], staffDocs = [], campaignWrites = [], staffActorDocs = {} } = {}) {
+function buildMockDb({ customerBotToken = null, verifiedClientIds = [], staffDocs = [], campaignWrites = [], staffActorDocs = {}, customerFullNames = {} } = {}) {
   return {
     collection: (name) => {
       if (name === "sellers") {
@@ -28,6 +28,23 @@ function buildMockDb({ customerBotToken = null, verifiedClientIds = [], staffDoc
             collection: (subName) => {
               if (subName === "campaigns") {
                 return { add: async (data) => { campaignWrites.push(data); return { id: "campaign-1" }; } };
+              }
+              // "customers" — `handleSendCrmNotification`ning YANGI
+              // shaxsiylashtirish qadami (`{ism}` almashtirish) shu
+              // yerdan HAR BIR tasdiqlangan mijozning ismini qidiradi
+              // (`.where(FieldPath.documentId(), "in", chunk).get()`).
+              // Bu testlar `{ism}` ishlatmaydi, shuning uchun bo'sh
+              // natija kifoya (matn shablon o'zgarishsiz qoladi).
+              if (subName === "customers") {
+                return {
+                  where: (_field, _op, ids) => ({
+                    get: async () => ({
+                      forEach: (cb) => ids
+                        .filter((id) => customerFullNames[id])
+                        .forEach((id) => cb({ id, data: () => ({ fullName: customerFullNames[id] }) })),
+                    }),
+                  }),
+                };
               }
               return {
                 doc: () => ({
@@ -84,11 +101,11 @@ function buildMockDb({ customerBotToken = null, verifiedClientIds = [], staffDoc
   };
 }
 
-function loadNotificationsModule({ customerBotToken, verifiedClientIds, sendResults, staffDocs, campaignWrites, staffActorDocs } = {}) {
+function loadNotificationsModule({ customerBotToken, verifiedClientIds, sendResults, staffDocs, campaignWrites, staffActorDocs, customerFullNames } = {}) {
   jest.resetModules();
 
   const trackedCampaignWrites = campaignWrites || [];
-  const mockDb = buildMockDb({ customerBotToken, verifiedClientIds, staffDocs, campaignWrites: trackedCampaignWrites, staffActorDocs });
+  const mockDb = buildMockDb({ customerBotToken, verifiedClientIds, staffDocs, campaignWrites: trackedCampaignWrites, staffActorDocs, customerFullNames });
   // `sendResults` — chaqiruvlar ketma-ketligi bo'yicha natijalar ro'yxati
   // (masalan, [{ ok: false }, { ok: true }] — shaxsiy bot orqali birinchi
   // urinish muvaffaqiyatsiz, keyin platforma boti orqali zaxira
@@ -117,6 +134,10 @@ function loadNotificationsModule({ customerBotToken, verifiedClientIds, sendResu
     increment: (n) => ({ __op: "increment", amount: n }),
     arrayUnion: (...items) => ({ __op: "arrayUnion", items }),
   };
+  // `handleSendCrmNotification`ning shaxsiylashtirish qadami
+  // `admin.firestore.FieldPath.documentId()`ni ishlatadi (`auth.test.js`da
+  // ALLAQACHON qo'llanilgan BIR XIL naqsh).
+  firestoreFn.FieldPath = { documentId: () => "__name__" };
   jest.doMock("../lib/admin", () => ({
     admin: { firestore: firestoreFn },
     BOT_TOKEN: { value: () => "platform-shared-token" },
@@ -383,6 +404,75 @@ describe("sendCrmNotification — kampaniya yozuvini saqlash (Business Command C
   });
 });
 
+// 2026-09, foydalanuvchi so'rovi: "Mijozlarga xabar yuborish" qismiga
+// haqiqiy productlarda ishlatiladigan top funksiyalardan qo'shish —
+// `{ism}` shaxsiylashtirish (`automationRules.js`dagi avtomatlashtirish
+// qoidalari bilan BIR XIL, `lib/messagePersonalization.js`ga
+// ko'chirilgan mantiq) endi CRM broadcast xabarlarida ham ishlaydi.
+describe("sendCrmNotification — {ism} shaxsiylashtirish", () => {
+  test("sarlavha/xabarda {ism} bo'lsa, HAR BIR mijozga O'ZINING ismi bilan yuboriladi", async () => {
+    const { notifications, sendTelegramMessageMock } = loadNotificationsModule({
+      customerBotToken: null,
+      verifiedClientIds: ["client-1", "client-2"],
+      customerFullNames: { "client-1": "Karim Aliyev", "client-2": "Dilnoza Yusupova" },
+    });
+
+    await notifications._testables.handleSendCrmNotification({
+      auth: { uid: "seller-1" },
+      data: {
+        sellerId: "seller-1",
+        targetClientIds: ["client-1", "client-2"],
+        title: "Aksiya",
+        message: "{ism}, siz uchun maxsus 15% chegirma!",
+      },
+    });
+
+    expect(sendTelegramMessageMock).toHaveBeenCalledTimes(2);
+    expect(sendTelegramMessageMock.mock.calls[0][2]).toContain("Karim, siz uchun");
+    expect(sendTelegramMessageMock.mock.calls[1][2]).toContain("Dilnoza, siz uchun");
+  });
+
+  test("ismi topilmagan mijozga xushmuomala umumiy murojaat bilan yuboriladi", async () => {
+    const { notifications, sendTelegramMessageMock } = loadNotificationsModule({
+      customerBotToken: null,
+      verifiedClientIds: ["client-1"],
+      customerFullNames: {},
+    });
+
+    await notifications._testables.handleSendCrmNotification({
+      auth: { uid: "seller-1" },
+      data: {
+        sellerId: "seller-1",
+        targetClientIds: ["client-1"],
+        title: "Aksiya",
+        message: "{ism}, chegirma sizni kutmoqda!",
+      },
+    });
+
+    expect(sendTelegramMessageMock.mock.calls[0][2]).toContain("Hurmatli mijoz, chegirma");
+  });
+
+  test("{ism} ishlatilmagan bo'lsa, xabar BARCHAGA bir xil qoladi (yon ta'sirsiz)", async () => {
+    const { notifications, sendTelegramMessageMock } = loadNotificationsModule({
+      customerBotToken: null,
+      verifiedClientIds: ["client-1", "client-2"],
+      customerFullNames: { "client-1": "Karim Aliyev", "client-2": "Dilnoza Yusupova" },
+    });
+
+    await notifications._testables.handleSendCrmNotification({
+      auth: { uid: "seller-1" },
+      data: {
+        sellerId: "seller-1",
+        targetClientIds: ["client-1", "client-2"],
+        title: "Aksiya",
+        message: "Barcha mahsulotlarga chegirma",
+      },
+    });
+
+    expect(sendTelegramMessageMock.mock.calls[0][2]).toBe(sendTelegramMessageMock.mock.calls[1][2]);
+  });
+});
+
 describe("buildSellerNewOrderMessage — sotuvchiga yuboriladigan yangi buyurtma matni", () => {
   test("mijoz, mahsulotlar va summani o'z ichiga oladi", () => {
     const { notifications } = loadNotificationsModule({});
@@ -423,6 +513,22 @@ describe("buildSellerNewOrderMessage — sotuvchiga yuboriladigan yangi buyurtma
       totalAmount: 100000,
     });
     expect(text).not.toContain("Kelishilgan vaqt");
+  });
+});
+
+/**
+ * TO'LOV MUDDATI O'TGAN sotuvchi uchun ishlatiladigan QISQARTIRILGAN
+ * xabar (2026-09, "barcha teshiklarni yop") — `buildSellerNewOrderMessage`dan
+ * FARQLI ravishda, mijoz/mahsulot/summasi haqida HECH QANDAY ma'lumot
+ * bermasligi kerak.
+ */
+describe("buildSellerPastDueOrderMessage — to'lov muddati o'tgan sotuvchi uchun qisqartirilgan xabar", () => {
+  test("mijoz/mahsulot/summasi haqida HECH QANDAY ma'lumot bermaydi", () => {
+    const { notifications } = loadNotificationsModule({});
+    const text = notifications._testables.buildSellerPastDueOrderMessage();
+    expect(text).not.toMatch(/\d/); // hech qanday raqam (summasi/telefon/son) yo'q
+    expect(text.toLowerCase()).toContain("yangi buyurtma");
+    expect(text.toLowerCase()).toContain("to'lov");
   });
 });
 

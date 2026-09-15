@@ -144,6 +144,12 @@ async function handleCreateOrder(request) {
           image: product.image || (product.images && product.images[0]) || null,
           price: unitPrice,
           quantity: requestedQty,
+          // "Qayta xarid eslatmasi"ning kategoriya-asoslangan iste'mol
+          // tsikli (`lib/replenishmentCycles.js`) uchun XARID PAYTIDAGI
+          // haqiqiy kategoriyani "suratga olamiz" - keyinroq mahsulot
+          // o'chirilsa/kategoriyasi o'zgartirilsa ham, bu buyurtma uchun
+          // to'g'ri qoladi (qo'shimcha o'qish ham kerak emas).
+          category: product.category || null,
         });
         subtotal += unitPrice * requestedQty;
       }

@@ -1,15 +1,17 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Crown, Star, Gem, Moon, AlertTriangle, Clock, Sparkles, RefreshCw,
-  Percent, Flame, ChevronRight, X, Phone, MessageCircle, Loader2, RotateCw,
+  Percent, Flame, ChevronRight, X, Phone, MessageCircle, Loader2, RotateCw, Search, ListFilter,
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
-import useCustomerIntelligence from "@/hooks/seller/useCustomerIntelligence";
 import { filterClassifiedCustomers } from "@/utils/customerIntelligence";
+import { getCustomerNote, saveCustomerNote } from "@/services/crm/customerNotes";
+import { getCustomerOrderHistory } from "@/services/orders/getOrderData";
 import { GridSkeleton } from "@/components/ui/Skeleton";
+import CustomSelect from "@/components/ui/CustomSelect";
+import Toast from "@/components/ui/Toast";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 import BiznesBadge from "@/components/ui/BiznesBadge";
 
@@ -34,42 +36,110 @@ const TAG_STYLE = {
   high_intent: "bg-cyan-500/15 text-cyan-400 border border-cyan-500/30",
 };
 
+const SEGMENT_KEYS = ["all", "vip", "high_value", "sleeping", "churn_risk", "at_risk", "new", "returning"];
+const TAG_KEYS = ["discount_hunter", "high_intent"];
+
 /**
  * MIJOZLAR RAZVEDKASI (Advanced Customer Intelligence, Z-Biznes,
- * 2026-09 punkt-royxati, 9-band) — CRM Hub'ning YUQORIDAGI, Z-Pro
- * 4-segmentli (`SEGMENT_META`/`useCustomerSegments`) bo'limidan
- * ATAYLAB ALOHIDA, QO'SHIMCHA panel. Ular BIRLASHTIRILMAGAN (ustiga
- * qurilmagan) — ikkalasi ham mustaqil ishlaydi, chunki bu yerdagi
- * 7-segment+2-belgi tasnifi FAQAT server tomonida (`getCustomerIntelligence`
- * onCall, batafsil izoh: `useCustomerIntelligence` hook'i) hisoblanadi
- * ("high_intent" belgisi uchun `carts`/`favorites`ni o'qish kerak,
- * ular esa sotuvchiga ham yopiq).
+ * 2026-09 punkt-royxati, 9-band) — CRM Hub'ning YAGONA mijozlar
+ * ro'yxati/tafsilot ko'rinishi.
  *
- * Shu sababli bu panelning O'Z, sodda mijoz kartochkasi/tafsilot
- * ko'rinishi bor (izohlar/xaridlar tarixisiz — ular kerak bo'lsa,
- * sotuvchi yuqoridagi asosiy ro'yxatdan o'sha mijozni topishi mumkin)
- * — mavjud, ishlab turgan CRM modalini qayta qurish/murakkablashtirish
- * o'rniga.
+ * 2026-09 UX TUZATISHI (foydalanuvchi so'rovi): OLDIN bu panel VA
+ * `CrmHub.jsx`ning O'ZI (Z-Pro'ning eski 4-segmentli qidiruv+tab+
+ * ro'yxati) BIR SAHIFADA ikki marta, ketma-ket mijozlar ro'yxatini
+ * ko'rsatardi - chalkash, dizaynni buzuvchi holat edi. Endi bu panel
+ * YAGONA ro'yxat: qidiruv maydoni ENDI shu yerda (avval faqat
+ * `CrmHub.jsx`da edi), va mijoz tafsiloti oynasi ham TO'LIQ (qo'ng'iroq/
+ * Telegram, LTV/buyurtmalar, IZOH va XARIDLAR TARIXI bilan) - avvalgi
+ * `CrmHub.jsx`ning "Customer Detail Modal"idan shu yerga ko'chirildi
+ * (chunki endi mijozni bosishning YAGONA yo'li shu yerdan).
+ *
+ * Segment/belgi filtrlari ENDI select (tanlash) dizaynida - avvalgi
+ * gorizontal skrol qiluvchi tab-tugmalar juda uzun bo'lib ketgani
+ * uchun (2026-09, foydalanuvchi so'rovi).
+ *
+ * `data`/`loading`/`error`/`refetch`/`isBiznes` — YUQORIDAN
+ * (`CrmHub.jsx`) beriladi: shu bir xil `useCustomerIntelligence`
+ * natijasi endi "Mijozlarga xabar yuborish" auditoriyasini tanlashda
+ * HAM ishlatiladi (3-band), shuning uchun hook faqat BIR MARTA,
+ * ota komponentda chaqiriladi - ikki marta server so'rovi yubormaslik
+ * uchun.
  */
-const CustomerIntelligencePanel = () => {
+const CustomerIntelligencePanel = ({ data, loading, error, refetch, isBiznes }) => {
   const navigate = useNavigate();
   const { t } = useLanguage();
-  const { store } = useSession();
-  const isBiznes = getEffectiveTariffPlan(store) === "biznes";
+  const { sellerId } = useSession();
 
-  const { data, loading, error, refetch } = useCustomerIntelligence(isBiznes);
+  const [searchText, setSearchText] = useState("");
   const [activeSegment, setActiveSegment] = useState("all");
-  const [activeTag, setActiveTag] = useState(null);
+  const [activeTag, setActiveTag] = useState("none");
   const [selected, setSelected] = useState(null);
   useEscapeToClose(() => setSelected(null), Boolean(selected));
 
-  const visibleCustomers = useMemo(
-    () => filterClassifiedCustomers(data?.customers, { segment: activeSegment, tag: activeTag }),
-    [data, activeSegment, activeTag]
-  );
+  // Mijoz kartochkasi bosilganda, o'sha mijoz haqidagi saqlangan izoh
+  // va to'liq xarid tarixi talab bo'yicha yuklanadi (`CrmHub.jsx`dagi
+  // AVVALGI mantiq bilan BIR XIL - endi shu yerga ko'chirilgan).
+  const [customerNote, setCustomerNote] = useState("");
+  const [noteLoading, setNoteLoading] = useState(false);
+  const [noteSaving, setNoteSaving] = useState(false);
+  const [noteToast, setNoteToast] = useState(null);
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
 
-  const SEGMENT_KEYS = ["all", "vip", "high_value", "sleeping", "churn_risk", "at_risk", "new", "returning"];
-  const TAG_KEYS = ["discount_hunter", "high_intent"];
+  useEffect(() => {
+    if (!selected || !sellerId) return;
+    let cancelled = false;
+    setNoteLoading(true);
+    getCustomerNote(sellerId, selected.clientId)
+      .then((note) => { if (!cancelled) setCustomerNote(note); })
+      .catch(() => { if (!cancelled) setCustomerNote(""); })
+      .finally(() => { if (!cancelled) setNoteLoading(false); });
+    return () => { cancelled = true; };
+  }, [selected, sellerId]);
+
+  useEffect(() => {
+    if (!selected || !sellerId) {
+      setCustomerOrders([]);
+      setCustomerOrdersLoading(false);
+      return;
+    }
+    setCustomerOrdersLoading(true);
+    const unsubscribe = getCustomerOrderHistory(
+      sellerId,
+      selected.clientId,
+      (orders) => {
+        setCustomerOrders(orders);
+        setCustomerOrdersLoading(false);
+      },
+      () => {
+        setCustomerOrders([]);
+        setCustomerOrdersLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, [selected, sellerId]);
+
+  const handleSaveNote = useCallback(async () => {
+    if (!selected) return;
+    setNoteSaving(true);
+    try {
+      await saveCustomerNote(sellerId, selected.clientId, customerNote);
+      setNoteToast(t("crmHub.noteSaved"));
+    } catch {
+      setNoteToast(t("crmHub.noteSaveFailed"));
+    } finally {
+      setNoteSaving(false);
+    }
+  }, [sellerId, selected, customerNote, t]);
+
+  const visibleCustomers = useMemo(
+    () => filterClassifiedCustomers(data?.customers, {
+      segment: activeSegment,
+      tag: activeTag === "none" ? null : activeTag,
+      searchText,
+    }),
+    [data, activeSegment, activeTag, searchText]
+  );
 
   if (!isBiznes) {
     return (
@@ -89,6 +159,20 @@ const CustomerIntelligencePanel = () => {
       </div>
     );
   }
+
+  const segmentOptions = SEGMENT_KEYS.map((key) => ({
+    value: key,
+    label: `${t(`customerIntelligence.segment.${key}`)} (${data ? (key === "all" ? data.counts.all : data.counts[key] || 0) : 0})`,
+    icon: SEGMENT_ICONS[key],
+  }));
+  const tagOptions = [
+    { value: "none", label: t("customerIntelligence.tagNone"), icon: ListFilter },
+    ...TAG_KEYS.map((key) => ({
+      value: key,
+      label: `${t(`customerIntelligence.tag.${key}`)} (${data?.tagCounts?.[key] || 0})`,
+      icon: TAG_ICONS[key],
+    })),
+  ];
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 space-y-3">
@@ -120,51 +204,27 @@ const CustomerIntelligencePanel = () => {
             </div>
           )}
 
-          {/* SEGMENT CHIPS */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-            {SEGMENT_KEYS.map((key) => {
-              const Icon = SEGMENT_ICONS[key];
-              const isActive = activeSegment === key;
-              const count = key === "all" ? data.counts.all : data.counts[key];
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setActiveSegment(key)}
-                  className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl transition-colors ${
-                    isActive
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                      : "bg-[#F4F5F9] dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-800"
-                  }`}
-                >
-                  <Icon size={13} />
-                  <span className="text-[11px] font-bold whitespace-nowrap">{t(`customerIntelligence.segment.${key}`)} ({count})</span>
-                </button>
-              );
-            })}
+          {/* QIDIRUV — avval faqat `CrmHub.jsx`ning eski (endi olib
+              tashlangan) ro'yxatida edi, endi shu yerga ko'chirilgan. */}
+          <div className="relative">
+            <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 dark:text-slate-500">
+              <Search size={14} />
+            </span>
+            <input
+              type="text"
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder={t("crmHub.searchPlaceholder")}
+              className="w-full h-10 pl-9 pr-3 bg-[#F4F5F9] dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            />
           </div>
 
-          {/* TAG TOGGLES */}
-          <div className="flex items-center gap-1.5">
-            {TAG_KEYS.map((key) => {
-              const Icon = TAG_ICONS[key];
-              const isActive = activeTag === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setActiveTag(isActive ? null : key)}
-                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl transition-colors ${
-                    isActive ? TAG_STYLE[key] : "bg-[#F4F5F9] dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-800"
-                  }`}
-                >
-                  <Icon size={13} />
-                  <span className="text-[11px] font-bold whitespace-nowrap">
-                    {t(`customerIntelligence.tag.${key}`)} ({data.tagCounts[key] || 0})
-                  </span>
-                </button>
-              );
-            })}
+          {/* SEGMENT/BELGI FILTRLARI — gorizontal skrol qiluvchi
+              tab-tugmalar o'rniga, ikonkalar bilan SELECT (2026-09,
+              foydalanuvchi so'rovi: "gorizontal skrol juda uzun"). */}
+          <div className="grid grid-cols-2 gap-2">
+            <CustomSelect value={activeSegment} onChange={setActiveSegment} options={segmentOptions} />
+            <CustomSelect value={activeTag} onChange={setActiveTag} options={tagOptions} />
           </div>
 
           {/* CUSTOMER LIST */}
@@ -214,11 +274,13 @@ const CustomerIntelligencePanel = () => {
         </>
       )}
 
-      {/* DETAIL FLYOUT */}
+      {/* MIJOZ TAFSILOTI (to'liq) — qo'ng'iroq/Telegram, LTV/buyurtmalar,
+          IZOH va XARIDLAR TARIXI (avvalgi `CrmHub.jsx`ning "Customer
+          Detail Modal"idan shu yerga ko'chirilgan). */}
       {selected && (
         <div className="fixed inset-0 z-50 flex items-end justify-center" role="dialog" aria-modal="true">
           <div className="absolute inset-0 bg-black/60" onClick={() => setSelected(null)} />
-          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 rounded-t-3xl p-4 pb-8 animate-fade-in">
+          <div className="relative w-full max-w-md bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 rounded-t-3xl p-4 pb-8 max-h-[85vh] overflow-y-auto animate-fade-in">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-11 h-11 rounded-full bg-indigo-500/15 text-indigo-400 font-black text-base flex items-center justify-center shrink-0">
@@ -254,7 +316,7 @@ const CustomerIntelligencePanel = () => {
               </a>
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 mb-4">
               <div className="bg-[#F4F5F9] dark:bg-slate-800 rounded-xl p-3">
                 <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase">{t("crmHub.totalSpent")}</p>
                 <p className="text-sm font-black text-emerald-400">{selected.ltv.toLocaleString()} so'm</p>
@@ -264,9 +326,50 @@ const CustomerIntelligencePanel = () => {
                 <p className="text-sm font-black text-slate-900 dark:text-white">{selected.orderCount} ta</p>
               </div>
             </div>
+
+            {/* ADMIN IZOHI (Notes) */}
+            <div className="mb-4">
+              <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider block mb-1.5">{t("crmHub.noteLabel")}</label>
+              <textarea
+                rows="2"
+                disabled={noteLoading}
+                placeholder={noteLoading ? t("crmHub.noteLoadingPlaceholder") : t("crmHub.notePlaceholder")}
+                value={customerNote}
+                onChange={(e) => setCustomerNote(e.target.value)}
+                className="w-full p-2.5 bg-[#F4F5F9] dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 rounded-xl text-xs font-medium focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none disabled:opacity-60"
+              />
+              <button
+                type="button"
+                onClick={handleSaveNote}
+                disabled={noteSaving || noteLoading}
+                className="mt-1.5 text-[10px] font-bold text-indigo-400 disabled:opacity-50"
+              >
+                {noteSaving ? t("crmHub.noteSaving") : t("crmHub.noteSaveBtn")}
+              </button>
+            </div>
+
+            <h4 className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-2">{t("crmHub.purchaseHistory")}</h4>
+            <div className="space-y-2">
+              {customerOrdersLoading && <GridSkeleton count={2} />}
+              {!customerOrdersLoading && customerOrders.length === 0 && (
+                <p className="text-center text-xs text-slate-400 dark:text-slate-500 py-4">{t("crmHub.noOrdersYet")}</p>
+              )}
+              {!customerOrdersLoading && customerOrders.map((o) => (
+                <div key={o.id} className="bg-[#F4F5F9] dark:bg-slate-800 rounded-xl p-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500">#{o.id.slice(0, 6)}</p>
+                    <p className="text-xs font-bold text-slate-700 dark:text-slate-200">{Number(o.totalAmount || 0).toLocaleString()} so'm</p>
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500">{o.createdAt ? new Date(o.createdAt).toLocaleDateString("uz-UZ") : ""}</p>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 capitalize">{t(`orderStatus.${o.status}`)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
+
+      {noteToast && <Toast message={noteToast} onDone={() => setNoteToast(null)} duration={1500} />}
 
       {loading && data && (
         <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 py-1">

@@ -8,13 +8,12 @@ export default defineConfig([
   globalIgnores(['dist']),
   {
     files: ['**/*.{js,jsx}'],
-    // MUHIM: `functions/` va `atmos-proxy-vm-test-server.js` endi
-    // pastdagi ALOHIDA bloklarida (Node.js globallari bilan)
-    // tekshiriladi - shuning uchun bu yerda chiqarib tashlangan, aks
-    // holda ikkala blok ham ularga ustma-ust tegib (React hooks/
-    // refresh qoidalari sof Node.js skriptiga ma'nosiz tarzda
-    // qo'llanardi), chalkash natija berardi.
-    ignores: ['functions/**', 'atmos-proxy-vm-test-server.js'],
+    // MUHIM: `functions/` endi pastdagi ALOHIDA blokda (Node.js
+    // globallari bilan) tekshiriladi - shuning uchun bu yerda chiqarib
+    // tashlangan, aks holda ikkala blok ham unga ustma-ust tegib
+    // (React hooks/refresh qoidalari sof Node.js koduga ma'nosiz
+    // tarzda qo'llanardi), chalkash natija berardi.
+    ignores: ['functions/**'],
     extends: [
       js.configs.recommended,
       reactHooks.configs.flat.recommended,
@@ -90,25 +89,6 @@ export default defineConfig([
   // Endi to'g'ri Node.js+Jest global o'zgaruvchilari beriladi, va
   // React'ga xos qoidalar (hooks/refresh) - bu yerda ma'nosiz -
   // o'chirib qo'yiladi.
-  // MUHIM, YANGI QO'SHILDI: `atmos-proxy-vm-test-server.js` - repo
-  // ILDIZIDAGI, `src/`ga ham `functions/`ga ham TEGISHLI BO'LMAGAN,
-  // mustaqil, VAQTINCHALIK Node.js tekshiruv skripti (o'z izohida
-  // "VAQTINCHALIK tekshiruv serveri" deb aytilgan - ATMOS proksi-VM
-  // haqiqiy IP orqali chiqayotganini tekshirish uchun). U yuqoridagi
-  // frontend blokiga tushib qolgani uchun (`**/*.{js,jsx}`,
-  // faqat `functions/**` chiqarib tashlangan), `globals.browser`
-  // bilan tekshirilardi - lekin bu fayl aslida oddiy Node.js skripti
-  // (`require("http")` ishlatadi), brauzer kodi emas. Natijada
-  // "'require' is not defined" (no-undef) soxta xato chiqardi. Kodni
-  // emas, konfiguratsiyani tuzatish to'g'ri - bu fayl uchun alohida,
-  // Node.js globallariga ega kichik blok.
-  {
-    files: ['atmos-proxy-vm-test-server.js'],
-    languageOptions: {
-      globals: globals.node,
-      sourceType: 'commonjs',
-    },
-  },
   {
     files: ['functions/**/*.js'],
     extends: [js.configs.recommended],

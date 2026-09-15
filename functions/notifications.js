@@ -8,6 +8,7 @@ const { checkRateLimit } = require("./lib/rateLimit");
 const { resolveActingSellerContext } = require("./lib/staffAccess");
 const { trackCrmMessageRecipients, logNotification } = require("./lib/dailyStats");
 const { getSellerCustomBotToken, sendCustomerNotification } = require("./lib/customerNotify");
+const { personalizeMessage } = require("./lib/messagePersonalization");
 // 50-100+ faol sotuvchida ketma-ket ishlov berish standart 60s
 // `onSchedule` timeout'idan oshib ketishi mumkin edi - batafsil
 // izoh: `lib/batchProcess.js`.
@@ -15,7 +16,7 @@ const { processBatched } = require("./lib/batchProcess");
 const { enqueueRetry } = require("./lib/notificationRetryQueue");
 const { withSentry, SENTRY_DSN, initSentry, Sentry } = require("./lib/sentry");
 const { formatDeliverySlotAbsolute } = require("./lib/deliverySlots");
-const { normalizeTariffPlan } = require("./lib/tariffs");
+const { normalizeTariffPlan, isTariffPastDue } = require("./lib/tariffs");
 
 /**
  * CRM Hub'dagi "Yuborish" tugmasi chaqiradigan funksiya — Telegram
@@ -73,11 +74,8 @@ async function handleSendCrmNotification(request) {
   // ulamagan, yoki muayyan mijoz o'sha botni hali ishga tushirmagan
   // holatlar uchun).
   const customBotToken = await getSellerCustomBotToken(sellerId);
-
-  let text = `*${title.trim()}*\n\n${message.trim()}`;
-  if (couponCode) {
-    text += `\n\nPromokod: \`${couponCode}\``;
-  }
+  const trimmedTitle = title.trim();
+  const trimmedMessage = message.trim();
 
   // `targetClientIds` frontenddan kelgan ro'yxatga ko'r-ko'rona
   // ishonilmaydi — har bir ID ushbu sotuvchining haqiqiy buyurtma
@@ -97,8 +95,35 @@ async function handleSendCrmNotification(request) {
   }
 
   const safeClientIds = targetClientIds.filter((id) => verifiedIds.has(id));
+
+  // MIJOZNI ISM BILAN CHAQIRISH (haqiqiy shaxsiylashtirish, mock EMAS,
+  // 2026-09 foydalanuvchi so'rovi: "haqiqiy productlarda ishlatiladigan
+  // top funksiyalardan qo'sh"): sotuvchi sarlavha/xabar matnida `{ism}`
+  // yozsa, HAR BIR mijozga O'ZINING ismi bilan yuboriladi
+  // (`automationRules.js`dagi avtomatlashtirish qoidalari bilan BIR
+  // XIL, `lib/messagePersonalization.js`ga ko'chirilgan mantiq). Agar
+  // sotuvchi `{ism}` ishlatmagan bo'lsa, xabar oldingidek BARCHAGA bir
+  // xil qoladi — yon ta'sirsiz.
+  const fullNameByClientId = new Map();
+  for (let i = 0; i < safeClientIds.length; i += CHUNK_SIZE) {
+    const chunk = safeClientIds.slice(i, i + CHUNK_SIZE);
+    const customersSnap = await firestore.collection("sellers").doc(sellerId).collection("customers")
+      .where(admin.firestore.FieldPath.documentId(), "in", chunk)
+      .get();
+    customersSnap.forEach((doc) => fullNameByClientId.set(doc.id, doc.data()?.fullName || ""));
+  }
+
+  const buildPersonalizedText = (clientId) => {
+    const fullName = fullNameByClientId.get(clientId) || "";
+    let personalized = `*${personalizeMessage(trimmedTitle, fullName)}*\n\n${personalizeMessage(trimmedMessage, fullName)}`;
+    if (couponCode) {
+      personalized += `\n\nPromokod: \`${couponCode}\``;
+    }
+    return personalized;
+  };
+
   const clientResults = await Promise.all(
-    safeClientIds.map((id) => sendCustomerNotification(customBotToken, id, text, { bannerImageUrl, buttonText, buttonUrl }))
+    safeClientIds.map((id) => sendCustomerNotification(customBotToken, id, buildPersonalizedText(id), { bannerImageUrl, buttonText, buttonUrl }))
   );
 
   // Kimlarga xabar yuborilganini kuzatamiz - AI CEO kunlik
@@ -124,8 +149,8 @@ async function handleSendCrmNotification(request) {
   // funksiya natijasiga ta'sir qilmaydi.
   try {
     await firestore.collection("sellers").doc(sellerId).collection("campaigns").add({
-      title: title.trim(),
-      message: message.trim(),
+      title: trimmedTitle,
+      message: trimmedMessage,
       audienceCount: safeClientIds.length,
       couponCode: couponCode || null,
       sentAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -145,8 +170,8 @@ async function handleSendCrmNotification(request) {
       sellerId,
       clientId: id,
       type: "crmBroadcast",
-      title: title.trim(),
-      message: clientResults[i]?.ok ? message.trim() : `${message.trim()}\n\n[Yetkazilmadi: ${clientResults[i]?.description || clientResults[i]?.error || "noma'lum sabab"}]`,
+      title: trimmedTitle,
+      message: clientResults[i]?.ok ? trimmedMessage : `${trimmedMessage}\n\n[Yetkazilmadi: ${clientResults[i]?.description || clientResults[i]?.error || "noma'lum sabab"}]`,
       delivered: Boolean(clientResults[i]?.ok),
     }))
   );
@@ -162,7 +187,7 @@ exports.sendCrmNotification = onCall(
   withSentry(handleSendCrmNotification)
 );
 
-exports._testables = { handleSendCrmNotification, notifyStaffOfNewOrder, buildSellerNewOrderMessage };
+exports._testables = { handleSendCrmNotification, notifyStaffOfNewOrder, buildSellerNewOrderMessage, buildSellerPastDueOrderMessage };
 
 /**
  * "Xodimlar" (Staff): buyurtmalarni boshqarish huquqiga
@@ -233,6 +258,30 @@ function buildSellerNewOrderMessage(order) {
 }
 
 /**
+ * TO'LOV MUDDATI O'TGAN sotuvchi uchun — YUQORIDAGI (`buildSellerNewOrderMessage`)
+ * TO'LIQ (mijoz telefoni/manzili/mahsulotlar/summasi) xabar O'RNIGA
+ * ishlatiladi (2026-09, "barcha teshiklarni yop" bo'limi).
+ *
+ * SABAB: `SellerLayout.jsx`dagi to'siq FAQAT ilova (Mini App) panelini
+ * bloklaydi — lekin bu Telegram xabarining O'ZI (agar to'liq bo'lsa)
+ * sotuvchiga PANELGA umuman kirmasdan buyurtmani QO'LDA bajarish
+ * uchun YETARLI barcha ma'lumotni (mijoz aloqasi, mahsulotlar, summasi)
+ * berib qo'yardi — bu to'lov majburiyatini butunlay ma'nosiz qilib
+ * qo'yardi. Shuning uchun to'lov muddati o'tgan holatda xabar
+ * QASDDAN faqat "yangi buyurtma bor" darajasida qoladi — buyurtmaning
+ * O'ZI (Firestore'da) va mijozga yuboriladigan tasdiqlash xabari
+ * BUTUNLAY o'zgarishsiz qoladi, faqat SOTUVCHIGA ko'rinadigan
+ * ma'lumot to'lov qilingunga qadar yashiriladi.
+ */
+function buildSellerPastDueOrderMessage() {
+  return [
+    "🆕 Sizda yangi buyurtma bor.",
+    "",
+    "Batafsil ma'lumot (mijoz, mahsulotlar, summasi) va boshqarish uchun tarif to'lovi talab qilinadi.",
+  ].join("\n");
+}
+
+/**
  * Yangi buyurtma kelganda sotuvchiga HAQIQIY Telegram xabari HAR DOIM
  * yuboriladi, va, mustaqil ravishda, `permissions.manageOrders`
  * huquqiga ega xodimlarga ham (`notifyStaffOfNewOrder`).
@@ -277,8 +326,14 @@ exports.onNewOrderNotifySeller = onDocumentCreated(
       // funksiya esa pastga, xodimlarga xabar yuborishga davom etadi
       // (bu ikki MUSTAQIL sozlama/oqim).
       if (seller) {
-        const text = buildSellerNewOrderMessage(order);
-        const inlineKeyboard = [[{ text: "📋 Buyurtmalarni ochish", web_app: { url: buildSellerAppLink("/seller/orders") } }]];
+        // MUHIM (2026-09, "barcha teshiklarni yop"): to'lov muddati
+        // o'tgan sotuvchiga xabar ATAYLAB qisqartirilgan shaklda
+        // yuboriladi — batafsil izoh: `buildSellerPastDueOrderMessage`.
+        const pastDue = isTariffPastDue(seller);
+        const text = pastDue ? buildSellerPastDueOrderMessage() : buildSellerNewOrderMessage(order);
+        const inlineKeyboard = pastDue
+          ? [[{ text: "💳 To'lovni amalga oshirish", web_app: { url: buildSellerAppLink("/seller/tariffs") } }]]
+          : [[{ text: "📋 Buyurtmalarni ochish", web_app: { url: buildSellerAppLink("/seller/orders") } }]];
         const result = await sendTelegramMessage(BOT_TOKEN.value(), order.sellerId, text, { inlineKeyboard });
         // 4-BOT EKOTIZIM AUDITI (P2) — "yangi buyurtma" sotuvchi uchun
         // ENG muhim bildirishnoma (batafsil: `lib/notificationRetryQueue.js`).

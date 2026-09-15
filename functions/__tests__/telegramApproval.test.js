@@ -36,6 +36,18 @@ jest.mock("firebase-functions/v2/https", () => ({
 function buildMockDb({ pendingAction = null, customerBotTokens = {} } = {}) {
   const updateCalls = [];
   const setCalls = [];
+  // 2026-09: haqiqiy holatni actionId bo'yicha SAQLAYDIGAN (oddiy
+  // sobit `pendingAction` javobidan farqli) do'kon - `crmCampaign`ning
+  // yangi avtomatik-ijro yo'li (`processSellerApprovalDigest` ichida
+  // BIR so'rov davomida createPendingAction -> runQueuedAction, ya'ni
+  // set() dan keyin DARHOL o'sha hujjatni get() qilish) to'g'ri
+  // ishlashi uchun zarur - haqiqiy Firestore'dagidek, `set`/`update`
+  // keyingi `get()`larga ta'sir qiladi. Agar shu aniq kalit uchun hali
+  // yozuv bo'lmagan bo'lsa, ESKI xatti-harakat (sobit `pendingAction`
+  // fixture) zaxira sifatida ishlayveradi - webhook/respond testlari
+  // (o'zlari set() chaqirmaydi, faqat tayyor fixture bilan ishlaydi)
+  // o'zgarishsiz qoladi.
+  const store = {};
   return {
     collection: (name) => {
       if (name === "sellers") {
@@ -44,12 +56,29 @@ function buildMockDb({ pendingAction = null, customerBotTokens = {} } = {}) {
             collection: (subName) => {
               if (subName === "aiCeoPendingActions") {
                 return {
-                  doc: (actionId) => ({
-                    get: async () => (pendingAction ? { exists: true, data: () => pendingAction } : { exists: false }),
-                    update: async (data) => updateCalls.push({ sellerId, actionId, data }),
-                    set: async (data) => setCalls.push({ sellerId, actionId, data }),
-                  }),
+                  doc: (actionId) => {
+                    const key = `${sellerId}/${actionId}`;
+                    return {
+                      get: async () => {
+                        if (Object.prototype.hasOwnProperty.call(store, key)) {
+                          return { exists: true, data: () => ({ ...store[key] }) };
+                        }
+                        return pendingAction ? { exists: true, data: () => pendingAction } : { exists: false };
+                      },
+                      update: async (data) => {
+                        updateCalls.push({ sellerId, actionId, data });
+                        store[key] = { ...(store[key] || pendingAction || {}), ...data };
+                      },
+                      set: async (data) => {
+                        setCalls.push({ sellerId, actionId, data });
+                        store[key] = { ...data };
+                      },
+                    };
+                  },
                 };
+              }
+              if (subName === "aiAuditLog") {
+                return { add: async () => ({}) };
               }
               if (subName === "customers") {
                 return { get: async () => ({ docs: [] }) };
@@ -181,7 +210,7 @@ describe("processSellerApprovalDigest", () => {
     expect(craftCrmCampaignMock).not.toHaveBeenCalled();
   });
 
-  test("ikkalasi ham yoqilgan, VIP segmentda mijoz bo'lsa - kampaniya yaratadi, pending action yozadi va Telegram'ga yuboradi", async () => {
+  test("ikkalasi ham yoqilgan, VIP segmentda mijoz bo'lsa - kampaniyani AVTOMATIK yuboradi (2026-09: tasdiq SO'RALMAYDI), sotuvchiga faqat natija xabari boradi", async () => {
     const craftCrmCampaignMock = jest.fn().mockResolvedValue({ title: "Sarlavha", message: "Xabar", reasoning: "Sabab" });
     const collectAttentionSegmentClientIdsMock = jest.fn(() => ({ vipClientIds: ["c1", "c2"], churnClientIds: [] }));
     const db = buildMockDb();
@@ -189,12 +218,33 @@ describe("processSellerApprovalDigest", () => {
     await _testables.processSellerApprovalDigest({ id: "s1", data: () => ({ aiCeoEnabled: true, aiCeoTelegramApprovalEnabled: true, storeName: "Zelo" }) });
 
     expect(craftCrmCampaignMock).toHaveBeenCalledWith("vip", 2, "Zelo", null);
+
+    // 1) createPendingAction - LOW xavf, to'g'ridan-to'g'ri "queued"
+    // (WAITING_APPROVAL/"pending" EMAS - tasdiq so'ralmaydi).
     expect(db.__setCalls.length).toBe(1);
-    expect(db.__setCalls[0].data.status).toBe("pending");
+    expect(db.__setCalls[0].data.status).toBe("queued");
     expect(db.__setCalls[0].data.targetClientIds).toEqual(["c1", "c2"]);
-    expect(__sendTelegramMessageMock).toHaveBeenCalledWith(
-      expect.any(String), "s1", expect.stringContaining("Sarlavha"), expect.objectContaining({ inlineKeyboard: expect.any(Array) })
+
+    // 2) runQueuedAction darhol ijro etadi - hujjat "executed"ga
+    // o'tkaziladi, sotuvchi hech narsa bosmasdan.
+    const executedUpdate = db.__updateCalls.find((c) => c.data.status === "executed");
+    expect(executedUpdate).toBeDefined();
+    expect(executedUpdate.data.approvedBy).toBe("system");
+
+    // 3) Mijozlarga (c1, c2) HAQIQIY kampaniya xabari ketgan (bu ham
+    // avtomatik - eski oqimda faqat TASDIQLANGANDAN keyin ketardi).
+    expect(__sendTelegramMessageMock.mock.calls.length).toBe(3); // c1 + c2 + sotuvchiga natija
+
+    // 4) Sotuvchiga ketgan NATIJA xabari - tugmasiz (inlineKeyboard
+    // YO'Q), "tasdiqlash" so'rovi emas.
+    const notifyCall = __sendTelegramMessageMock.mock.calls.find(
+      (call) => typeof call[2] === "string" && call[2].includes("AI CEO avtomatik yubordi")
     );
+    expect(notifyCall).toBeDefined();
+    expect(notifyCall[1]).toBe("s1");
+    expect(notifyCall[2]).toContain("Sarlavha");
+    expect(notifyCall[2]).toContain("2/2");
+    expect(notifyCall[3]).toBeUndefined(); // tugma/inlineKeyboard yo'q
   });
 
   test("VIP ham, uxlab qolgan ham bo'sh bo'lsa - Gemini UMUMAN chaqirilmaydi", async () => {
@@ -353,6 +403,47 @@ describe("telegramCallbackWebhook", () => {
     const res = fakeRes();
     await telegramCallbackWebhook(req, res);
     expect(__sendTelegramMessageMock).not.toHaveBeenCalled();
+  });
+
+  // XAVFSIZLIK/MONITORING (2026-09 audit, "o'rtacha darajadagi
+  // kamchiliklar"): oldin bu webhook'da Sentry hech qachon
+  // chaqirilmagan edi (faqat `console.error`) - endi ikkala ICHKI
+  // `catch` blokida ham aniq `Sentry.captureException` chaqirilishi
+  // TEKSHIRILADI.
+  test("`telegramBotMenu` xato tashlasa — Sentry.captureException chaqiriladi", async () => {
+    const handleErr = new Error("kutilmagan xato");
+    const handleTelegramMessageMock = jest.fn(async () => { throw handleErr; });
+    const { telegramCallbackWebhook } = loadModule(buildMockDb(), { handleTelegramMessageMock });
+    const { Sentry } = require("../lib/sentry");
+    const req = { get: () => "mock-webhook-secret", body: { message: { text: "salom", from: { id: 555 }, chat: { id: 555 } } } };
+    const res = fakeRes();
+    await telegramCallbackWebhook(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(Sentry.captureException).toHaveBeenCalledWith(handleErr);
+  });
+
+  test("callback_query'ni qayta ishlashda kutilmagan (Firestore) xato — Sentry.captureException chaqiriladi", async () => {
+    // `resolvePendingAction`ning eng BOSHIDA (`aiApprovalEngine.js`dagi
+    // `loadResolvableAction`) `db.collection("sellers")...`ni chaqiradi -
+    // shu birinchi chaqiruvning O'ZIDA sinxron xato tashlab, HAQIQIY
+    // (mock qilinmagan) `aiApprovalEngine.js` orqali webhook'ning
+    // tashqi `catch` blokigacha yetib borishini tekshiramiz.
+    const throwingDb = {
+      collection: (name) => {
+        if (name === "sellers") throw new Error("Firestore ulanish xatosi");
+        return { doc: () => ({ get: async () => ({ exists: false }) }) };
+      },
+    };
+    const { telegramCallbackWebhook } = loadModule(throwingDb);
+    const { Sentry } = require("../lib/sentry");
+    const req = {
+      get: () => "mock-webhook-secret",
+      body: { callback_query: { id: "cbq-1", from: { id: 555 }, message: { chat: { id: 555 }, message_id: 10 }, data: "a:vip:2026-08-23" } },
+    };
+    const res = fakeRes();
+    await telegramCallbackWebhook(req, res);
+    expect(res.statusCode).toBe(200);
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.objectContaining({ message: "Firestore ulanish xatosi" }));
   });
 });
 

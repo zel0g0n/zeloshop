@@ -1,0 +1,25 @@
+name: CI (Pull Request tekshiruvi)
+
+# Bu workflow — HAR BIR o'zgarish uchun "darvozabon" (gate): kod
+# to'g'ridan-to'g'ri `main`/`develop`ga tushmasdan OLDIN, avtomatik
+# ravishda lint + test + build ishga tushiriladi. Xato bo'lsa, GitHub PR
+# sahifasida QIZIL belgi chiqadi va (agar "branch protection" qoidasi
+# sozlangan bo'lsa - qo'llanmaga qarang) PR'ni birlashtirish (merge)
+# BLOKLANADI.
+#
+# `main`/`develop`ning O'ZIGA to'g'ridan-to'g'ri push qilinganda bu
+# workflow ISHLAMAYDI (pastdagi `branches-ignore`ga qarang) - chunki
+# o'sha ikkala holat uchun testlar allaqachon `deploy-staging.yml`/
+# `deploy-production.yml` ichida (deploy'dan OLDIN, gate sifatida)
+# ishga tushadi - ikki marta bir xil narsani qilishning hojati yo'q.
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches-ignore: [main, develop]
+
+jobs:
+  tests:
+    name: Testlar
+    uses: ./.github/workflows/tests.yml

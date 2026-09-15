@@ -93,8 +93,9 @@ describe("adCampaign classifyRisk — xavf klassifikatsiyasi", () => {
     const manyIds = Array.from({ length: 1001 }, (_, i) => `c${i}`);
     expect(ACTION_REGISTRY.adCampaign.classifyRisk(validAdPayload({ targetClientIds: manyIds }))).toBe(RISK_LEVELS.HIGH);
   });
-  test("crmCampaign HAR DOIM MEDIUM", () => {
-    expect(ACTION_REGISTRY.crmCampaign.classifyRisk(validCrmPayload())).toBe(RISK_LEVELS.MEDIUM);
+  test("crmCampaign HAR DOIM LOW (2026-09: moliyaviy majburiyatsiz - avtomatik ijro etiladi)", () => {
+    expect(ACTION_REGISTRY.crmCampaign.classifyRisk(validCrmPayload())).toBe(RISK_LEVELS.LOW);
+    expect(ACTION_REGISTRY.crmCampaign.autoExecuteEligible).toBe(true);
   });
 });
 

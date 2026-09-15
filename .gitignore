@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Environment/secret files - hech qachon repo'ga tushmasligi kerak
+# (2026-09 audit: .env fayl mavjud edi, lekin bu qoidada yo'q edi -
+# hozircha unda faqat OCHIQ Sentry manzili bor, lekin kelajakda haqiqiy
+# maxfiy qiymat qo'shilib qolsa ham, shu qoida uni himoya qiladi).
+.env
+.env.*
+!.env.example
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

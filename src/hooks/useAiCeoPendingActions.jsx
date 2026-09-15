@@ -5,8 +5,11 @@ import { db } from "@/firebase/config";
 /**
  * "Universal Inbox" MVP (ZeloShop TOP 15, #12) — sotuvchining
  * `sellers/{sellerId}/aiCeoPendingActions` to'plamini JONLI kuzatadi
- * (Telegram bot orqali yuboriladigan "1-tugmali tasdiqlash" xabarlari
- * bilan BIR XIL manba - `functions/telegramApproval.js`).
+ * (Telegram bot orqali yuboriladigan xabarnomalar bilan BIR XIL manba -
+ * `functions/telegramApproval.js`). 2026-09'dan beri crmCampaign
+ * hujjatlari sotuvchi tasdig'ini KUTMAYDI — to'g'ridan-to'g'ri
+ * "executed" holatida yaratiladi (AI CEO mustaqil yuborgan); faqat
+ * adCampaign hamon "waiting_approval" holatida paydo bo'lishi mumkin.
  *
  * ATAYLAB `status`ga qarab FILTRLANMAYDI (faqat "pending" emas, hammasi
  * qaytariladi) — sabab: bitta sotuvchida kunига atigi ~2 ta hujjat

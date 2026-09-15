@@ -352,10 +352,14 @@ exports.processProductDrafts = onSchedule(
         });
 
         if (draftResult.successCount > 0) {
-          const customBotSnap = await db.collection("sellers").doc(sellerId).collection("private").doc("customerBot").get();
-          const token = customBotSnap.exists && customBotSnap.data().botToken ? customBotSnap.data().botToken : BOT_TOKEN.value();
+          // MUHIM (2026-09, foydalanuvchi so'rovi): AI CEO bildirishnomasi
+          // SOTUVCHIga mo'ljallangan - sotuvchining shaxsiy boti esa faqat
+          // MIJOZLAR bilan ishlashi kerak (`lib/customerNotify.js`ga
+          // qarang). Shu sababli HAR DOIM platforma boti (`BOT_TOKEN`,
+          // zeloshop_bot) orqali yuboriladi, sotuvchining shaxsiy bot
+          // tokeni ATAYLAB ishlatilmaydi.
           const text = `AI CEO\n\n${draftResult.successCount} ta mahsulot tayyorlandi va tasdiqlashingizni kutmoqda!\n\nIlovani oching → Mahsulotlar → "Tasdiqlash kutilmoqda" bo'limi.`;
-          await sendTelegramMessage(token, sellerId, text);
+          await sendTelegramMessage(BOT_TOKEN.value(), sellerId, text);
         }
       } catch (err) {
         console.error(`Sotuvchi ${sellerId} uchun qoralamalarni qayta ishlashda xatolik:`, err);

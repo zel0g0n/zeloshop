@@ -521,3 +521,116 @@ describe("handleNewOrdersButton ('🆕 Yangi buyurtmalar' tugmasi)", () => {
     }
   });
 });
+
+/**
+ * TO'LOV MUDDATI O'TGAN sotuvchi uchun UCHTA menyu tugmasining
+ * HAMMASI (2026-09, "barcha teshiklarni yop") — Mini App panelini
+ * chetlab o'tib, biznes ma'lumotini (buyurtma soni, moliyaviy
+ * hisobot) chatga to'kib bermasligini tekshiradi.
+ */
+describe("to'lov muddati o'tgan sotuvchi uchun menyu tugmalari (isTariffPastDue)", () => {
+  const CUTOFF_MS = Date.parse("2026-09-11T00:00:00+05:00");
+  const PAST_DUE_CREATED_AT_MS = CUTOFF_MS + 20 * 24 * 60 * 60 * 1000; // billing rejimida, 20 kun keyin ro'yxatdan o'tgan
+  const FIXED_NOW_MS = CUTOFF_MS + 200 * 24 * 60 * 60 * 1000; // "hozir" - grace muddati aniq tugagan
+
+  function withFixedNow(fn) {
+    return async (...args) => {
+      const dateNowSpy = jest.spyOn(Date, "now").mockReturnValue(FIXED_NOW_MS);
+      try {
+        return await fn(...args);
+      } finally {
+        dateNowSpy.mockRestore();
+      }
+    };
+  }
+
+  test(
+    "'Yangi buyurtmalar' - buyurtma sonini AYTMAYDI, to'lov havolasi bilan qisqa xabar yuboradi",
+    withFixedNow(async () => {
+      const db = buildMockDb({
+        sellerData: { createdAt: { toMillis: () => PAST_DUE_CREATED_AT_MS } },
+        orders: [{ id: "o1", sellerId: "555", status: "new" }],
+      });
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn(async () => ({ json: async () => ({ ok: true }) }));
+      try {
+        const { handleTelegramMessage, MENU_NEW_ORDERS_TEXT } = loadModule(db, {});
+        await handleTelegramMessage("mock-token", { text: MENU_NEW_ORDERS_TEXT, from: { id: 555 }, chat: { id: 555 } });
+        const sendCalls = global.fetch.mock.calls.filter(([url]) => url.includes("/sendMessage"));
+        expect(sendCalls).toHaveLength(1);
+        const body = JSON.parse(sendCalls[0][1].body);
+        expect(body.text).not.toContain("buyurtma bor");
+        expect(body.text).toContain("to'lov");
+        const button = body.reply_markup.inline_keyboard[0][0];
+        expect(button.web_app.url).toBe("https://commerce-zelo.web.app/seller/tariffs");
+      } finally {
+        global.fetch = originalFetch;
+      }
+    })
+  );
+
+  test(
+    "'AI CEO hisobotlari' - buildDailyReport UMUMAN chaqirilmaydi, faqat to'lov xabari yuboriladi",
+    withFixedNow(async () => {
+      const buildDailyReportMock = jest.fn();
+      const db = buildMockDb({
+        sellerData: { aiCeoEnabled: true, createdAt: { toMillis: () => PAST_DUE_CREATED_AT_MS } },
+      });
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn(async () => ({ json: async () => ({ ok: true }) }));
+      try {
+        const { handleTelegramMessage, MENU_REPORT_TEXT } = loadModule(db, { buildDailyReportMock });
+        await handleTelegramMessage("mock-token", { text: MENU_REPORT_TEXT, from: { id: 555 }, chat: { id: 555 } });
+        expect(buildDailyReportMock).not.toHaveBeenCalled();
+        const sendCalls = global.fetch.mock.calls.filter(([url]) => url.includes("/sendMessage"));
+        expect(sendCalls).toHaveLength(1);
+        const body = JSON.parse(sendCalls[0][1].body);
+        expect(body.text).toContain("to'lov");
+        expect(body.text).not.toContain("so'm");
+      } finally {
+        global.fetch = originalFetch;
+      }
+    })
+  );
+
+  test(
+    "'AI CEO bilan mahsulot qo'shish' - sessiya BOSHLANMAYDI, faqat to'lov xabari yuboriladi",
+    withFixedNow(async () => {
+      const db = buildMockDb({
+        sellerData: { aiCeoEnabled: true, createdAt: { toMillis: () => PAST_DUE_CREATED_AT_MS } },
+      });
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn(async () => ({ json: async () => ({ ok: true }) }));
+      try {
+        const { handleTelegramMessage, MENU_ADD_PRODUCT_TEXT } = loadModule(db, {});
+        await handleTelegramMessage("mock-token", { text: MENU_ADD_PRODUCT_TEXT, from: { id: 555 }, chat: { id: 555 } });
+        expect(db.__setCalls).toHaveLength(0); // hech qanday sessiya yozuvi yaratilmadi
+        const sendCalls = global.fetch.mock.calls.filter(([url]) => url.includes("/sendMessage"));
+        expect(sendCalls).toHaveLength(1);
+        expect(JSON.parse(sendCalls[0][1].body).text).toContain("to'lov");
+      } finally {
+        global.fetch = originalFetch;
+      }
+    })
+  );
+
+  test(
+    "grandfathered (cutoff'dan OLDIN ro'yxatdan o'tgan) sotuvchi - past-due deb HISOBLANMAYDI, oddiy ishlayveradi",
+    withFixedNow(async () => {
+      const db = buildMockDb({
+        sellerData: { createdAt: { toMillis: () => CUTOFF_MS - 1000 } },
+        orders: [],
+      });
+      const originalFetch = global.fetch;
+      global.fetch = jest.fn(async () => ({ json: async () => ({ ok: true }) }));
+      try {
+        const { handleTelegramMessage, MENU_NEW_ORDERS_TEXT } = loadModule(db, {});
+        await handleTelegramMessage("mock-token", { text: MENU_NEW_ORDERS_TEXT, from: { id: 555 }, chat: { id: 555 } });
+        const body = JSON.parse(global.fetch.mock.calls.find(([url]) => url.includes("/sendMessage"))[1].body);
+        expect(body.text).not.toContain("to'lov");
+      } finally {
+        global.fetch = originalFetch;
+      }
+    })
+  );
+});

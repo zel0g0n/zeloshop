@@ -57,10 +57,15 @@ const AiCeoSettingsPage = () => {
   );
   const [savingDiscountPercent, setSavingDiscountPercent] = useState(false);
   const [savingMaster, setSavingMaster] = useState(false);
-  // Telegram orqali "1-tugmali tasdiqlash": Mini App'ni ochmasdan,
-  // to'g'ridan-to'g'ri Telegram chatida AI CEO tavsiyasini ko'rib, bitta
-  // tugma bilan tasdiqlash mumkin (standart holatda o'chiq, batafsil
-  // izoh: `functions/telegramApproval.js`).
+  // Telegram orqali xabarnoma: AI CEO (crmCampaign — moliyaviy
+  // majburiyatsiz, sof CRM xabari) endi SOTUVCHI TASDIG'ISIZ, mustaqil
+  // yuboradi (2026-09, sotuvchi so'roviga ko'ra) — bu tumbler yoqilsa,
+  // sotuvchi faqat NATIJANI (nechta mijozga yuborilgani) Telegram
+  // chatida ko'radi, tasdiqlash/rad etish tugmasi endi yo'q (standart
+  // holatda o'chiq, batafsil izoh: `functions/telegramApproval.js`).
+  // ESLATMA: `adCampaign` (chegirma/byudjet — haqiqiy moliyaviy xavf)
+  // bu o'zgarishga KIRMAYDI — u hamon Mini App orqali sotuvchi
+  // tasdig'ini talab qiladi, o'zgarishsiz qoldi.
   const [telegramApprovalEnabled, setTelegramApprovalEnabled] = useState(store?.aiCeoTelegramApprovalEnabled === true);
   const [savingTelegramApproval, setSavingTelegramApproval] = useState(false);
   // AI RASM GENERATSIYASI (avtomatik reklama surati, avtomatik 9:16
@@ -400,9 +405,9 @@ const AiCeoSettingsPage = () => {
               )}
             </div>
 
-            {/* Telegram orqali "1-tugmali tasdiqlash": Mini App'ni
-                ochmasdan, AI CEO tavsiyasini to'g'ridan-to'g'ri
-                Telegram chatida bitta tugma bilan tasdiqlash mumkin. */}
+            {/* Telegram orqali xabarnoma: AI CEO kampaniyani mustaqil
+                yuboradi (sotuvchi tasdig'isiz), sotuvchi faqat
+                natijani Telegram chatida ko'radi. */}
             <div className="pt-3 border-t border-slate-50 dark:border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-200 flex-1">{t("aiCeo.telegramApprovalTitle")}</span>

@@ -1,5 +1,8 @@
 const {
   TARIFF_LIMITS,
+  TARIFF_MONTHLY_PRICE_SOM,
+  TARIFF_BILLING_CUTOFF_MS,
+  SIGNUP_GRACE_DAYS,
   normalizeTariffPlan,
   getEffectiveTariffPlan,
   getTariffLimits,
@@ -8,6 +11,11 @@ const {
   getNextTrialTier,
   hasUsedTrial,
   hasActiveTrial,
+  isBillingRequired,
+  paidUntilMs,
+  graceExpiresAtMs,
+  isTariffPastDue,
+  isTariffPurchasable,
 } = require("../../lib/tariffs");
 
 describe("normalizeTariffPlan", () => {
@@ -127,5 +135,111 @@ describe("hasUsedTrial / hasActiveTrial", () => {
     expect(hasActiveTrial({ tariffTrialActive: true, tariffTrialExpiresAt: now - 1000 }, now)).toBe(false);
     expect(hasActiveTrial({ tariffTrialActive: false, tariffTrialExpiresAt: now + 1000 }, now)).toBe(false);
     expect(hasActiveTrial({}, now)).toBe(false);
+  });
+});
+
+describe("isBillingRequired", () => {
+  test("cutoff'dan OLDIN ro'yxatdan o'tgan sotuvchi - grandfathered, `false`", () => {
+    const before = TARIFF_BILLING_CUTOFF_MS - 24 * 60 * 60 * 1000;
+    expect(isBillingRequired({ createdAt: before })).toBe(false);
+  });
+
+  test("cutoff'dan KEYIN ro'yxatdan o'tgan sotuvchi - `true`", () => {
+    const after = TARIFF_BILLING_CUTOFF_MS + 24 * 60 * 60 * 1000;
+    expect(isBillingRequired({ createdAt: after })).toBe(true);
+  });
+
+  test("aynan cutoff vaqtida - inklyuziv, `true`", () => {
+    expect(isBillingRequired({ createdAt: TARIFF_BILLING_CUTOFF_MS })).toBe(true);
+  });
+
+  test("`createdAt` yo'q/noto'g'ri bo'lsa - `false`", () => {
+    expect(isBillingRequired({})).toBe(false);
+    expect(isBillingRequired(null)).toBe(false);
+  });
+
+  test("Firestore Timestamp (`toMillis`) ko'rinishida ham to'g'ri ishlaydi", () => {
+    const fakeTimestamp = { toMillis: () => TARIFF_BILLING_CUTOFF_MS + 5000 };
+    expect(isBillingRequired({ createdAt: fakeTimestamp })).toBe(true);
+  });
+});
+
+describe("paidUntilMs / graceExpiresAtMs", () => {
+  test("paidUntilMs - `tariffPaidUntil` yo'q bo'lsa `0`", () => {
+    expect(paidUntilMs({})).toBe(0);
+  });
+
+  test("paidUntilMs - ISO sana satrini to'g'ri o'qiydi", () => {
+    const iso = new Date(2026, 9, 1).toISOString();
+    expect(paidUntilMs({ tariffPaidUntil: iso })).toBe(Date.parse(iso));
+  });
+
+  test("graceExpiresAtMs - `createdAt + SIGNUP_GRACE_DAYS kun`", () => {
+    const createdAtMs = TARIFF_BILLING_CUTOFF_MS;
+    expect(graceExpiresAtMs({ createdAt: createdAtMs })).toBe(
+      createdAtMs + SIGNUP_GRACE_DAYS * 24 * 60 * 60 * 1000
+    );
+  });
+
+  test("graceExpiresAtMs - `createdAt` yo'q bo'lsa `0`", () => {
+    expect(graceExpiresAtMs({})).toBe(0);
+  });
+});
+
+describe("isTariffPastDue", () => {
+  const now = TARIFF_BILLING_CUTOFF_MS + 100 * 24 * 60 * 60 * 1000;
+
+  test("grandfathered (billing talab qilinmaydigan) sotuvchi - doim `false`", () => {
+    const oldSeller = { createdAt: TARIFF_BILLING_CUTOFF_MS - 1000, tariffPaidUntil: now - 1000 };
+    expect(isTariffPastDue(oldSeller, now)).toBe(false);
+  });
+
+  test("yangi sotuvchi, hali 7 kunlik bepul grace ichida - `false`", () => {
+    const createdAtMs = now - 3 * 24 * 60 * 60 * 1000;
+    expect(isTariffPastDue({ createdAt: createdAtMs }, now)).toBe(false);
+  });
+
+  test("yangi sotuvchi, grace muddati o'tgan VA hech qachon to'lamagan - `true`", () => {
+    const createdAtMs = now - 10 * 24 * 60 * 60 * 1000;
+    expect(isTariffPastDue({ createdAt: createdAtMs }, now)).toBe(true);
+  });
+
+  test("yuqori tarifni sinayotgan (faol trial) sotuvchi - `false`", () => {
+    const createdAtMs = now - 10 * 24 * 60 * 60 * 1000;
+    const seller = { createdAt: createdAtMs, tariffTrialActive: true, tariffTrialExpiresAt: now + 1000 };
+    expect(isTariffPastDue(seller, now)).toBe(false);
+  });
+
+  test("to'lov qilingan VA muddati hali tugamagan - `false`", () => {
+    const createdAtMs = now - 10 * 24 * 60 * 60 * 1000;
+    const seller = { createdAt: createdAtMs, tariffPaidUntil: now + 5 * 24 * 60 * 60 * 1000 };
+    expect(isTariffPastDue(seller, now)).toBe(false);
+  });
+
+  test("to'lov qilingan LEKIN muddati tugagan - `true` (yangilash kerak)", () => {
+    const createdAtMs = now - 40 * 24 * 60 * 60 * 1000;
+    const seller = { createdAt: createdAtMs, tariffPaidUntil: now - 1000 };
+    expect(isTariffPastDue(seller, now)).toBe(true);
+  });
+});
+
+describe("isTariffPurchasable", () => {
+  test("Z-Start va Z-Pro - haqiqiy pulga sotib olish mumkin", () => {
+    expect(isTariffPurchasable("start")).toBe(true);
+    expect(isTariffPurchasable("pro")).toBe(true);
+  });
+
+  test("Z-Biznes - hali yo'q (faqat qiziqish bildirish)", () => {
+    expect(isTariffPurchasable("biznes")).toBe(false);
+  });
+
+  test("noto'g'ri/mavjud bo'lmagan qiymat - `false`", () => {
+    expect(isTariffPurchasable("noto'g'ri")).toBe(false);
+    expect(isTariffPurchasable(undefined)).toBe(false);
+  });
+
+  test("narxlar to'g'ri belgilangan (49 000 / 199 000 so'm)", () => {
+    expect(TARIFF_MONTHLY_PRICE_SOM.start).toBe(49000);
+    expect(TARIFF_MONTHLY_PRICE_SOM.pro).toBe(199000);
   });
 });

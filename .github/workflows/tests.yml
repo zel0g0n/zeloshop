@@ -1,0 +1,68 @@
+name: Testlar va lint (qayta ishlatiladigan)
+
+# MUHIM: bu fayl to'g'ridan-to'g'ri ishga tushmaydi - u boshqa
+# workflow'lar (`ci.yml`, `deploy-staging.yml`, `deploy-production.yml`)
+# tomonidan `uses: ./.github/workflows/tests.yml` orqali CHAQIRILADI.
+# Shu orqali "testlar qanday ishga tushirilishi" BITTA joyda yoziladi -
+# ikkalasi (PR tekshiruvi va deploy oldidan gate) doim BIR XIL bo'ladi,
+# ular orasida drift (bir joyda tuzatilib, boshqasida unutilib qolish)
+# bo'lmaydi.
+
+on:
+  workflow_call:
+
+jobs:
+  frontend:
+    name: Frontend — ESLint, Vitest, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Kodni olish
+        uses: actions/checkout@v4
+
+      - name: Node.js 20 sozlash
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Paketlarni o'rnatish
+        run: npm ci
+
+      # ESLint konfiguratsiyasi (`eslint.config.js`) BITTA fayl ichida
+      # ham frontend, ham `functions/` (backend) uchun alohida
+      # bloklarni o'z ichiga oladi - shuning uchun bu YAGONA `npm run
+      # lint` chaqiruvi ikkalasini ham tekshiradi.
+      - name: ESLint (frontend + backend)
+        run: npm run lint
+
+      - name: Vitest (frontend birlik testlari)
+        run: npm run test
+
+      - name: Production build (Vite)
+        run: npm run build
+
+  backend:
+    name: Backend (functions) — Jest testlari
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - name: Kodni olish
+        uses: actions/checkout@v4
+
+      - name: Node.js 20 sozlash
+        # MUHIM: `functions/package.json`dagi "engines": {"node": "20"}
+        # bilan BIR XIL versiya - production Cloud Functions runtime'i
+        # aynan shu versiyada ishlaydi, CI ham shunga mos bo'lishi kerak.
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Paketlarni o'rnatish
+        run: npm ci
+
+      - name: Jest testlari
+        run: npm test

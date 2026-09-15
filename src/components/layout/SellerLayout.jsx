@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Outlet, Navigate } from 'react-router-dom'
-import { ShieldAlert } from 'lucide-react'
+import { Outlet, Navigate, Link } from 'react-router-dom'
+import { ShieldAlert, CreditCard } from 'lucide-react'
 import SellerNavbar from './SellerNavbar'
 import PinLockScreen from '@/components/ui/PinLockScreen'
 import { useSession } from '@/context/SessionContext'
+import { isTariffPastDue } from '@/utils/tariffLimits'
 
 // OLDIN: PIN kod sozlamasi (Maxfiylik va Xavfsizlik) faqat saqlanardi,
 // lekin hech qayerda HAQIQATAN talab qilinmasdi. Endi, agar sotuvchi
@@ -55,6 +56,39 @@ const SellerLayout = () => {
           Sizning do'koningiz administrator tomonidan vaqtincha faolsizlantirilgan. Sabab va qayta faollashtirish
           bo'yicha ZeloShop administratoriga murojaat qiling.
         </p>
+      </div>
+    );
+  }
+
+  // YANGI (2026-09): Atmos orqali haqiqiy pul bilan to'lanadigan
+  // tariflar tizimi. `isTariffPastDue` — sotuvchi 2026-09-11dan KEYIN
+  // ro'yxatdan o'tgan (eski sotuvchilar butunlay "grandfathered" —
+  // bepul Z-Start abadiy) VA 7 kunlik sinov/oxirgi to'lov muddati
+  // tugagan bo'lsa TRUE qaytaradi. Bu yerda ATAYLAB faqat SOTUVCHI
+  // PANELI (buyurtmalar, mahsulotlar, sozlamalar) bloklanadi — do'kon
+  // vitrinasi, xaridorlar va ularning buyurtmalari BUTUNLAY teginilmay
+  // qoladi, va to'lov qilingan zahoti (keyingi `store` yangilanishida)
+  // avtomatik ochiladi. `status:"suspended"` maydonidan ATAYLAB
+  // foydalanilmadi — bu ADMIN tomonidan qo'lda to'xtatish uchun,
+  // to'lov holatidan mustaqil bo'lishi kerak.
+  if (isSeller && !isAdmin && isTariffPastDue(store)) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-3 px-6 text-center bg-white dark:bg-slate-950">
+        <div className="w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-500/10 text-rose-500 flex items-center justify-center">
+          <CreditCard size={26} />
+        </div>
+        <h1 className="text-base font-black text-slate-800 dark:text-white">To'lov muddati tugagan</h1>
+        <p className="text-xs text-slate-400 dark:text-slate-500 max-w-xs leading-relaxed">
+          Tarif uchun to'lov muddati o'tib ketgan. Sotuvchi panelidan foydalanishni davom ettirish uchun
+          to'lovni amalga oshiring — do'koningiz va buyurtmalaringiz xaridorlar uchun ochiq qoladi.
+        </p>
+        <Link
+          to="/seller/tariffs"
+          className="mt-2 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-colors"
+        >
+          <CreditCard size={14} />
+          To'lovni amalga oshirish
+        </Link>
       </div>
     );
   }

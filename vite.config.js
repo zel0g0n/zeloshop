@@ -37,6 +37,23 @@ export default defineConfig({
           if (id.includes("framer-motion") || id.includes("react-icons")) {
             return "ui-vendor";
           }
+          // 2026-09 audit ("kichik kamchiliklar" - bosh `index-*.js` fayli
+          // 500KB chegarasidan katta edi): `@sentry/react` `main.jsx`da
+          // ENG BOSHIDA (`initSentry()`) va `ErrorBoundary.jsx`da statik
+          // import qilinadi - shuning uchun uni asosiy ilova kodidan
+          // "dinamik import"ga o'tkazish orqali kechiktirish (lazy-load)
+          // XAVFLI bo'lardi (ilova ochilgan zahoti yuz beradigan xatolar
+          // Sentry hali yuklanmagani uchun qo'lga tushmay qolishi mumkin
+          // edi). Shuning uchun ATAYLAB kamroq xavfli yechim tanlandi:
+          // umumiy baytlar SONI o'zgarmaydi, lekin Sentry alohida "vendor"
+          // faylga chiqariladi - shu orqali (1) bosh `index-*.js`
+          // 500KB'dan pastga tushadi, (2) Sentry SDK ilova kodidan
+          // KAMROQ tez-tez o'zgargani uchun, brauzer uni HAR BIR yangi
+          // deploy'da qaytadan yuklab olmasdan, keshdan foydalanishi
+          // mumkin bo'ladi (haqiqiy, ijobiy tezlik natijasi).
+          if (id.includes("@sentry")) {
+            return "sentry-vendor";
+          }
         },
       },
     },

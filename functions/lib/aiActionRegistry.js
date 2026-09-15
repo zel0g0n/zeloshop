@@ -155,11 +155,20 @@ const ACTION_REGISTRY = Object.freeze({
     name: "CRM segment kampaniyasi",
     description: "VIP yoki 'uxlab qolgan' mijozlar segmentiga tayyor kampaniya matnini yuboradi.",
     requiredPlan: null, // istalgan `aiCeoEnabled` sotuvchi (mavjud xatti-harakat)
-    // Har doim MEDIUM - moliyaviy majburiyat yo'q (faqat xabar), lekin
-    // mijozga to'g'ridan-to'g'ri yetib boradigan real xabar bo'lgani
-        // uchun har doim sotuvchi tasdig'i kerak (mavjud xatti-harakat).
-    classifyRisk: () => RISK_LEVELS.MEDIUM,
-    autoExecuteEligible: false,
+    // 2026-09, sotuvchi qarori ("AI CEO mustaqil yuborsin, men faqat
+    // natijani ko'raman"): LOW xavf - moliyaviy majburiyat yo'q (faqat
+    // tayyor xabar, promokod/chegirma YO'Q), shuning uchun endi
+    // AVTOMATIK ijro etiladi (sotuvchi tasdig'i SHART EMAS) -
+    // `functions/telegramApproval.js`dagi `processSellerApprovalDigest`
+    // harakatni "system" nomidan darhol ijro etadi
+    // (`lib/aiApprovalEngine.js`dagi `runQueuedAction`), sotuvchi esa
+    // faqat NATIJANI (Telegram xabari + Inbox/Buyruq Markazidagi
+    // "executed" kartochka) ko'radi. Moliyaviy ta'sirga ega `adCampaign`
+    // bunga KIRMAYDI - u hali ham HAR DOIM sotuvchi tasdig'ini talab
+    // qiladi (pastga qarang, `classifyAdCampaignRisk` hech qachon LOW
+    // qaytarmaydi).
+    classifyRisk: () => RISK_LEVELS.LOW,
+    autoExecuteEligible: true,
     validate: validateCrmCampaignPayload,
     computeActionId: ({ payload }) => `crm_${payload.segment}_${payload.dateId}`,
     limits: { maxTargetClientIds: AD_CAMPAIGN_MAX_RECIPIENTS },
