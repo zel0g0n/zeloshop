@@ -8,7 +8,7 @@ const { withSentry, initSentry, Sentry, SENTRY_DSN } = require("./lib/sentry");
 const {
   ATMOS_CONSUMER_KEY, ATMOS_CONSUMER_SECRET, ATMOS_STORE_ID, ATMOS_API_KEY, ATMOS_ENV,
   ATMOS_PROXY_TOKEN,
-  createCheckoutInvoice, getCheckoutInvoiceStatus, verifyCallbackSign,
+  createTransaction, buildCheckoutUrl, getTransaction, verifyCallbackSign,
 } = require("./lib/atmosClient");
 const {
   TARIFF_MONTHLY_PRICE_SOM, TARIFF_BILLING_PERIOD_DAYS, TARIFF_BILLING_CUTOFF_MS,
@@ -21,7 +21,8 @@ const {
  * ARXITEKTURA (foydalanuvchi bilan tasdiqlangan qarorlar):
  *   1. Faqat TARIF (Z-Start/Z-Pro) to'lovi — mahsulot/checkout to'lovi
  *      hamon eski, decentralizatsiyalashgan strukturada qoladi
- *      (`sellers/{id}/private`dagi shaxsiy Click/Payme hisobi orqali).
+ *      (`sellers/{id}/private`dagi shaxsiy Click/Payme hisobi orqali,
+ *      yoki naqd — `functions/orders.js`, bu faylga ALOQASI YO'Q).
  *      Atmos bu yerda FAQAT sotuvchi ZeloShop'ning O'ZIGA to'laydigan
  *      pulni qabul qiladi — hech qanday "split"/marketplace-routing
  *      shart emas (bu Atmos'da mavjud ham emas).
@@ -34,34 +35,82 @@ const {
  *      to'lov HECH QACHON so'ralmaydi (`lib/tariffs.js`dagi
  *      `TARIFF_BILLING_CUTOFF_MS`/`isBillingRequired`).
  *
- * OQIM (2026-09-14 YANGILANDI — `checkout/invoice/create`, Atmos xodimi
- * ANIQ shuni ko'rsatdi; ESKI `/merchant/pay/create`+qo'lda-qurilgan-URL
- * oqimi endi ishlatilmaydi, batafsil: `lib/atmosClient.js`):
- *   `createTariffPayment` → Atmos'da invoys yaratadi (`createCheckoutInvoice`),
- *   TAYYOR `checkoutUrl` (checkout.atmos.uz) qaytaradi → sotuvchi shu
- *   havolaga o'tadi (Atmos'ning O'Z sahifasi) → to'lov muvaffaqiyatli
- *   bo'lsa, Atmos bizning `atmosPaymentCallback` webhook'imizga xabar
- *   beradi (HAQIQIY tasdiqlash manbai — redirect emas) →
- *   `activateTariffPayment` `tariffPlan`/`tariffPaidUntil`ni yangilaydi.
- *   `getTariffPaymentStatus` esa frontend redirect'dan qaytgach holatni
- *   tekshirish/tezlashtirish (callback kechiksa, Atmos'dan
- *   `getCheckoutInvoiceStatus` orqali to'g'ridan-to'g'ri so'rab, ZAXIRA
- *   yo'l bilan) uchun.
+ * OQIM — 2026-09-25'DA ESKI `/merchant/pay/create` YO'LIGA QAYTARILDI
+ * (MUHIM TARIX, KEYINGI KIMDIR "nega checkout/invoice/create emas"
+ * deb so'ramasin uchun batafsil yozilmoqda):
  *
- * FIRESTORE HUJJAT KALITI O'ZGARDI: `atmosPayments/{id}` endi bizning
- * O'ZIMIZ oldindan generatsiya qiladigan `requestId` bilan kalitlanadi
- * (ESKI oqimda Atmos qaytargan `transaction_id` bilan kalitlangan edi) —
- * sababi: `success_url` (frontend redirect havolasi) `checkout/invoice/create`
- * so'rovining O'ZI ICHIDA yuborilishi kerak, ya'ni Atmos hali `payment_id`
- * qaytarmasdan OLDIN biz uni bilishimiz kerak. Frontend kontrakti
- * (`?atmosTxn=...`, `getTariffPaymentStatus({transactionId})`) ATAYLAB
- * O'ZGARTIRILMADI (`src/features/seller/.../TariffsSection.jsx`ni
- * o'zgartirmaslik uchun) — faqat shu maydonga endi Atmos'ning raqamli
- * transaction_id'i EMAS, bizning `requestId`imiz uzatiladi.
+ *   - 2026-09-14: Atmos xodimi ANIQ "sandbox test uchun checkout/
+ *     invoice/create ishlating" degan edi, shu sabab oqim o'sha
+ *     endpoint'ga o'tkazilgan edi (bu izohning O'ZI o'sha paytdan
+ *     qolgan, pastda saqlanmoqda — tarixiy kontekst uchun).
+ *   - 2026-09-15 — 2026-09-18 oralig'ida: `checkout/invoice/create`
+ *     DOIMIY ravishda `-999998 "Invalid request format... Date format...
+ *     snake_case"` xatosini qaytardi — o'nlab kombinatsiya sinaldi
+ *     (`request_id` format, `store_id` turi, `expiration_date`/`_time`,
+ *     `apikey` sarlavhasi, `items[].details[]`ning 5 XIL varianti —
+ *     to'liq, oxirigacha, `empty_details`/`values_array`/`minimal_item`
+ *     — HAMMASI bir xil xato). Diagnostika vositalari (`atmosProxyTest.js`,
+ *     hozir ham loyihada, admin-only, qoldirilgan) orqali ANIQLANDI:
+ *       (a) ESKI `/merchant/pay/create` ENDPOINTI (xuddi shu store_id/
+ *           consumer key-secret bilan) DARHOL, TO'LIQ muvaffaqiyatli
+ *           ishladi (`transactionId:257276` qaytardi) — demak
+ *           store_id/kalitlar/proksi HAMMASI to'g'ri sozlangan, muammo
+ *           FAQAT `checkout/invoice/create`ning o'ziga (yoki uning
+ *           `items`/OFD-fiskal talabiga) xos;
+ *       (b) `items[0]`da `details` KALITI MAVJUD bo'lganda (tarkibidan
+ *           qat'i nazar) — doim `-999998`; `details` KALITI UMUMAN
+ *           yo'q bo'lganda — BOSHQA xato (`-999999 "System error"`)
+ *           chiqadi. Bu `details`ning ANIQ kutilgan formatini
+ *           TOPOLMAGANIMIZNI, lekin muammo shu joyda ekanini tasdiqlaydi.
+ *   - XULOSA (2026-09-25): `checkout/invoice/create`ning to'g'ri
+ *     `items`/OFD formati Atmos qo'llab-quvvatlash xizmati bilan
+ *     ALOHIDA aniqlashtirilishi kerak (bu hamon OCHIQ savol) — shu
+ *     kutish sotuvchilarni to'lovsiz qoldirmasligi uchun, ISHLAYOTGANI
+ *     ISBOTLANGAN eski `/merchant/pay/create` yo'liga QAYTARILDI.
+ *     BU — PRAGMATIK VAQTINCHALIK YECHIM, "to'g'ri" yechim emas: Atmos
+ *     o'zi "checkout/invoice/create ishlating" degan, va bu eski yo'lda
+ *     OFD-fiskal ma'lumot UMUMAN yuborilmaydi (`buildTariffInvoiceItems`
+ *     endi chaqirilmaydi, lekin kelajakda kerak bo'lib qolishi mumkinligi
+ *     uchun pastda saqlanadi). Atmos javob bergach, `createTariffPayment`
+ *     ichidagi `createTransaction`+`buildCheckoutUrl` chaqiruvini qayta
+ *     `createCheckoutInvoice`ga almashtirish YETARLI (funksiya interfeysi
+ *     — `{transactionId, checkoutUrl, amountSom}` — o'zgarmaydi, frontend
+ *     buzilmaydi). Uzoqroq muddatda, ATMOS'ning "Card Linking + Recurring
+ *     Payments" (`lib/atmosClient.js`dagi `bindCardInit`/`bindCardConfirm`/
+ *     `createTransaction({cardToken})`) orqali sotuvchi kartasini BIR
+ *     MARTA bog'lab, har oy AVTOMATIK yechib olish ham ko'rib chiqilishi
+ *     mumkin — hozircha FAQAT diagnostika sifatida mavjud
+ *     (`atmosProxyTest.js`), productionda ishlatilmaydi (PCI-DSS
+ *     sababli, batafsil: `lib/atmosClient.js`).
  *
- * OCHIQ QOLGAN TAXMIN (sandboxda tekshirilmagan, `lib/atmosClient.js`da
- * ham qayd etilgan): webhook `invoice` maydonini `payment_id` bilan bir
- * xil deb hisoblab, shu bo'yicha Firestore'da qidiradi.
+ *   YANGI OQIM: `createTariffPayment` → Atmos'da chernovik tranzaksiya
+ *   yaratadi (`createTransaction`, `/merchant/pay/create`) → qaytgan
+ *   RAQAMLI `transactionId` bilan hosted checkout havolasini quradi
+ *   (`buildCheckoutUrl`) → sotuvchi shu havolaga o'tadi (Atmos'ning
+ *   O'Z sahifasi, bizning serverimiz karta ma'lumotini HECH QACHON
+ *   ko'rmaydi) → to'lov muvaffaqiyatli bo'lsa, Atmos bizning
+ *   `atmosPaymentCallback` webhook'imizga xabar beradi (HAQIQIY
+ *   tasdiqlash manbai — redirect emas) → `activateTariffPayment`
+ *   `tariffPlan`/`tariffPaidUntil`ni yangilaydi. `getTariffPaymentStatus`
+ *   esa frontend redirect'dan qaytgach holatni tekshirish/tezlashtirish
+ *   (callback kechiksa, Atmos'dan `getTransaction`/`/merchant/pay/get`
+ *   orqali to'g'ridan-to'g'ri so'rab, ZAXIRA yo'l bilan) uchun.
+ *
+ * FIRESTORE HUJJAT KALITI: `atmosPayments/{id}` ENDI (qaytadan) Atmos
+ * qaytargan RAQAMLI `transactionId` bilan kalitlanadi (checkout/invoice/
+ * create davridagi bizning oldindan-generatsiya qilingan `requestId`
+ * EMAS) — buning muammosi yo'q, chunki `/merchant/pay/create`da
+ * `redirectLink` alohida, `buildCheckoutUrl`da, transactionId Atmos'dan
+ * QAYTGANDAN KEYIN quriladi (checkout/invoice/create'dagi kabi
+ * "success_url oldindan kerak" muammosi bu yo'lda yo'q). Frontend
+ * kontrakti (`?atmosTxn=...`, `getTariffPaymentStatus({transactionId})`)
+ * o'zgarmadi — faqat qiymat endi Atmos'ning raqamli transaction_id'i
+ * (satr sifatida).
+ *
+ * CALLBACK QIDIRUVI SODDALASHTI: `invoice`ning `payment_id`ga
+ * tengligi haqidagi taxmin (ESKI izoh, pastda saqlangan) ENDI KERAK
+ * EMAS — Firestore hujjati bevosita `transaction_id` bo'yicha
+ * (webhook'ning eng ishonchli, hujjatlashtirilgan maydoni) topiladi.
  */
 
 const PENDING_REUSE_WINDOW_MS = 30 * 60 * 1000; // 30 daqiqa ichida yaratilgan, hali to'lanmagan tranzaksiyani qayta ishlatamiz (dublikat oldini olish).
@@ -113,7 +162,14 @@ function buildTariffInvoiceItems({ plan, amountTiyin }) {
     {
       items_id: plan,
       code: TARIFF_SERVICE_IKPU_CODE,
-      name: `ZeloShop — ${label} tarifi (oylik obuna)`,
+      // MUHIM (2026-09-15): AVVAL em-dash ("—", Unicode U+2014) ishlatilgan
+      // edi — buning o'zi xatoga sabab bo'lishi DALILLANMAGAN (hujjatning
+      // o'z javob namunalarida kirill harflari bor, ya'ni Unicode umuman
+      // muammo emasligini ko'rsatadi), LEKIN arzon va xavfsiz tuzatish
+      // bo'lgani uchun oddiy tire ("-") bilan almashtirildi — ehtiyot
+      // chorasi sifatida, asosiy gumon (pastdagi `apikey` sarlavhasi) bilan
+      // BIRGA sinash uchun.
+      name: `ZeloShop - ${label} tarifi (oylik obuna)`,
       amount: amountTiyin,
       quantity: 1,
       // MUHIM (2026-09-14, real sandbox xatosidan keyin): AVVAL
@@ -246,56 +302,42 @@ async function handleCreateTariffPayment(request) {
   const amountSom = TARIFF_MONTHLY_PRICE_SOM[plan];
   const amountTiyin = amountTiyinFor(plan);
   // `account` — Atmos hujjatiga ko'ra to'lov identifikatori (произвольная
-  // строка); vaqt tamg'asi (ms) tabiiy ravishda noyob.
-  const account = String(Date.now());
-  // `requestId` — BIZNING o'zimiz oldindan generatsiya qiladigan noyob
-  // identifikator (Atmos hujjatida "уникальный идентификатор запроса").
-  // Firestore hujjati ham shu bilan kalitlanadi (batafsil: fayl boshidagi
-  // izoh — `success_url` invoys yaratilishidan OLDIN kerak bo'lgani
-  // uchun Atmos qaytaradigan `payment_id`ni oldindan bila olmaymiz).
-  // MUHIM (2026-09-15, real sandbox xatosidan keyin): AVVAL tire (`-`)
-  // bilan qurilgan edi (`tariff-${sellerId}-${Date.now()}`) — Atmos
-  // xatosi aynan "ALL fields must be snake_case" deydi, snake_case esa
-  // SO'ZLARNI TIRE bilan emas, PASTKI CHIZIQCHA (`_`) bilan ajratadi.
-  // Hujjatning o'z namunasida ham `request_id` sof raqam ("1231312312"),
-  // hech qanday ajratuvchi belgisiz. Shuning uchun endi pastki chiziqcha
-  // ishlatiladi, va `sellerId` ham ehtiyot uchun faqat harf/raqamga
-  // qisqartiriladi (odatda Telegram foydalanuvchi ID'i — sof raqam —
-  // bo'lsa ham, kelajakda boshqa turdagi ID kelib qolsa ham xavfsiz
-  // bo'lishi uchun).
+  // строка, faqat bizning tomonimizdan izlash/diagnostika uchun
+  // ma'noli bo'lishi kerak — Atmos buni tekshirmaydi). Tarixiy sabablarga
+  // ko'ra pastki chiziqcha bilan ("snake_case" xatosi checkout/invoice/
+  // create bilan bog'liq bo'lgan, lekin bu format baribir xavfsiz va
+  // o'qilishi oson bo'lgani uchun saqlab qolindi).
   const safeSellerId = String(sellerId).toLowerCase().replace(/[^a-z0-9]/g, "");
-  const requestId = `tariff_${safeSellerId}_${Date.now()}`;
+  const account = `tariff_${safeSellerId}_${Date.now()}`;
 
-  const successUrl = buildSellerAppLink(`/seller/tariffs?atmosTxn=${requestId}`);
-  const items = buildTariffInvoiceItems({ plan, amountTiyin });
+  // ESKI `/merchant/pay/create` oqimi (2026-09-25'dan — fayl boshidagi
+  // izohga qarang): Atmos RAQAMLI `transactionId` bilan javob beradi,
+  // `redirectLink` esa shu ID ma'lum bo'lgandan KEYIN, `buildCheckoutUrl`
+  // orqali, mahalliy ravishda (Atmos'ga alohida yuborilmasdan) quriladi
+  // — shuning uchun bu yerda "success_url oldindan kerak" muammosi yo'q.
+  const { transactionId } = await createTransaction({ amountSom, account });
+  const redirectLink = buildSellerAppLink(`/seller/tariffs?atmosTxn=${transactionId}`);
+  const checkoutUrl = buildCheckoutUrl({ transactionId, redirectLink });
 
-  const { paymentId, token, url } = await createCheckoutInvoice({
-    requestId, account, amountSom, successUrl, items,
-    expirationMinutes: TARIFF_INVOICE_EXPIRATION_MINUTES,
-    expirationDateIso: formatAtmosExpirationDate(TARIFF_INVOICE_EXPIRATION_MINUTES),
-  });
-
-  await db.collection("atmosPayments").doc(requestId).set({
+  await db.collection("atmosPayments").doc(String(transactionId)).set({
     sellerId,
     plan,
     amountSom,
     amountTiyin,
     account,
-    requestId,
-    paymentId,
-    paymentToken: token,
+    transactionId,
     status: "created",
-    checkoutUrl: url,
+    checkoutUrl,
     createdAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  return { transactionId: requestId, checkoutUrl: url, amountSom };
+  return { transactionId: String(transactionId), checkoutUrl, amountSom };
 }
 
 exports.createTariffPayment = onCall(
   {
     region: "asia-south1",
-    secrets: [ATMOS_CONSUMER_KEY, ATMOS_CONSUMER_SECRET, ATMOS_STORE_ID, ATMOS_PROXY_TOKEN, SENTRY_DSN],
+    secrets: [ATMOS_CONSUMER_KEY, ATMOS_CONSUMER_SECRET, ATMOS_STORE_ID, ATMOS_API_KEY, ATMOS_PROXY_TOKEN, SENTRY_DSN],
   },
   withSentry(handleCreateTariffPayment)
 );
@@ -354,25 +396,17 @@ async function handleAtmosPaymentCallback(req, res) {
       return;
     }
 
-    // MUHIM, HALI SANDBOXDA TASDIQLANMAGAN TAXMIN (batafsil:
-    // `lib/atmosClient.js` fayl boshidagi izoh): `invoice` maydoni
-    // `checkout/invoice/create` javobidagi `payment_id` bilan BIR XIL
-    // deb hisoblanmoqda — Firestore hujjati ENDI `requestId` bilan
-    // kalitlangani uchun (eski `transaction_id`-kalit emas), bu yerda
-    // `paymentId` maydoni bo'yicha QIDIRUV qilamiz.
-    const invoiceNum = Number(invoice);
-    const paymentIdMatch = Number.isFinite(invoiceNum) ? invoiceNum : invoice;
-    const paymentQuery = await db
-      .collection("atmosPayments")
-      .where("paymentId", "==", paymentIdMatch)
-      .limit(1)
-      .get();
-    if (paymentQuery.empty) {
-      respond(0, `Invoys ${invoice} tizimda topilmadi.`);
+    // 2026-09-25'dan (fayl boshidagi izohga qarang): Firestore hujjati
+    // ENDI to'g'ridan-to'g'ri `transaction_id` bilan kalitlangan —
+    // `invoice`ning nimaga tengligi haqidagi taxminga endi ehtiyoj yo'q,
+    // shunchaki oddiy `doc().get()`, QIDIRUVSIZ.
+    const paymentRef = db.collection("atmosPayments").doc(String(transactionId));
+    const paymentSnap = await paymentRef.get();
+    if (!paymentSnap.exists) {
+      respond(0, `Tranzaksiya ${transactionId} tizimda topilmadi.`);
       return;
     }
-    const paymentDoc = paymentQuery.docs[0];
-    const payment = paymentDoc.data();
+    const payment = paymentSnap.data();
 
     if (Number(payment.amountTiyin) !== Number(amount)) {
       console.error("atmosPaymentCallback: summa mos kelmadi", { transactionId, expected: payment.amountTiyin, got: amount });
@@ -380,7 +414,7 @@ async function handleAtmosPaymentCallback(req, res) {
       return;
     }
 
-    await activateTariffPayment({ paymentDocId: paymentDoc.id, callbackRaw: body });
+    await activateTariffPayment({ paymentDocId: paymentSnap.id, callbackRaw: body });
 
     respond(1, "Успешно");
   } catch (err) {
@@ -413,12 +447,12 @@ async function handleGetTariffPaymentStatus(request) {
   // uchun eski nomicha qoldirilgan — qiymat esa ENDI bizning
   // `requestId`imiz (Firestore hujjat ID'i), Atmos'ning raqamli
   // transaction_id'i EMAS (batafsil: fayl boshidagi izoh).
-  const requestId = String(request.data?.transactionId || "");
-  if (!requestId) {
+  const transactionId = String(request.data?.transactionId || "");
+  if (!transactionId) {
     throw new HttpsError("invalid-argument", "transactionId talab qilinadi.");
   }
 
-  const paymentRef = db.collection("atmosPayments").doc(requestId);
+  const paymentRef = db.collection("atmosPayments").doc(transactionId);
   const paymentSnap = await paymentRef.get();
   if (!paymentSnap.exists) {
     throw new HttpsError("not-found", "To'lov topilmadi.");
@@ -432,17 +466,28 @@ async function handleGetTariffPaymentStatus(request) {
     return { status: "paid", plan: payment.plan, paidUntilMs: payment.sellerPaidUntilAtActivation || null };
   }
 
+  // QO'LDA (bank o'tkazmasi) TO'LOV (2026-09-25, `manualTariffPayments.js`):
+  // bu yozuv Atmos orqali UMUMAN yaratilmagan — `payment.transactionId`
+  // yo'q, shuning uchun pastdagi Atmos reconciliation so'rovini
+  // chaqirish MA'NOSIZ (baribir xato beradi). O'rniga hujjatda
+  // saqlangan holatning O'ZINI qaytaramiz — admin `reviewManualTariffPayment`
+  // orqali tasdiqlagach, hujjat `status: "paid"` bo'ladi va yuqoridagi
+  // shart ishga tushadi (sotuvchi sahifani qayta ochganda).
+  if (payment.method === "manual") {
+    if (payment.status === "rejected") {
+      return { status: "rejected", plan: payment.plan, amountSom: payment.amountSom, rejectReason: payment.rejectReason || null };
+    }
+    return { status: "pending_review", plan: payment.plan, amountSom: payment.amountSom };
+  }
+
   // ZAXIRA YO'L: webhook hali kelmagan bo'lishi mumkin — Atmos'dan
-  // to'g'ridan-to'g'ri so'raymiz (`paymentId` invoys yaratilganda
-  // saqlangan bo'lishi kerak — bo'lmasa reconciliation o'tkazib
-  // yuboriladi, xato tashlanmaydi).
+  // to'g'ridan-to'g'ri so'raymiz (`/merchant/pay/get`, 2026-09-25'dan —
+  // fayl boshidagi izohga qarang).
   try {
-    if (payment.paymentId) {
-      const { success } = await getCheckoutInvoiceStatus({ paymentId: payment.paymentId });
-      if (success) {
-        const result = await activateTariffPayment({ paymentDocId: requestId, callbackRaw: null });
-        return { status: "paid", plan: result.plan, paidUntilMs: result.paidUntilMs };
-      }
+    const { confirmed } = await getTransaction({ transactionId: payment.transactionId || transactionId });
+    if (confirmed) {
+      const result = await activateTariffPayment({ paymentDocId: transactionId, callbackRaw: null });
+      return { status: "paid", plan: result.plan, paidUntilMs: result.paidUntilMs };
     }
   } catch (err) {
     // Atmos vaqtincha javob bermasa ham, sotuvchiga "hali kutilmoqda"
@@ -457,7 +502,7 @@ async function handleGetTariffPaymentStatus(request) {
 exports.getTariffPaymentStatus = onCall(
   {
     region: "asia-south1",
-    secrets: [ATMOS_CONSUMER_KEY, ATMOS_CONSUMER_SECRET, ATMOS_STORE_ID, ATMOS_PROXY_TOKEN, SENTRY_DSN],
+    secrets: [ATMOS_CONSUMER_KEY, ATMOS_CONSUMER_SECRET, ATMOS_STORE_ID, ATMOS_API_KEY, ATMOS_PROXY_TOKEN, SENTRY_DSN],
   },
   withSentry(handleGetTariffPaymentStatus)
 );
@@ -522,6 +567,17 @@ exports.sendTariffPaymentReminders = onSchedule(
   withSentry(handleSendTariffPaymentReminders)
 );
 
+// `manualTariffPayments.js` (2026-09-25, "qo'lda tasdiqlash" — bank
+// o'tkazmasi + admin ko'rib chiqish oqimi, Atmos'ga QO'SHIMCHA variant)
+// admin tasdiqlagan to'lovni AYNAN SHU funksiya orqali faollashtiradi —
+// `tariffPaidUntil`/AI CEO/eslatma-belgisi mantiqi IKKALA oqim uchun
+// ham BITTA, yagona joyda qolishi uchun (couriers.js'dagi
+// `applyCourierOrderAction` bilan bir xil, loyihada allaqachon
+// o'rnatilgan "qo'shni modul funksiyasini to'g'ridan-to'g'ri eksport
+// qilish" konvensiyasi — `_testables` FAQAT testlar uchun, production
+// kodi buni ishlatmasligi kerak).
+exports.activateTariffPayment = activateTariffPayment;
+
 exports._testables = {
   handleCreateTariffPayment,
   handleAtmosPaymentCallback,
@@ -529,6 +585,14 @@ exports._testables = {
   handleSendTariffPaymentReminders,
   activateTariffPayment,
   amountTiyinFor,
+  // 2026-09-25: `checkout/invoice/create` oqimi vaqtincha to'xtatilgani
+  // sababli (fayl boshidagi izohga qarang) quyidagi uchtasi ASOSIY
+  // oqimda ENDI chaqirilmaydi — lekin Atmos javob berib, o'sha oqimga
+  // qaytish kerak bo'lganda ZARUR bo'lgani uchun saqlanadi, shuning
+  // uchun shu yerda "ishlatilgan" deb belgilanadi (lint xatosi
+  // bermasligi uchun).
   buildTariffInvoiceItems,
+  formatAtmosExpirationDate,
+  TARIFF_INVOICE_EXPIRATION_MINUTES,
   ATMOS_ENV,
 };

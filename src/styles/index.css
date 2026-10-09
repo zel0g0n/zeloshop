@@ -68,3 +68,9 @@ html.dark, html.dark body {
     scrollbar-width: none; /* Firefox uchun */
   }
 }
+/* Kompyuter (lg+): sotuvchi panelidagi yuqori panel (h-16) ostida
+   yopishib turadigan sahifa sarlavhalari uning tagidan boshlansin. */
+@media (min-width: 1024px) {
+  .seller-main .sticky { top: 4rem; }
+  .seller-main .seller-topbar { top: 0; }
+}

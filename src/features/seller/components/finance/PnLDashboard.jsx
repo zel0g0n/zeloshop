@@ -186,28 +186,38 @@ const PnLDashboard = () => {
     { label: `${t("pnl.tax")} (${TAX_RATE * 100}%)`, value: taxes, sign: "-" },
   ];
 
-  return (
-    <div className="min-h-screen bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased pb-36 transition-colors duration-300">
+  const splitSegments = totalRevenue > 0
+    ? [
+        { key: "cogs", label: t("pnl.cogs"), value: totalCOGS, color: "#f59e0b" },
+        { key: "opex", label: t("pnl.opex"), value: totalOpex, color: "#3b82f6" },
+        { key: "marketing", label: t("pnl.marketing"), value: totalMarketing, color: "#a855f7" },
+        { key: "tax", label: t("pnl.tax"), value: taxes, color: "#94a3b8" },
+        { key: "net", label: t("pnl.equalsNetProfit"), value: Math.max(netProfit, 0), color: "#10b981" },
+      ].map((seg) => ({ ...seg, percent: Math.min((seg.value / totalRevenue) * 100, 100) }))
+    : [];
 
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center gap-3">
-        <button type="button" onClick={() => navigate(-1)} className="p-1 text-slate-500 dark:text-slate-300 active:scale-95 transition-transform">
+  return (
+    <div className="min-h-screen lg:min-h-0 bg-[#F4F5F9] dark:bg-slate-950 lg:bg-transparent lg:dark:bg-transparent text-slate-900 dark:text-white font-sans antialiased pb-36 lg:pb-6 transition-colors duration-300">
+
+      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center gap-3 lg:static lg:bg-transparent lg:dark:bg-transparent lg:shadow-none lg:px-0 lg:pt-0 lg:pb-5">
+        <button type="button" onClick={() => navigate(-1)} className="lg:hidden p-1 text-slate-500 dark:text-slate-300 active:scale-95 transition-transform">
           <ArrowLeft size={20} />
         </button>
         <div className="flex-1">
-          <h1 className="text-base font-black text-slate-800 dark:text-white">{t("pnl.title")}</h1>
+          <h1 className="text-base lg:text-2xl lg:tracking-tight font-black text-slate-800 dark:text-white">{t("pnl.title")}</h1>
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t("pnl.subtitle")}</p>
         </div>
         <button
           type="button"
           onClick={handleExport}
-          className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center"
+          className="w-9 h-9 lg:w-auto lg:h-11 lg:px-4 lg:gap-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center lg:text-xs lg:font-black"
           title={t("pnl.exportCsvTitle")}
         >
-          <Download size={16} />
+          <Download size={16} /><span className="hidden lg:inline">{t("desktop.exportCsv")}</span>
         </button>
       </div>
 
-      <div className="px-4 pt-4">
+      <div className="px-4 pt-4 lg:px-0 lg:pt-0 lg:max-w-sm">
         <TimeframeTabs timeframe={timeframe} onChange={handleTimeframeChange} />
         {isMonthMode && selectedMonthsAgo > 0 && (
           <button
@@ -227,8 +237,9 @@ const PnLDashboard = () => {
         )}
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 lg:p-0 lg:pt-5 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-5 lg:items-start">
 
+        <div className="space-y-4 lg:col-span-7">
         <div
           onClick={() => navigate("/seller/analytics/profit-deep-dive")}
           role="button"
@@ -243,7 +254,7 @@ const PnLDashboard = () => {
             </span>
           </div>
           <div className="flex items-center gap-2 mt-1">
-            <h2 className="text-3xl font-black tracking-tight">{money(netProfit)}</h2>
+            <h2 className="text-3xl lg:text-5xl font-black tracking-tight">{money(netProfit)}</h2>
             {netProfit >= 0 ? <ArrowUpRight size={22} /> : <ArrowDownRight size={22} />}
           </div>
 
@@ -286,6 +297,27 @@ const PnLDashboard = () => {
           </div>
         </div>
 
+        {totalRevenue > 0 && (
+          <div className="hidden lg:block bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-4">{t("desktop.revenueSplit")}</h3>
+            <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-800">
+              {splitSegments.map((seg) => (
+                <div key={seg.key} style={{ width: `${seg.percent}%`, background: seg.color }} title={`${seg.label}: ${seg.percent.toFixed(1)}%`} />
+              ))}
+            </div>
+            <ul className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2.5">
+              {splitSegments.map((seg) => (
+                <li key={seg.key} className="flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-2 font-semibold text-slate-600 dark:text-slate-300"><i className="w-2.5 h-2.5 rounded-full" style={{ background: seg.color }} />{seg.label}</span>
+                  <span className="font-black tabular-nums text-slate-800 dark:text-white">{seg.percent.toFixed(1)}%</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        </div>
+
+        <div className="space-y-4 lg:col-span-5">
         {/* CAC (mijoz jalb qilish narxi) — 2026-09 punkt-royxati, 3-band.
             Marketing xarajati kiritilmagan yoki shu davrda yangi mijoz
             bo'lmagan holatda mazmunsiz raqam (masalan cheksizlik yoki
@@ -344,6 +376,7 @@ const PnLDashboard = () => {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       {error && (

@@ -36,10 +36,10 @@ const TRIAL_DAYS = 7;
 const NEXT_TRIAL_TIER = { start: "pro", pro: "biznes" };
 
 /**
- * HAQIQIY TO'LOV (ATMOS) — 2026-09, "tarif to'lov tizimini ishga
+ * TARIF TO'LOVI (qo'lda chek tasdiqlash) — 2026-09, "tarif to'lov tizimini ishga
  * tushirish" bo'limi.
  *
- * Faqat Z-Start va Z-Pro haqiqiy (Atmos orqali avtomatik) to'lovga ega
+ * Faqat Z-Start va Z-Pro uchun to'lov (qo'lda tasdiqlash orqali) mavjud
  * — Z-Biznes hamon "ishlab chiqilmoqda" (narx yakunlanmagan,
  * `TariffsSection.jsx`dagi `inDevelopment` bayrog'i), shuning uchun
  * bu jadvalda YO'Q — sotuvchi hamon faqat "qiziqish bildirish" orqali
@@ -181,7 +181,7 @@ function isBillingRequired(sellerData) {
 }
 
 /**
- * Joriy TO'LANGAN muddat (haqiqiy Atmos to'lovi orqali uzaytirilgan)
+ * Joriy TO'LANGAN muddat (tasdiqlangan to'lov orqali uzaytirilgan)
  * millisekundda — hali hech qachon to'lanmagan bo'lsa `0`.
  */
 function paidUntilMs(sellerData) {
@@ -217,7 +217,7 @@ function isTariffPastDue(sellerData, nowMs = Date.now()) {
 }
 
 /**
- * Bu tarifni HAQIQIY (Atmos orqali avtomatik) pulga sotib olish
+ * Bu tarifni to'lov orqali (qo'lda tasdiqlash) sotib olish
  * mumkinmi. Hozircha faqat Z-Start/Z-Pro — Z-Biznes hamon "qiziqish
  * bildirish" orqali (`inDevelopment`).
  */

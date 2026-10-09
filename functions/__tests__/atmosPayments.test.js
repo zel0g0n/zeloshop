@@ -4,6 +4,12 @@
  * bilan), Callback webhook (imzo/summasi tekshiruvi), reconciliation
  * (`getTariffPaymentStatus`), va kunlik eslatma yuborish.
  *
+ * 2026-09-25'DAN: oqim eski `/merchant/pay/create` + `buildCheckoutUrl`
+ * yo'liga qaytarildi (fayl boshidagi izohga qarang, `atmosPayments.js`),
+ * shu sabab bu yerda `./lib/atmosClient`dan `createTransaction`/
+ * `buildCheckoutUrl`/`getTransaction` mock qilinadi — `createCheckoutInvoice`/
+ * `getCheckoutInvoiceStatus` ENDI asosiy oqimda ishlatilmaydi.
+ *
  * `tariffs.test.js`dagi BIR XIL mock-db naqshi ishlatiladi
  * (`jest.doMock("../lib/admin", ...)` va h.k.) — `./lib/atmosClient`
  * esa (haqiqiy tarmoq so'rovi yuboradigan modul) to'liq mock qilinadi,
@@ -106,13 +112,9 @@ function loadModule(db, { checkRateLimitMock, sendTelegramMessageMock, atmosClie
     ATMOS_API_KEY: { value: () => "mock-api-key" },
     ATMOS_ENV: { value: () => "production" },
     ATMOS_PROXY_TOKEN: { value: () => "mock-proxy-token" },
-    createCheckoutInvoice: jest.fn().mockResolvedValue({
-      storeId: 1234,
-      paymentId: 272,
-      token: "invoice-token",
-      url: "https://checkout.atmos.uz/ru/invoice?id=invoice-token",
-    }),
-    getCheckoutInvoiceStatus: jest.fn().mockResolvedValue({ success: false, final: false, state: "PENDING", raw: {} }),
+    createTransaction: jest.fn().mockResolvedValue({ transactionId: 272 }),
+    buildCheckoutUrl: jest.fn(({ transactionId }) => `https://checkout.atmos.uz/pay?transactionId=${transactionId}`),
+    getTransaction: jest.fn().mockResolvedValue({ confirmed: false, statusMessage: null, raw: {} }),
     verifyCallbackSign: jest.fn(() => true),
     ...atmosClientMock,
   }));
@@ -153,76 +155,67 @@ describe("handleCreateTariffPayment", () => {
     ).rejects.toMatchObject({ code: "failed-precondition" });
   });
 
-  test("yangi tranzaksiya yaratadi va atmosPayments hujjatini to'g'ri yozadi", async () => {
+  test("yangi tranzaksiya yaratadi va atmosPayments hujjatini Atmos'ning transactionId'i bilan to'g'ri yozadi", async () => {
     const db = buildMockDb({ sellers: { s1: { storeName: "Do'kon" } } });
-    const dateNowSpy = jest.spyOn(Date, "now").mockReturnValue(1700000000000);
     const { _testables } = loadModule(db);
-
-    let result;
-    try {
-      result = await _testables.handleCreateTariffPayment({ auth: { uid: "s1" }, data: { plan: "start" } });
-    } finally {
-      dateNowSpy.mockRestore();
-    }
-
-    const expectedRequestId = "tariff-s1-1700000000000";
-    expect(result).toEqual({
-      transactionId: expectedRequestId,
-      checkoutUrl: "https://checkout.atmos.uz/ru/invoice?id=invoice-token",
-      amountSom: 49000,
-    });
-    expect(db.__atmosPayments[expectedRequestId]).toMatchObject({
-      sellerId: "s1",
-      plan: "start",
-      amountSom: 49000,
-      amountTiyin: 4900000,
-      status: "created",
-      paymentId: 272,
-      paymentToken: "invoice-token",
-      checkoutUrl: "https://checkout.atmos.uz/ru/invoice?id=invoice-token",
-    });
-  });
-
-  test("createCheckoutInvoice'ga to'g'ri items[] (ИКПУ/STIR) va success_url yuboradi", async () => {
-    const db = buildMockDb({ sellers: { s1: {} } });
-    const createCheckoutInvoiceMock = jest.fn().mockResolvedValue({
-      storeId: 1234, paymentId: 1, token: "t", url: "https://checkout.atmos.uz/x",
-    });
-    const { _testables } = loadModule(db, { atmosClientMock: { createCheckoutInvoice: createCheckoutInvoiceMock } });
-
-    await _testables.handleCreateTariffPayment({ auth: { uid: "s1" }, data: { plan: "pro" } });
-
-    expect(createCheckoutInvoiceMock).toHaveBeenCalledTimes(1);
-    const callArgs = createCheckoutInvoiceMock.mock.calls[0][0];
-    expect(callArgs.amountSom).toBe(199000);
-    expect(callArgs.successUrl).toMatch(/\/seller\/tariffs\?atmosTxn=tariff-s1-/);
-    expect(callArgs.items).toHaveLength(1);
-    expect(callArgs.items[0]).toMatchObject({
-      code: "10305008003000000",
-      amount: 19900000,
-      quantity: 1,
-    });
-    const tinDetail = callArgs.items[0].details.find((d) => d.name === "tin");
-    expect(tinDetail.values).toBe("313278793");
-  });
-
-  test("30 daqiqa ichida yaratilgan, hali to'lanmagan tranzaksiya bo'lsa - YANGISINI yaratmasdan uni qayta ishlatadi", async () => {
-    const pendingDoc = {
-      id: "tariff-s1-999",
-      data: () => ({ checkoutUrl: "https://checkout.atmos.uz/ru/invoice?id=old-token", amountSom: 49000 }),
-    };
-    const db = buildMockDb({ sellers: { s1: {} }, pendingPaymentDocs: [pendingDoc] });
-    const createCheckoutInvoiceMock = jest.fn();
-    const { _testables } = loadModule(db, { atmosClientMock: { createCheckoutInvoice: createCheckoutInvoiceMock } });
 
     const result = await _testables.handleCreateTariffPayment({ auth: { uid: "s1" }, data: { plan: "start" } });
 
     expect(result).toEqual({
-      transactionId: "tariff-s1-999",
-      checkoutUrl: "https://checkout.atmos.uz/ru/invoice?id=old-token",
+      transactionId: "272",
+      checkoutUrl: "https://checkout.atmos.uz/pay?transactionId=272",
       amountSom: 49000,
     });
-    expect(createCheckoutInvoiceMock).not.toHaveBeenCalled();
+    expect(db.__atmosPayments["272"]).toMatchObject({
+      sellerId: "s1",
+      plan: "start",
+      amountSom: 49000,
+      amountTiyin: 4900000,
+      transactionId: 272,
+      status: "created",
+      checkoutUrl: "https://checkout.atmos.uz/pay?transactionId=272",
+    });
+    expect(db.__atmosPayments["272"].account).toMatch(/^tariff_s1_\d+$/);
+  });
+
+  test("createTransaction'ga to'g'ri amountSom/account yuboradi, buildCheckoutUrl'ga transactionId/redirectLink beradi", async () => {
+    const db = buildMockDb({ sellers: { s1: {} } });
+    const createTransactionMock = jest.fn().mockResolvedValue({ transactionId: 501 });
+    const buildCheckoutUrlMock = jest.fn(() => "https://checkout.atmos.uz/x");
+    const { _testables } = loadModule(db, {
+      atmosClientMock: { createTransaction: createTransactionMock, buildCheckoutUrl: buildCheckoutUrlMock },
+    });
+
+    await _testables.handleCreateTariffPayment({ auth: { uid: "s1" }, data: { plan: "pro" } });
+
+    expect(createTransactionMock).toHaveBeenCalledTimes(1);
+    const createArgs = createTransactionMock.mock.calls[0][0];
+    expect(createArgs.amountSom).toBe(199000);
+    expect(createArgs.account).toMatch(/^tariff_s1_\d+$/);
+
+    expect(buildCheckoutUrlMock).toHaveBeenCalledTimes(1);
+    const checkoutArgs = buildCheckoutUrlMock.mock.calls[0][0];
+    expect(checkoutArgs.transactionId).toBe(501);
+    expect(checkoutArgs.redirectLink).toMatch(/\/seller\/tariffs\?atmosTxn=501$/);
+  });
+
+  test("30 daqiqa ichida yaratilgan, hali to'lanmagan tranzaksiya bo'lsa - YANGISINI yaratmasdan uni qayta ishlatadi", async () => {
+    const pendingDoc = {
+      id: "999",
+      data: () => ({ checkoutUrl: "https://checkout.atmos.uz/pay?transactionId=999", amountSom: 49000 }),
+    };
+    const db = buildMockDb({ sellers: { s1: {} }, pendingPaymentDocs: [pendingDoc] });
+    const createTransactionMock = jest.fn();
+    const { _testables } = loadModule(db, { atmosClientMock: { createTransaction: createTransactionMock } });
+
+    const result = await _testables.handleCreateTariffPayment({ auth: { uid: "s1" }, data: { plan: "start" } });
+
+    expect(result).toEqual({
+      transactionId: "999",
+      checkoutUrl: "https://checkout.atmos.uz/pay?transactionId=999",
+      amountSom: 49000,
+    });
+    expect(createTransactionMock).not.toHaveBeenCalled();
   });
 
   test("rate-limit tekshiruvini to'g'ri chaqiradi", async () => {
@@ -235,14 +228,12 @@ describe("handleCreateTariffPayment", () => {
 
   test("Z-Pro uchun to'g'ri summani (199 000 so'm) yuboradi", async () => {
     const db = buildMockDb({ sellers: { s1: {} } });
-    const createCheckoutInvoiceMock = jest.fn().mockResolvedValue({
-      storeId: 1234, paymentId: 777, token: "t", url: "https://checkout.atmos.uz/y",
-    });
-    const { _testables } = loadModule(db, { atmosClientMock: { createCheckoutInvoice: createCheckoutInvoiceMock } });
+    const createTransactionMock = jest.fn().mockResolvedValue({ transactionId: 777 });
+    const { _testables } = loadModule(db, { atmosClientMock: { createTransaction: createTransactionMock } });
 
     await _testables.handleCreateTariffPayment({ auth: { uid: "s1" }, data: { plan: "pro" } });
 
-    expect(createCheckoutInvoiceMock).toHaveBeenCalledWith(
+    expect(createTransactionMock).toHaveBeenCalledWith(
       expect.objectContaining({ amountSom: 199000 })
     );
   });
@@ -369,13 +360,14 @@ describe("handleAtmosPaymentCallback", () => {
   });
 
   test("summa mos kelmasa - status:0 qaytaradi", async () => {
-    const paymentDoc = { id: "tariff-s1-555", data: () => ({ sellerId: "s1", plan: "start", amountTiyin: 4900000, paymentId: 555 }) };
-    const db = buildMockDb({ pendingPaymentDocs: [paymentDoc] });
+    const db = buildMockDb({
+      atmosPayments: { 999: { sellerId: "s1", plan: "start", amountTiyin: 4900000, status: "created" } },
+    });
     const { _testables } = loadModule(db);
     const res = fakeRes();
 
     await _testables.handleAtmosPaymentCallback(
-      { body: { store_id: "1234", transaction_id: 999, amount: 1000000, invoice: 555, sign: "x" } },
+      { body: { store_id: "1234", transaction_id: 999, amount: 1000000, invoice: 999, sign: "x" } },
       res
     );
 
@@ -384,26 +376,21 @@ describe("handleAtmosPaymentCallback", () => {
   });
 
   test("hammasi to'g'ri bo'lsa - to'lovni faollashtiradi va status:1 qaytaradi", async () => {
-    const paymentDoc = {
-      id: "tariff-s1-555",
-      data: () => ({ sellerId: "s1", plan: "pro", amountTiyin: 19900000, status: "created", paymentId: 555 }),
-    };
     const db = buildMockDb({
       sellers: { s1: { tariffPlan: "start" } },
-      atmosPayments: { "tariff-s1-555": { sellerId: "s1", plan: "pro", amountTiyin: 19900000, status: "created", paymentId: 555 } },
-      pendingPaymentDocs: [paymentDoc],
+      atmosPayments: { 999: { sellerId: "s1", plan: "pro", amountTiyin: 19900000, status: "created" } },
     });
     const { _testables } = loadModule(db);
     const res = fakeRes();
 
     await _testables.handleAtmosPaymentCallback(
-      { body: { store_id: "1234", transaction_id: 999, amount: 19900000, invoice: 555, sign: "x" } },
+      { body: { store_id: "1234", transaction_id: 999, amount: 19900000, invoice: 999, sign: "x" } },
       res
     );
 
     expect(res.body).toEqual({ status: 1, message: "Успешно" });
     expect(db.__sellers.s1.tariffPlan).toBe("pro");
-    expect(db.__atmosPayments["tariff-s1-555"].status).toBe("paid");
+    expect(db.__atmosPayments["999"].status).toBe("paid");
   });
 
   // 2026-09-13: real production xatosi — terminalda qo'lda kiritilgan
@@ -411,14 +398,9 @@ describe("handleAtmosPaymentCallback", () => {
   // boshi/oxiri probel qo'shilib qolishi mumkin. Bu holatda ham webhook
   // "noto'g'ri merchant" deb RAD ETMASLIGI kerak — `.trim()` orqali.
   test("ATMOS_STORE_ID atrofida bo'sh joy bo'lsa ham store_id'ni to'g'ri taniydi", async () => {
-    const paymentDoc = {
-      id: "tariff-s1-555",
-      data: () => ({ sellerId: "s1", plan: "pro", amountTiyin: 19900000, status: "created", paymentId: 555 }),
-    };
     const db = buildMockDb({
       sellers: { s1: { tariffPlan: "start" } },
-      atmosPayments: { "tariff-s1-555": { sellerId: "s1", plan: "pro", amountTiyin: 19900000, status: "created", paymentId: 555 } },
-      pendingPaymentDocs: [paymentDoc],
+      atmosPayments: { 999: { sellerId: "s1", plan: "pro", amountTiyin: 19900000, status: "created" } },
     });
     const { _testables } = loadModule(db, {
       atmosClientMock: { ATMOS_STORE_ID: { value: () => "  1234\n" } },
@@ -426,7 +408,7 @@ describe("handleAtmosPaymentCallback", () => {
     const res = fakeRes();
 
     await _testables.handleAtmosPaymentCallback(
-      { body: { store_id: "1234", transaction_id: 999, amount: 19900000, invoice: 555, sign: "x" } },
+      { body: { store_id: "1234", transaction_id: 999, amount: 19900000, invoice: 999, sign: "x" } },
       res
     );
 
@@ -485,22 +467,22 @@ describe("handleGetTariffPaymentStatus", () => {
     const db = buildMockDb({
       atmosPayments: { 555: { sellerId: "s1", plan: "pro", status: "paid", sellerPaidUntilAtActivation: 999 } },
     });
-    const getCheckoutInvoiceStatusMock = jest.fn();
-    const { _testables } = loadModule(db, { atmosClientMock: { getCheckoutInvoiceStatus: getCheckoutInvoiceStatusMock } });
+    const getTransactionMock = jest.fn();
+    const { _testables } = loadModule(db, { atmosClientMock: { getTransaction: getTransactionMock } });
 
     const result = await _testables.handleGetTariffPaymentStatus({ auth: { uid: "s1" }, data: { transactionId: "555" } });
 
     expect(result).toEqual({ status: "paid", plan: "pro", paidUntilMs: 999 });
-    expect(getCheckoutInvoiceStatusMock).not.toHaveBeenCalled();
+    expect(getTransactionMock).not.toHaveBeenCalled();
   });
 
-  test("hali 'created' holatda, LEKIN Atmos'da success:true bo'lsa - ZAXIRA yo'l bilan faollashtiradi", async () => {
+  test("hali 'created' holatda, LEKIN Atmos'da confirmed:true bo'lsa - ZAXIRA yo'l bilan faollashtiradi", async () => {
     const db = buildMockDb({
       sellers: { s1: { tariffPlan: "start" } },
-      atmosPayments: { 555: { sellerId: "s1", plan: "pro", status: "created", amountSom: 199000, paymentId: 272 } },
+      atmosPayments: { 555: { sellerId: "s1", plan: "pro", status: "created", amountSom: 199000, transactionId: 555 } },
     });
     const { _testables } = loadModule(db, {
-      atmosClientMock: { getCheckoutInvoiceStatus: jest.fn().mockResolvedValue({ success: true, final: true, state: "SUCCESS", raw: {} }) },
+      atmosClientMock: { getTransaction: jest.fn().mockResolvedValue({ confirmed: true, statusMessage: "CONFIRMED", raw: {} }) },
     });
 
     const result = await _testables.handleGetTariffPaymentStatus({ auth: { uid: "s1" }, data: { transactionId: "555" } });
@@ -512,10 +494,10 @@ describe("handleGetTariffPaymentStatus", () => {
 
   test("hali 'created' holatda VA Atmos'da ham tasdiqlanmagan - 'created' qaytaradi (xato TASHLAMAYDI)", async () => {
     const db = buildMockDb({
-      atmosPayments: { 555: { sellerId: "s1", plan: "start", status: "created", amountSom: 49000, paymentId: 1 } },
+      atmosPayments: { 555: { sellerId: "s1", plan: "start", status: "created", amountSom: 49000, transactionId: 555 } },
     });
     const { _testables } = loadModule(db, {
-      atmosClientMock: { getCheckoutInvoiceStatus: jest.fn().mockResolvedValue({ success: false, final: false, state: "PENDING", raw: {} }) },
+      atmosClientMock: { getTransaction: jest.fn().mockResolvedValue({ confirmed: false, statusMessage: "PENDING", raw: {} }) },
     });
 
     const result = await _testables.handleGetTariffPaymentStatus({ auth: { uid: "s1" }, data: { transactionId: "555" } });
@@ -525,10 +507,10 @@ describe("handleGetTariffPaymentStatus", () => {
 
   test("Atmos so'rovi xato bersa ham - 'created' holatini qaytaradi (frontend buzilmaydi)", async () => {
     const db = buildMockDb({
-      atmosPayments: { 555: { sellerId: "s1", plan: "start", status: "created", amountSom: 49000, paymentId: 1 } },
+      atmosPayments: { 555: { sellerId: "s1", plan: "start", status: "created", amountSom: 49000, transactionId: 555 } },
     });
     const { _testables } = loadModule(db, {
-      atmosClientMock: { getCheckoutInvoiceStatus: jest.fn().mockRejectedValue(new Error("Atmos vaqtincha ishlamayapti")) },
+      atmosClientMock: { getTransaction: jest.fn().mockRejectedValue(new Error("Atmos vaqtincha ishlamayapti")) },
     });
 
     const result = await _testables.handleGetTariffPaymentStatus({ auth: { uid: "s1" }, data: { transactionId: "555" } });
@@ -536,17 +518,32 @@ describe("handleGetTariffPaymentStatus", () => {
     expect(result).toEqual({ status: "created", plan: "start", amountSom: 49000 });
   });
 
-  test("payment hujjatida paymentId hali yo'q bo'lsa - reconciliation'ni o'tkazib yuboradi ('created' qaytaradi)", async () => {
+  // 2026-09-25: `manualTariffPayments.js`dagi "qo'lda tasdiqlash" oqimi
+  // (bank o'tkazmasi + admin ko'rib chiqish) uchun yaratilgan yozuvlar —
+  // bularda `payment.transactionId` YO'Q, shuning uchun Atmos'ga
+  // MUROJAAT QILINMASLIGI kerak (aks holda foydasiz xato/kechikish).
+  test("method:'manual' bo'lsa - Atmos'ga murojaat qilmasdan saqlangan holatni ('pending_review') qaytaradi", async () => {
     const db = buildMockDb({
-      atmosPayments: { 555: { sellerId: "s1", plan: "start", status: "created", amountSom: 49000 } },
+      atmosPayments: { manual_s1_1: { sellerId: "s1", plan: "start", status: "pending_review", amountSom: 49000, method: "manual" } },
     });
-    const getCheckoutInvoiceStatusMock = jest.fn();
-    const { _testables } = loadModule(db, { atmosClientMock: { getCheckoutInvoiceStatus: getCheckoutInvoiceStatusMock } });
+    const getTransactionMock = jest.fn();
+    const { _testables } = loadModule(db, { atmosClientMock: { getTransaction: getTransactionMock } });
 
-    const result = await _testables.handleGetTariffPaymentStatus({ auth: { uid: "s1" }, data: { transactionId: "555" } });
+    const result = await _testables.handleGetTariffPaymentStatus({ auth: { uid: "s1" }, data: { transactionId: "manual_s1_1" } });
 
-    expect(result).toEqual({ status: "created", plan: "start", amountSom: 49000 });
-    expect(getCheckoutInvoiceStatusMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ status: "pending_review", plan: "start", amountSom: 49000 });
+    expect(getTransactionMock).not.toHaveBeenCalled();
+  });
+
+  test("method:'manual' VA admin rad etgan bo'lsa - 'rejected' holatini sababi bilan qaytaradi", async () => {
+    const db = buildMockDb({
+      atmosPayments: { manual_s1_1: { sellerId: "s1", plan: "start", status: "rejected", amountSom: 49000, method: "manual", rejectReason: "Kartaga pul tushmagan" } },
+    });
+    const { _testables } = loadModule(db);
+
+    const result = await _testables.handleGetTariffPaymentStatus({ auth: { uid: "s1" }, data: { transactionId: "manual_s1_1" } });
+
+    expect(result).toEqual({ status: "rejected", plan: "start", amountSom: 49000, rejectReason: "Kartaga pul tushmagan" });
   });
 });
 

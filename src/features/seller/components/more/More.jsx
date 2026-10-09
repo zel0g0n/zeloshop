@@ -15,6 +15,7 @@ import StatusModal from '@/components/ui/StatusModal';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import { getEffectiveTariffPlan } from '@/utils/tariffLimits';
 import BiznesBadge from '@/components/ui/BiznesBadge';
+import { useIsDesktop } from '@/hooks/useIsDesktop';
 
 // Z-Start tarifida MAVJUD BO'LMAGAN bo'limlar (2026-09 tarif bo'yicha
 // tozalash) — ushbu ID'ga ega elementlar Z-Pro/Z-Biznes uchun
@@ -37,7 +38,7 @@ const BIZNES_ONLY_IDS = new Set(['buyruq-markazi', 'automation-rules']);
 // "Tizimdan chiqish" tasdiqlashsiz to'g'ridan-to'g'ri ishlardi, va
 // bildirishnoma sozlamasi umuman yo'q edi.
 const MorePage = () => {
-  const { telegramUser, store } = useSession();
+  const { telegramUser, store, isWebSession, logout } = useSession();
   const { isDark } = useTheme();
   const { language, t } = useLanguage();
   const effectivePlan = getEffectiveTariffPlan(store);
@@ -48,6 +49,7 @@ const MorePage = () => {
   const [openModal, setOpenModal] = useState(null); // 'language' | 'theme' | null
   const [comingSoonName, setComingSoonName] = useState(null);
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
 
   const displayName = useMemo(() => {
     if (store?.storeName) return store.storeName;
@@ -141,6 +143,13 @@ const MorePage = () => {
   // "chiqish"ning IMKONSIZLIGINI yashiruvchi, aslida hech narsa
   // qilmaydigan kod edi. To'g'ri yechim - ILOVANI YOPISH.
   const handleLogout = () => {
+    // Brauzer (veb) sessiyasida chiqish HAQIQIY ishlaydi (Firebase
+    // `signOut` + Kirish sahifasiga qaytish) — Telegram Mini App'dan
+    // farqli o'laroq, bu yerda avtomatik qayta kirish yo'q.
+    if (isWebSession) {
+      logout();
+      return;
+    }
     const webApp = getTelegramWebApp();
     if (webApp?.close) {
       webApp.close();
@@ -151,8 +160,113 @@ const MorePage = () => {
 
 
 
+  const modals = (
+    <>
+      {openModal === 'language' && <LanguageModal onClose={() => setOpenModal(null)} />}
+      {openModal === 'theme' && <ThemeModal onClose={() => setOpenModal(null)} />}
+
+      {comingSoonName && (
+        <StatusModal
+          variant="info"
+          title={t("more.comingSoon")}
+          message={t("more.comingSoonMessage", { feature: comingSoonName })}
+          onClose={() => setComingSoonName(null)}
+        />
+      )}
+
+      {showLogoutConfirm && (
+        <ConfirmDialog
+          title={t("more.logoutConfirmTitle")}
+          message={isWebSession ? t("more.logoutConfirmMessageWeb") : t("more.logoutConfirmMessage")}
+          confirmLabel={t("more.logoutConfirmLabel")}
+          danger
+          onConfirm={handleLogout}
+          onCancel={() => setShowLogoutConfirm(false)}
+        />
+      )}
+    </>
+  );
+
+  if (isDesktop) {
+    const planLabel = isBiznes ? 'Z-Biznes' : isStart ? 'Z-Start' : 'Z-Pro';
+    return (
+      <div className="space-y-6 animate-fade-in pb-6">
+        <div>
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{t("more.pageTitle")}</h2>
+          <p className="text-sm font-medium text-slate-400 dark:text-slate-500 mt-1">{t("desktop.settingsSub")}</p>
+        </div>
+
+        <div className="grid grid-cols-12 gap-6 items-start">
+          <aside className="col-span-4 xl:col-span-3 sticky top-6 space-y-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-xs p-6 text-center">
+              <div className="mx-auto w-20 h-20 rounded-2xl bg-[#5346E0] text-white flex items-center justify-center overflow-hidden shadow-[0_10px_24px_rgba(83,70,224,0.28)]">
+                {store?.logo ? <img src={store.logo} alt={store.storeName} className="w-full h-full object-cover" /> : <Store size={30} />}
+              </div>
+              <h3 className="mt-4 text-lg font-black text-slate-900 dark:text-white truncate">{displayName}</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                {store?.category || t("more.defaultCategory")}{store?.phone ? ` · ${store.phone}` : ""}
+              </p>
+              <div className="mt-3 flex items-center justify-center gap-2">
+                <span className={`inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-1 rounded-full ${isActive ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400"}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isActive ? "bg-emerald-500" : "bg-rose-500"}`} />
+                  {isActive ? t("more.statusActive") : t("more.statusSuspended")}
+                </span>
+                <span className="text-[10px] font-black px-2.5 py-1 rounded-full bg-[#5346E0]/10 text-[#5346E0] dark:text-indigo-300">{planLabel}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/seller/store-settings')}
+                className="mt-5 w-full h-11 rounded-xl bg-[#5346E0] hover:bg-[#4338CA] text-white text-xs font-black flex items-center justify-center gap-2 transition-colors"
+              >
+                <Settings size={15} />{t("more.storeSettingsName")}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowLogoutConfirm(true)}
+              className="w-full h-11 rounded-xl border border-rose-100 dark:border-rose-500/20 text-rose-500 bg-white dark:bg-slate-900 text-xs font-bold flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors"
+            >
+              <LogOut size={15} />{t("more.logout")}
+            </button>
+          </aside>
+
+          <div className="col-span-8 xl:col-span-9 space-y-7">
+            {menuGroups.map((group, gi) => (
+              <section key={gi}>
+                <h3 className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">{group.title}</h3>
+                <div className="grid grid-cols-2 xl:grid-cols-3 gap-4">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleItemClick(item)}
+                        className="group text-left bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 shadow-xs hover:border-[#5346E0]/40 hover:shadow-md hover:-translate-y-0.5 transition-all"
+                      >
+                        <span className="w-11 h-11 rounded-xl bg-[#5346E0]/10 text-[#5346E0] dark:text-indigo-300 group-hover:bg-[#5346E0] group-hover:text-white flex items-center justify-center transition-colors">
+                          <Icon size={19} />
+                        </span>
+                        <h4 className="mt-4 text-sm font-black text-slate-800 dark:text-white flex items-center gap-1.5">
+                          <span className="truncate">{item.name}</span>
+                          {BIZNES_ONLY_IDS.has(item.id) && <BiznesBadge size="xs" />}
+                        </h4>
+                        <p className="mt-1 text-xs font-medium text-slate-400 dark:text-slate-500 line-clamp-2">{item.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        </div>
+        {modals}
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-md mx-auto bg-gray-50 dark:bg-slate-950 min-h-screen font-sans border-x border-gray-200 dark:border-slate-800 shadow-xl transition-colors duration-300 flex flex-col">
+    <div className="max-w-md lg:max-w-none mx-auto bg-gray-50 dark:bg-slate-950 min-h-screen font-sans border-x lg:border-x-0 border-gray-200 dark:border-slate-800 shadow-xl lg:shadow-none transition-colors duration-300 flex flex-col">
 
       <div className="shrink-0 p-4 bg-white/95 dark:bg-slate-900/95 sticky top-0 shadow-sm z-50">
         <h1 className="text-xl font-black text-gray-900 dark:text-white tracking-tight">{t("more.pageTitle")}</h1>
@@ -251,28 +365,7 @@ const MorePage = () => {
         </div>
       </div>
 
-      {openModal === 'language' && <LanguageModal onClose={() => setOpenModal(null)} />}
-      {openModal === 'theme' && <ThemeModal onClose={() => setOpenModal(null)} />}
-
-      {comingSoonName && (
-        <StatusModal
-          variant="info"
-          title={t("more.comingSoon")}
-          message={t("more.comingSoonMessage", { feature: comingSoonName })}
-          onClose={() => setComingSoonName(null)}
-        />
-      )}
-
-      {showLogoutConfirm && (
-        <ConfirmDialog
-          title={t("more.logoutConfirmTitle")}
-          message={t("more.logoutConfirmMessage")}
-          confirmLabel={t("more.logoutConfirmLabel")}
-          danger
-          onConfirm={handleLogout}
-          onCancel={() => setShowLogoutConfirm(false)}
-        />
-      )}
+      {modals}
     </div>
   );
 }

@@ -44,15 +44,44 @@ function initSentry() {
  * turlar uchun bu shunchaki `undefined` bo'lib qoladi, xatoga sabab
  * bo'lmaydi (optional chaining orqali xavfsiz).
  */
+// 2026-10-08: Sentry'da faqat HAQIQIY nosozliklar ko'rinsin. Quyidagi
+// HttpsError kodlari mijoz tomonidagi KUTILGAN holatlarni bildiradi
+// (masalan "tavsiya allaqachon hal qilingan", noto'g'ri argument,
+// ruxsat yo'q) - bu server xatosi emas, shuning uchun Sentry'ga
+// yuborilmaydi. Mijoz esa xatoni avvalgidek oladi. Server tomoni
+// kodlari (internal, unavailable, data-loss, unknown ...) va oddiy
+// `Error`lar HAMON yuboriladi. `unauthenticated` ATAYLAB bu ro'yxatda
+// YO'Q: noto'g'ri BOT_TOKEN kabi sozlama xatosi aynan shu kod bilan
+// ko'rinadi. Alohida kutilgan holatni `err.isExpected = true` bilan
+// belgilash mumkin.
+const EXPECTED_CLIENT_ERROR_CODES = new Set([
+  "invalid-argument",
+  "failed-precondition",
+  "not-found",
+  "already-exists",
+  "permission-denied",
+  "resource-exhausted",
+  "out-of-range",
+  "cancelled",
+]);
+
+function isExpectedClientError(err) {
+  if (!err) return false;
+  if (err.isExpected === true) return true;
+  // firebase-functions `HttpsError`da `code` (matn) va `httpErrorCode`
+  // (obyekt) bo'ladi; oddiy `Error`da `httpErrorCode` yo'q.
+  return typeof err.code === "string" && typeof err.httpErrorCode === "object" && EXPECTED_CLIENT_ERROR_CODES.has(err.code);
+}
+
 function withSentry(handler) {
   return async (...args) => {
     initSentry();
     try {
       return await handler(...args);
     } catch (err) {
-      if (initialized) {
-        // KENGAYTIRISH (2026-09-14): ba'zi xatolar (masalan Atmos
-        // validatsiya xatolari) diagnostika uchun qo'shimcha kontekst
+      if (initialized && !isExpectedClientError(err)) {
+        // KENGAYTIRISH (2026-09-14): ba'zi xatolar (masalan Telegram
+        // autentifikatsiya xatolari) diagnostika uchun qo'shimcha kontekst
         // (masalan yuborilgan to'liq JSON payload) qo'shib qo'yishi
         // mumkin - `err.extraContext` (oddiy obyekt) orqali. Bu Sentry
         // "Additional Data" bo'limida to'liq (xato XABARIGA qo'shilgan,
@@ -68,4 +97,4 @@ function withSentry(handler) {
   };
 }
 
-module.exports = { initSentry, withSentry, Sentry, SENTRY_DSN };
+module.exports = { initSentry, withSentry, isExpectedClientError, Sentry, SENTRY_DSN };

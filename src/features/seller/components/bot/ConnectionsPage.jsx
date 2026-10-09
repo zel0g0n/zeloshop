@@ -9,7 +9,7 @@ import { useSession } from "@/context/SessionContext";
 import { connectCustomBot, disconnectCustomBot } from "@/services/settings/customBot";
 import updateSeller from "@/services/sellers/updateSeller";
 import { buildShopLink } from "@/utils/shareLink";
-import { getTelegramWebApp } from "@/config/telegram";
+import { openTelegramLinkSafe } from "@/config/telegram";
 import StatusModal from "@/components/ui/StatusModal";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -60,13 +60,8 @@ const ConnectionsPage = () => {
         return;
       }
     }
-    const webApp = getTelegramWebApp();
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(shopLink)}&text=${encodeURIComponent(shareText)}`;
-    if (webApp?.openTelegramLink) {
-      webApp.openTelegramLink(shareUrl);
-    } else {
-      window.open(shareUrl, "_blank");
-    }
+    openTelegramLinkSafe(shareUrl);
   }, [shopLink, store, t, markShared]);
 
   // --- Shaxsiy bot ulash ---

@@ -1,15 +1,11 @@
 import { describe, test, expect, vi } from "vitest";
 
-// MUHIM (item 13, v39.15): `canDispatchYandex` endi platforma darajasidagi
-// `ATMOS_PAYMENT_CONNECTED` bayrog'iga ham bog'liq (hozircha `false` - Yandex
-// dispetcherlik vaqtincha o'chirilgan, chunki ATMOS to'lov integratsiyasi
-// hali ulanmagan). Bu fayl esa funksiyaning O'ZINING shart-mantiqini
-// (do'kon holati, mijoz koordinatasi, buyurtma bosqichi va h.k.) sinaydi -
-// shuning uchun bayroqni shu fayl doirasida `true` deb mock qilamiz, aks
-// holda "boshqa hamma shart bajarilsa true" testi doim yolg'on-manfiy
-// bo'lib qolardi. Bayroqning haqiqiy (production) qiymati bilan bog'liq
-// xatti-harakat alohida joyda (masalan UI darajasida) tekshiriladi.
-vi.mock("@/config/platformFlags", () => ({ ATMOS_PAYMENT_CONNECTED: true }));
+// `canDispatchYandex` platforma darajasidagi `YANDEX_DISPATCH_VISIBLE`
+// bayrog'iga ham bog'liq (2026-10-08 dan `true`). Bu fayl funksiyaning
+// O'ZINING shart-mantiqini sinaydi, shuning uchun bayroq qiymati mock
+// orqali qat'iy `true` qilib qo'yiladi - production qiymati o'zgarsa ham
+// testlar barqaror qoladi.
+vi.mock("@/config/platformFlags", () => ({ YANDEX_DISPATCH_VISIBLE: true }));
 
 import { canDispatchYandex, isCourierAssignedPending, isCourierActiveDelivery } from "./orderCourierLogic";
 

@@ -1,4 +1,4 @@
-import { ATMOS_PAYMENT_CONNECTED } from "@/config/platformFlags";
+import { YANDEX_DISPATCH_VISIBLE } from "@/config/platformFlags";
 
 /**
  * `OrderCard.jsx` (sotuvchi buyurtma kartochkasi)dagi kuryer/Yandex
@@ -10,17 +10,15 @@ import { ATMOS_PAYMENT_CONNECTED } from "@/config/platformFlags";
  */
 
 /**
- * Yandex Delivery chaqirish tugmasi FAQAT: ATMOS to'lov tizimi ulangan
- * (`ATMOS_PAYMENT_CONNECTED`, src/config/platformFlags.js - hozircha
- * `false`, chunki Yandex Delivery pulni platforma egasining o'z
- * balansidan yechadi), do'konda Yandex yoqilgan, mijoz manzili
+ * Yandex Delivery chaqirish tugmasi FAQAT: platforma bayrog'i yoqilgan
+ * (`YANDEX_DISPATCH_VISIBLE`, src/config/platformFlags.js), do'konda Yandex yoqilgan, mijoz manzili
  * (koordinatasi) bor, hali Yandex chaqirilmagan, HECH QANDAY shaxsiy
  * kuryer biriktirilmagan, va buyurtma "Yig'ilmoqda" bosqichida bo'lsa
  * ko'rinadi.
  */
 export const canDispatchYandex = (order, store) =>
   Boolean(
-    ATMOS_PAYMENT_CONNECTED &&
+    YANDEX_DISPATCH_VISIBLE &&
     store?.yandexDeliveryEnabled &&
     order?.customer?.location?.lat &&
     !order?.yandexClaimId &&
@@ -42,3 +40,24 @@ export const isCourierAssignedPending = (order) =>
  */
 export const isCourierActiveDelivery = (order) =>
   Boolean(order?.courierId && order?.courierDeliveryStatus === "picked_up");
+
+// Yandex'ning to'liq status ro'yxatidan, sotuvchiga TUSHUNARLI
+// qisqa yorliqlarga moslashtirilgan qism — barcha texnik holatlarni
+// emas, faqat eng muhim bosqichlarni ko'rsatamiz.
+export const YANDEX_STATUS_LABEL_KEYS = {
+  new: "yandexStatusSearching",
+  estimating: "yandexStatusSearching",
+  ready_for_approval: "yandexStatusSearching",
+  accepted: "yandexStatusSearching",
+  performer_lookup: "yandexStatusSearching",
+  performer_draft: "yandexStatusSearching",
+  performer_found: "yandexStatusCourierFound",
+  pickup_arrived: "yandexStatusCourierFound",
+  pickuped: "yandexStatusOnTheWay",
+  delivery_arrived: "yandexStatusOnTheWay",
+  delivered_finish: "yandexStatusDelivered",
+  cancelled: "yandexStatusCancelled",
+  cancelled_with_payment: "yandexStatusCancelled",
+  cancelled_by_taxi: "yandexStatusCancelled",
+  failed: "yandexStatusCancelled",
+};

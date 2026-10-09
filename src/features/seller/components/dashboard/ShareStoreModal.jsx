@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import { X, Check, Send } from "lucide-react";
 import { buildShopLink, buildSellerBotDeepLink } from "@/utils/shareLink";
-import { getTelegramWebApp } from "@/config/telegram";
+import { openTelegramLinkSafe } from "@/config/telegram";
 import { useLanguage } from "@/context/LanguageContext";
 import { useEscapeToClose } from "@/hooks/useEscapeToClose";
 
@@ -54,17 +54,11 @@ const ShareStoreModal = ({ sellerId, storeName, customBotUsername, onClose }) =>
         return;
       }
     }
-
-    const webApp = getTelegramWebApp();
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(shopLink)}&text=${encodeURIComponent(shareText)}`;
 
     // Telegram ichida bo'lsak, uning o'z "ulashish" ekranini ochamiz —
     // bu eng tabiiy, tanish tajriba beradi (kontakt/guruh tanlash).
-    if (webApp?.openTelegramLink) {
-      webApp.openTelegramLink(shareUrl);
-    } else {
-      window.open(shareUrl, "_blank");
-    }
+    openTelegramLinkSafe(shareUrl);
   };
 
   return (

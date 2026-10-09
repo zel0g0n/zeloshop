@@ -156,7 +156,7 @@ const OnboardingChecklist = ({ sellerId, store, dashboardSummary, onOpenShareMod
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 space-y-2">
+        <div className="px-4 pb-4 space-y-2 lg:space-y-0 lg:grid lg:grid-cols-2 xl:grid-cols-3 lg:gap-2">
           {steps.map((step) => (
             <StepRow key={step.key} step={step} label={t(`onboardingChecklist.steps.${step.key}`)} onActivate={handleActivate} />
           ))}

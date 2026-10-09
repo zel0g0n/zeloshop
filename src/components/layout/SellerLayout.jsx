@@ -1,7 +1,9 @@
 import { useState } from 'react'
-import { Outlet, Navigate, Link } from 'react-router-dom'
+import { Outlet, Navigate, Link, useLocation } from 'react-router-dom'
 import { ShieldAlert, CreditCard } from 'lucide-react'
 import SellerNavbar from './SellerNavbar'
+import SellerSidebar from './SellerSidebar'
+import SellerTopbar from './SellerTopbar'
 import PinLockScreen from '@/components/ui/PinLockScreen'
 import { useSession } from '@/context/SessionContext'
 import { isTariffPastDue } from '@/utils/tariffLimits'
@@ -28,7 +30,16 @@ import { isTariffPastDue } from '@/utils/tariffLimits'
 // "bo'sh"/xato ko'rinishdagi sahifa bo'lardi, toza yo'naltirish
 // o'rniga). Endi `isSeller`/`isAdmin` BO'LMAGAN har qanday
 // foydalanuvchi butun sotuvchi bo'limidan bosh sahifaga qaytariladi.
+// Kompyuter uchun ALOHIDA loyihalangan sahifalar — to'liq kenglikdagi
+// ish maydoni oladi; qolganlari markazlashtirilgan ustunda qoladi.
+const DESKTOP_DESIGNED_PATHS = new Set([
+  '/seller', '/seller/orders', '/seller/products', '/seller/functions',
+  '/seller/pnl', '/seller/crm', '/seller/marketing', '/seller/store-settings',
+])
+
 const SellerLayout = () => {
+  const { pathname } = useLocation();
+  const isDesktopPage = DESKTOP_DESIGNED_PATHS.has(pathname.replace(/\/+$/, '') || '/seller');
   const { security, isSeller, isAdmin, store } = useSession();
   const [unlocked, setUnlocked] = useState(
     () => sessionStorage.getItem("zeloshop_pin_unlocked") === "true"
@@ -60,8 +71,8 @@ const SellerLayout = () => {
     );
   }
 
-  // YANGI (2026-09): Atmos orqali haqiqiy pul bilan to'lanadigan
-  // tariflar tizimi. `isTariffPastDue` — sotuvchi 2026-09-11dan KEYIN
+  // YANGI (2026-09): to'lanadigan tariflar tizimi (to'lov hozircha
+  // qo'lda, chek orqali tasdiqlanadi). `isTariffPastDue` — sotuvchi 2026-09-11dan KEYIN
   // ro'yxatdan o'tgan (eski sotuvchilar butunlay "grandfathered" —
   // bepul Z-Start abadiy) VA 7 kunlik sinov/oxirgi to'lov muddati
   // tugagan bo'lsa TRUE qaytaradi. Bu yerda ATAYLAB faqat SOTUVCHI
@@ -100,9 +111,19 @@ const SellerLayout = () => {
   }
 
   return (
-    <div className='w-full h-full seller-layout'>
-      <main>
-        <Outlet/>
+    // RESPONSIVE (2026-10, veb-kirish): telefonda — pastki suzuvchi navbar
+    // (avvalgidek); lg+ (kompyuter) — chap yon panel (`SellerSidebar`) va
+    // markazlashtirilgan, cheklangan kenglikdagi kontent. Sahifalarning
+    // o'zi o'zgarmagan — ular shu ustun ichida to'liq kenglikda ishlaydi.
+    // Fon rangi shu yerda ham beriladi, shunda sahifa ustunidan tashqaridagi
+    // maydon (keng ekranda) sahifa fonidan farq qilmaydi.
+    <div className='w-full h-full seller-layout bg-[#F4F5F9] dark:bg-slate-950'>
+      <SellerSidebar/>
+      <main className='seller-main lg:pl-64 min-h-screen'>
+        <SellerTopbar/>
+        <div className={isDesktopPage ? 'lg:px-8 lg:py-6 lg:max-w-[1600px] lg:mx-auto' : 'md:max-w-2xl lg:max-w-3xl md:mx-auto lg:py-6'}>
+          <Outlet/>
+        </div>
       </main>
       <SellerNavbar/>
     </div>

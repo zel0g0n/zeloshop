@@ -106,8 +106,8 @@ const CouponsSection = () => {
   }, [remove]);
 
   return (
-    <div className="p-4 space-y-4">
-      <form onSubmit={handleCreate} className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs space-y-3">
+    <div className="p-4 space-y-4 lg:p-0 lg:pt-5 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-5 lg:items-start">
+      <form onSubmit={handleCreate} className="lg:col-span-5 lg:sticky lg:p-6 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs space-y-3">
         <div className="flex items-center gap-1.5 text-slate-400 dark:text-slate-500">
           <Tag size={13} />
           <h3 className="text-xs font-black uppercase tracking-wider">{t("marketing.newCouponTitle")}</h3>
@@ -195,7 +195,7 @@ const CouponsSection = () => {
         </button>
       </form>
 
-      <div className="space-y-2">
+      <div className="space-y-2 lg:col-span-7">
         <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1">{t("marketing.activeCouponsTitle")}</h3>
 
         {loading && <p className="text-center text-xs text-slate-400 dark:text-slate-500 py-6">{t("marketing.loading")}</p>}
@@ -264,7 +264,7 @@ const CouponsSection = () => {
           bir yozuv `functions/orders.js` tomonidan AVTOMATIK
           yangilanadi - bu yerda hech qanday qo'lda hisoblash yo'q. */}
       {!partnerStatsLoading && partnerStats.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2 lg:col-span-12">
           <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider px-1 flex items-center gap-1.5">
             <Megaphone size={13} /> {t("marketing.partnerStats.title")}
           </h3>

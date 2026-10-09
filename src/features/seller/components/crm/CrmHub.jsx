@@ -295,25 +295,25 @@ const CrmHub = () => {
   }, [title, message, bannerFile, buttonText, buttonUrl, couponCode, audienceTargetIds, sellerId, uploadImage]);
 
   return (
-    <div className="min-h-screen bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased pb-36">
+    <div className="min-h-screen lg:min-h-0 bg-[#F4F5F9] dark:bg-slate-950 lg:bg-transparent lg:dark:bg-transparent text-slate-900 dark:text-white font-sans antialiased pb-36 lg:pb-6">
 
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-950/95 px-4 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
-        <button type="button" onClick={() => navigate(-1)} className="p-1 text-slate-500 dark:text-slate-400 active:scale-95 transition-transform">
+      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-950/95 px-4 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3 lg:static lg:bg-transparent lg:dark:bg-transparent lg:border-0 lg:px-0 lg:pt-0 lg:pb-5">
+        <button type="button" onClick={() => navigate(-1)} className="lg:hidden p-1 text-slate-500 dark:text-slate-400 active:scale-95 transition-transform">
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+          <h1 className="text-base lg:text-2xl lg:tracking-tight font-black text-slate-900 dark:text-white flex items-center gap-1.5">
             {t("crmHub.title")} {isBiznes && <BiznesBadge size="xs" />}
           </h1>
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t("crmHub.subtitle")}</p>
         </div>
       </div>
 
-      <div className="p-4 space-y-5">
+      <div className="p-4 space-y-5 lg:p-0 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-5 lg:items-start">
 
         {/* TOP CRM METRICS */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-3 gap-2 lg:col-span-12 lg:gap-5 lg:[&>div]:p-5 lg:[&>div]:rounded-2xl lg:[&_p:last-child]:text-2xl lg:[&_p:last-child]:mt-1.5">
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3">
             <Users size={14} className="text-indigo-400 mb-1.5" />
             <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t("crmHub.totalCustomers")}</p>
@@ -335,7 +335,7 @@ const CrmHub = () => {
             juda ko'p mijozli sotuvchida (5000+) TAXMINIY ekanini
             ko'rsatadi — batafsil izoh `useCrmOrders.jsx`da. */}
         {isApproximate && (
-          <div className="text-xs text-amber-600 dark:text-amber-400 font-semibold bg-amber-50 dark:bg-amber-950/30 rounded-xl px-3 py-2">
+          <div className="lg:col-span-12 text-xs text-amber-600 dark:text-amber-400 font-semibold bg-amber-50 dark:bg-amber-950/30 rounded-xl px-3 py-2">
             {t("crmHub.approximateNotice")}
           </div>
         )}
@@ -344,16 +344,18 @@ const CrmHub = () => {
             tuzatishi: avval bu yerda IKKINCHI, dublikat ro'yxat ham bor
             edi — olib tashlandi, batafsil izoh yuqorida). Biznes
             bo'lmagan tarifda panel o'zi "yangilang" devorini ko'rsatadi. */}
-        <CustomerIntelligencePanel
-          data={intelligence.data}
-          loading={intelligence.loading}
-          error={intelligence.error}
-          refetch={intelligence.refetch}
-          isBiznes={isBiznes}
-        />
+        <div className="lg:col-span-7 min-w-0">
+          <CustomerIntelligencePanel
+            data={intelligence.data}
+            loading={intelligence.loading}
+            error={intelligence.error}
+            refetch={intelligence.refetch}
+            isBiznes={isBiznes}
+          />
+        </div>
 
         {/* TELEGRAM BROADCAST TERMINAL */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 space-y-3.5">
+        <div className="lg:col-span-5 lg:sticky bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 lg:p-6 space-y-3.5">
           <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t("crmHub.broadcastTitle")}</h3>
 
           <div className="space-y-1.5">

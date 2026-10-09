@@ -14,8 +14,8 @@
 
 ## 0. Eng muhim ogohlantirish — barcha AI xususiyatlar uchun umumiy muammo
 
-ZeloShop'da HALI HAM markazlashtirilgan to'lov tizimi yo'q (ATMOS
-kelishilmoqda, lekin ishga tushmagan). Bugungi kunda "buyurtma" — bu shunchaki
+ZeloShop'da HALI HAM markazlashtirilgan to'lov tizimi yo'q (hozircha onlayn
+to'lov tizimi ulanmagan, to'lovlar qo'lda chek bilan tasdiqlanadi). Bugungi kunda "buyurtma" — bu shunchaki
 Firestore'dagi yozuv, HAQIQIY to'lov tranzaksiyasi emas: mijoz sotuvchining
 o'z Click/Payme'siga to'laydi, bu to'lov ZeloShop tizimidan TASHQARIDA sodir
 bo'ladi. Demak:
@@ -30,7 +30,7 @@ bo'ladi. Demak:
 Bu — AI xususiyatlarni qurmaslik uchun sabab EMAS, lekin ularni qanday
 TAQDIM ETISH kerakligini butunlay o'zgartiradi: har bir raqam yonida
 "taxminiy" yoki "sizning kiritgan ma'lumotingiz asosida" degan halol
-belgi bo'lishi SHART. ATMOS ishga tushgach, bu raqamlar birinchi marta
+belgi bo'lishi SHART. onlayn to'lov tizimi ishga tushgach, bu raqamlar birinchi marta
 HAQIQIY bo'ladi — o'shanda "AI Sales OS" pozitsiyasi to'liq kuchga kiradi.
 Bu — 16 va 25-bo'limlarda qaytaraman.
 
@@ -39,7 +39,7 @@ Bu — 16 va 25-bo'limlarda qaytaraman.
 ## 1. Eng katta 5 ta muammo (hozirgi holat bo'yicha, halol)
 
 1. **Ma'lumot ishonchliligi** — yuqorida tushuntirilgan: revenue-asosidagi
-   har qanday AI da'vo, ATMOS'gacha, "taxminiy" ekanligi aniq ko'rsatilishi
+   har qanday AI da'vo, onlayn to'lov tizimigacha, "taxminiy" ekanligi aniq ko'rsatilishi
    kerak, aks holda birinchi noto'g'ri raqam butun "AI CEO" ishonchini
    buzadi.
 2. **Feature-sprawl, PMF isbotlanmagan traction'dan oldin** — kod tarixida
@@ -54,7 +54,7 @@ Bu — 16 va 25-bo'limlarda qaytaraman.
    ko'rsatkichi (necha kishi taklif havolasini bosdi → necha kishi
    ro'yxatdan o'tdi → necha kishi faol qoldi) yo'q. Bu — GTM bo'limida
    qaytariladi.
-4. **ATMOS — yagona eng katta blokировка nuqtasi** — chegirma-avtomatlashtirish,
+4. **Onlayn to'lov tizimining yo'qligi — yagona eng katta blokirovka nuqtasi** — chegirma-avtomatlashtirish,
    checkout-optimallashtirish, komissiya-asosidagi monetizatsiya — barchasi
    shunga bog'liq.
 5. **Yakka/kichik jamoa quvvati vs g'oyalar soni** — bu hujjatning o'zida 25
@@ -127,7 +127,7 @@ shu xususiyatning yaxshilangan versiyasi, noldan yangi konsepsiya emas.
 6. **Business value**: mavjud daromadni "ushlab qolish" — yangi mijoz
    jalb qilishdan doim arzonroq.
 7. **Revenue impact**: sanoat o'rtacha ko'rsatkichi bo'yicha 5–15%
-   qaytarish darajasi kutish mumkin (aniq raqam ATMOS'dan keyin
+   qaytarish darajasi kutish mumkin (aniq raqam onlayn to'lov tizimi ulangandan keyin
    o'lchanadi).
 8. **Implementation difficulty**: O'RTA — mavjud `engagementReminders.js`
    ustiga qurilgan, faqat bosqichlash mantig'i kengaytiriladi.
@@ -231,7 +231,7 @@ murakkabligi. Quyida — shu mezon bilan qayta tuzilgan ro'yxat.
    allaqachon boshlangan) — ERTA boshlagan tarmoq effektini keyinroq
    boshlagan hech kim tez quvib yeta olmaydi.
 4. **Mahalliy integratsiya "og'irligi"** — Yandex Delivery, kuryer tizimi,
-   (kelajakda) ATMOS, o'zbek tilidagi to'liq i18n — bularning HAR BIRI
+   (kelajakda) onlayn to'lov tizimi, o'zbek tilidagi to'liq i18n — bularning HAR BIRI
    o'ziga xos, "chiroyli emas lekin zarur" ish. Raqobatchi buni ko'chirishi
    MUMKIN, lekin bu OYLAB davom etadigan, jozibasiz ish — ko'pchilik startup
    buni "keyinroq" deb qoldiradi. ZeloShop buni ALLAQACHON qilgan.
@@ -362,7 +362,7 @@ kengaytmasi (2.1-band), abandoned cart 1-2 bosqich (2.2-band).
 
 **Phase 2 (3-6 oy, o'sish+avtomatlashtirish)**: Z-Bazar (marketpleys),
 repeat purchase engine (2.3-band), oddiy upsell/cross-sell (2.4-band),
-ATMOS integratsiyasi (agar tayyor bo'lsa).
+onlayn to'lov integratsiyasi (agar tayyor bo'lsa).
 
 **Phase 3 (6-12 oy, AI Sales OS + moat)**: platforma-darajasidagi A/B
 testlar (5-bo'lim), ko'p-sotuvchili benchmark ma'lumot mahsuloti
@@ -384,7 +384,7 @@ Growth Score (7-bo'lim, ehtiyotkorlik bilan).
 | 7 | Benchmark ma'lumot mahsuloti | Yuqori | Yuqori (ma'lumot yetarli bo'lishi kerak) | Yuqori | 7 |
 | 8 | Growth Score (ichki, coaching) | Past-O'rta | Past | Past | 8 |
 | 9 | Autopilot avtonomiya kengaytmasi | O'rta | Yuqori | O'rta | 9 |
-| 10 | ATMOS/komissiya-asosidagi monetizatsiya | Yuqori (lekin tashqi kompaniyaga bog'liq) | Yuqori | O'rta | (Sizning nazoratingizdan tashqarida — vaqt jadvalini ATMOS belgilaydi) |
+| 10 | to'lov tizimi/komissiya-asosidagi monetizatsiya | Yuqori (lekin tashqi kompaniyaga bog'liq) | Yuqori | O'rta | (Onlayn to'lov tizimi ulanishiga bog'liq) |
 
 ---
 
@@ -401,7 +401,7 @@ upsell (2.4, qoidaga asoslangan).
 
 **61-90 kun**: (a) birinchi natijalarni o'lchash va TO'XTATISH/DAVOM
 ETTIRISH qarorini qabul qilish (nima ishladi, nima ishlamadi — halol);
-(b) ATMOS holatiga qarab, komissiya-asosidagi monetizatsiyani
+(b) onlayn to'lov tizimi holatiga qarab, komissiya-asosidagi monetizatsiyani
 loyihalashtirish boshlash; (c) benchmark ma'lumot yig'ish infratuzilmasini
 (3-bo'lim #1) tayyorlash (foydalanish keyinroq).
 
@@ -413,13 +413,13 @@ Falsafangizga ("seller ko'proq topsa, biz ham topamiz") ENG mos model —
 **gibrid**: (a) past/bepul BAZA daraja (do'kon yaratish, asosiy buyurtma
 boshqaruvi — hech kimni chetlab qo'ymaslik uchun); (b) AI CEO (Pro) —
 oylik obuna YOKI referral orqali bepul (allaqachon qurilgan); (c) Z-Bazar
-orqali komissiya — FAQAT ATMOS ishga tushgach, chunki komissiya avtomatik
+orqali komissiya — FAQAT onlayn to'lov tizimi ishga tushgach, chunki komissiya avtomatik
 ushlab qolinishi kerak, qo'lda undirish oqilona emas.
 
 **Nega SOF "transaction fee" (har buyurtmadan foiz) HOZIRCHA yomon g'oya**:
 to'lov markazlashtirilmagan bo'lgani uchun, ZeloShop haqiqiy pul oqimini
 KO'RMAYDI — komissiyani "ishonchga asoslanib" undirish amaliy emas.
-Shuning uchun ATMOS'gacha, OBUNA (fiksed narx) — yagona ISHONCHLI
+Shuning uchun onlayn to'lov tizimigacha, OBUNA (fiksed narx) — yagona ISHONCHLI
 undiriladigan model.
 
 ---
@@ -477,13 +477,13 @@ soxta "faqat 2 dona qoldi" — butun ishonch kapitalini yo'q qiladi.
 ## 15. Yakuniy javob
 
 **Eng katta 5 muammo**: (1) revenue ma'lumoti hali tekshirilmagan
-(ATMOS'gacha), (2) feature-sprawl vs isbotlanmagan traction, (3)
-distribution rejasi hali tasdiqlanmagan, (4) ATMOS — asosiy blokировка,
+(onlayn to'lov tizimigacha), (2) feature-sprawl vs isbotlanmagan traction, (3)
+distribution rejasi hali tasdiqlanmagan, (4) onlayn to'lov tizimi — asosiy blokировка,
 (5) g'oyalar soni jamoa quvvatidan oshib ketgan.
 
 **Eng kuchli 10 opportunity** (ustuvorlik tartibida): 2.1 → 2.2 → 2.3 →
 Z-Bazar → 2.4 → platforma-A/B → benchmark-mahsulot → Growth Score →
-Autopilot-kengaytma → ATMOS-komissiya.
+Autopilot-kengaytma → to'lov-komissiya.
 
 **Eng kuchli 5 moat**: (1) Z-Bazar tarmoq effekti, (2) AI CEO
 switching-cost xotirasi, (3) mahalliy integratsiya chuqurligi, (4) har
@@ -499,7 +499,7 @@ tasdiqlangan sotuvchilar soni.
 **Positioning**: tashqi — "5 daqiqada do'kon, ko'proq sotish uchun";
 ichki — "Ko'proq soting"; "Sales OS" — kelajak uchun, hozir emas.
 
-**Monetizatsiya**: hozircha OBUNA (Pro daraja), ATMOS'dan keyin
+**Monetizatsiya**: hozircha OBUNA (Pro daraja), onlayn to'lov tizimi ulangandan keyin
 komissiya qo'shiladi.
 
 **GTM**: kosmetika, qo'lda birinchi 100, referral orqali 1000.

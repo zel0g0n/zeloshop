@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { Bike, Plus, Check, Send, Trash2, Loader2, X, PhoneCall } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { getTelegramWebApp } from "@/config/telegram";
+import { openTelegramLinkSafe } from "@/config/telegram";
 import { getCourierList } from "@/services/couriers/getCourierList";
 import { createCourierInvite, setCourierActive, removeCourier } from "@/services/couriers/courierManagement";
 import getOrderData from "@/services/orders/getOrderData";
@@ -133,13 +133,8 @@ const CourierManagementSection = () => {
         return;
       }
     }
-    const webApp = getTelegramWebApp();
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(newInviteLink)}&text=${encodeURIComponent(shareText)}`;
-    if (webApp?.openTelegramLink) {
-      webApp.openTelegramLink(shareUrl);
-    } else {
-      window.open(shareUrl, "_blank");
-    }
+    openTelegramLinkSafe(shareUrl);
   }, [newInviteLink, t]);
 
   // --- Faollashtirish/o'chirish ---

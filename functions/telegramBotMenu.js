@@ -4,12 +4,13 @@ const { checkRateLimit } = require("./lib/rateLimit");
 const { sendTelegramMessage, buildSellerAppLink } = require("./lib/helpers");
 const { buildDailyReport } = require("./aiCeo");
 const { isTariffPastDue } = require("./lib/tariffs");
+const { generateWebAppCredentials } = require("./webAppAuth");
 
 /**
  * Telegram bot "menyu" - platforma botida ("ZeloShop") ilgari faqat
  * "Do'konni ochish" (BotFather'da sozlangan Menu tugmasi) mavjud edi -
  * do'konni ochmasdan turib bajarish mumkin bo'lgan amal yo'q edi. Bu
- * fayl uchta yangi, Mini App'ni ochishni talab qilmaydigan (yoki
+ * fayl to'rtta yangi, Mini App'ni ochishni talab qilmaydigan (yoki
  * minimal talab qiladigan) amalni qo'shadi, hammasi sotuvchiga doimiy
  * ko'rinadigan Telegram "reply keyboard" (xabar kiritish maydoni
  * ustidagi tugmalar qatori, `setChatMenuButton`dan farqli - u yerda
@@ -24,7 +25,13 @@ const { isTariffPastDue } = require("./lib/tariffs");
  *      qayta ishlatiladi - yangi hisoblash yozilmaydi) darhol, Telegram
  *      xabari sifatida yuboradi.
  *
- *   3) "🤖 AI CEO bilan mahsulot qo'shish" - sotuvchi 4 tagacha rasm
+ *   3) "🔐 Veb login/parol" (2026-10) - sotuvchi panelini oddiy
+ *      brauzerda (Telegramsiz) ochish uchun maxsus login+parol juftligi
+ *      yaratadi va yuboradi (batafsil izoh: `webAppAuth.js`). Bosilgan sayin YANGI juftlik
+ *      yaratiladi (eskisi bekor qilinadi) - "parolni unutdim/yangilash"
+ *      alohida oqim shart emas, xuddi shu tugma buni ham qamrab oladi.
+ *
+ *   4) "🤖 AI CEO bilan mahsulot qo'shish" - sotuvchi 4 tagacha rasm
  *      yuboradi ("✅ Tayyor" bilan yakunlaydi yoki 4-rasmdan keyin
  *      avtomatik), bir marta yakuniy tasdiqlash so'raladi, va
  *      tasdiqlangach mahsulot qoralamasi `sellers/{id}/productDrafts`
@@ -73,6 +80,7 @@ const { isTariffPastDue } = require("./lib/tariffs");
 
 const MENU_NEW_ORDERS_TEXT = "🆕 Yangi buyurtmalar";
 const MENU_REPORT_TEXT = "📊 AI CEO hisobotlari";
+const MENU_APP_LOGIN_TEXT = "🔐 Veb login/parol";
 const MENU_ADD_PRODUCT_TEXT = "🤖 AI CEO bilan mahsulot qo'shish";
 const FINISH_TEXT = "✅ Tayyor";
 const CONFIRM_TEXT = "✅ Tasdiqlash";
@@ -89,7 +97,12 @@ const AI_PRODUCT_WINDOW_SECONDS = 24 * 60 * 60;
  */
 function buildMainMenuKeyboard() {
   return {
-    keyboard: [[{ text: MENU_NEW_ORDERS_TEXT }], [{ text: MENU_REPORT_TEXT }], [{ text: MENU_ADD_PRODUCT_TEXT }]],
+    keyboard: [
+      [{ text: MENU_NEW_ORDERS_TEXT }],
+      [{ text: MENU_REPORT_TEXT }],
+      [{ text: MENU_APP_LOGIN_TEXT }],
+      [{ text: MENU_ADD_PRODUCT_TEXT }],
+    ],
     resize_keyboard: true,
   };
 }
@@ -318,6 +331,48 @@ async function handleReportButton(token, sellerId, chatId) {
 }
 
 /**
+ * "🔐 Veb login/parol" tugmasi bosilganda - brauzerdagi sotuvchi paneli
+ * uchun YANGI login+parol juftligi yaratadi (`webAppAuth.js`dagi
+ * `generateWebAppCredentials`, eskisi bo'lsa avtomatik bekor
+ * qilinadi) va OCHIQ qiymatlarni (FAQAT shu bir martalik xabarda
+ * ko'rinadi - Firestore'da hech qachon ochiq saqlanmaydi) sotuvchiga
+ * yuboradi.
+ *
+ * ATAYLAB `isTariffPastDue` TEKSHIRILMAYDI: bu tugma - Mini App
+ * havolasining o'zi kabi - shunchaki ilovaga "kirish huquqi" beradi,
+ * hech qanday biznes ma'lumotini ochiq qilmaydi. To'lov muddati
+ * tugagan bo'lsa, xuddi veb versiyada bo'lgani kabi (`SellerLayout.jsx`),
+ * veb panel sotuvchi TIZIMGA KIRGANDAN KEYIN o'zi to'lov sahifasini
+ * ko'rsatadi - bu yerda oldindan bloklash noto'g'ri bo'lardi (aks
+ * holda sotuvchi hatto to'lov qilish uchun ham ilovaga kira olmasdi).
+ */
+async function handleAppLoginButton(token, sellerId, chatId) {
+  const sellerSnap = await db.collection("sellers").doc(sellerId).get();
+  if (!sellerSnap.exists) {
+    await sendReply(token, chatId, "Sotuvchi topilmadi.", buildMainMenuKeyboard());
+    return;
+  }
+
+  try {
+    const { login, password } = await generateWebAppCredentials(sellerId);
+    await sendTelegramMessage(
+      token, chatId,
+      `🔐 *ZeloShop veb login/parol*\n\n` +
+      `Sayt: ${buildSellerAppLink("/seller")}\n` +
+      `Login: \`${login}\`\n` +
+      `Parol: \`${password}\`\n\n` +
+      `Saytni brauzerda (kompyuter yoki telefon) oching va shu ma'lumotlarni kirish oynasiga kiriting. ` +
+      `Hech kimga bermang - bu orqali do'koningizni to'liq boshqarish mumkin. ` +
+      `Bu tugmani qayta bossangiz, YANGI juftlik yaratiladi va ESKISI ishlamay qoladi.`,
+      { replyMarkup: buildMainMenuKeyboard() }
+    );
+  } catch (err) {
+    console.error(`Bot orqali veb login/parol yaratishda xatolik (sotuvchi ${sellerId}):`, err);
+    await sendReply(token, chatId, "Login/parol yaratishda xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.", buildMainMenuKeyboard());
+  }
+}
+
+/**
  * "🤖 AI CEO bilan mahsulot qo'shish" tugmasi bosilganda - rasm
  * yig'ish sessiyasini boshlaydi. Sotuvchining o'zi sozlagan AI CEO
  * qayta ishlash soatini (`aiCeoDraftProcessHour`) sessiya hujjatiga
@@ -535,6 +590,10 @@ async function handleTelegramMessage(token, message) {
     await handleReportButton(token, sellerId, chatId);
     return;
   }
+  if (text === MENU_APP_LOGIN_TEXT) {
+    await handleAppLoginButton(token, sellerId, chatId);
+    return;
+  }
   if (text === MENU_ADD_PRODUCT_TEXT) {
     await handleAddProductButton(token, sellerId, chatId);
     return;
@@ -561,13 +620,13 @@ async function handleTelegramMessage(token, message) {
 }
 
 module.exports = {
-  MENU_NEW_ORDERS_TEXT, MENU_REPORT_TEXT, MENU_ADD_PRODUCT_TEXT, FINISH_TEXT, CONFIRM_TEXT, CANCEL_TEXT,
+  MENU_NEW_ORDERS_TEXT, MENU_REPORT_TEXT, MENU_APP_LOGIN_TEXT, MENU_ADD_PRODUCT_TEXT, FINISH_TEXT, CONFIRM_TEXT, CANCEL_TEXT,
   MAX_PHOTOS, MAX_AI_PRODUCTS_PER_DAY,
   buildMainMenuKeyboard, buildPhotoCollectionKeyboard, buildConfirmationKeyboard, pickLargestPhoto,
   formatDailyReportForTelegram, handleTelegramMessage,
   _testables: {
     downloadTelegramPhoto, uploadPhotoToStorage, formatHourLabel, sendPastDueReply,
-    handleReportButton, handleAddProductButton, handlePhotoMessage, handleCancelButton,
+    handleReportButton, handleAddProductButton, handleAppLoginButton, handlePhotoMessage, handleCancelButton,
     handleNewOrdersButton, handleFinishButton, handleConfirmButton,
   },
 };

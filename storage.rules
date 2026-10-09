@@ -133,8 +133,8 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == sellerId && isValidImageUpload();
     }
 
-    // To'lov cheki skrinshotlari (2026-09 punkt-royxati, 14-band): ATMOS
-    // hali ulanmagani uchun, mijoz "Karta orqali" to'lov usulini
+    // To'lov cheki skrinshotlari (2026-09 punkt-royxati, 14-band): avtomatik
+    // shlyuz yo'qligi uchun, mijoz "Karta orqali" to'lov usulini
     // tanlaganda, sotuvchining shaxsiy kartasiga o'tkazma qilgach, shu
     // to'lov chekining skrinshotini shu yerga yuklaydi — sotuvchi buni
     // buyurtmani tasdiqlashdan oldin ko'rib, pul tushganini tekshiradi.
@@ -144,8 +144,25 @@ service firebase.storage {
     match /payment-receipts/{sellerId}/{clientId}/{fileName} {
       allow read: if request.auth != null &&
         (request.auth.uid == sellerId || request.auth.uid == clientId ||
-         firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid)));
+         (request.auth.token.get("loginMethod", "") != "password" &&
+          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))));
       allow write: if request.auth != null && request.auth.uid == clientId && isValidImageUpload();
+    }
+
+    // TARIF TO'LOVI CHEK SKRINSHOTI (2026-09-25, `functions/
+    // manualTariffPayments.js` — "qo'lda tasdiqlash"): sotuvchi ZeloShop'ning O'Z kartasiga
+    // o'tkazma qilgach, shu to'lov chekining skrinshotini shu yerga
+    // yuklaydi — admin buni ko'rib chiqib, tasdiqlaydi/rad etadi
+    // (`AdminManualTariffPaymentsPage.jsx`). `payment-receipts` bilan
+    // AYNAN BIR XIL mantiq — MOLIYAVIY hujjat bo'lgani uchun ATAYLAB
+    // `allow read: if true` EMAS, faqat shu sotuvchining O'ZI
+    // (yuklovchi) va admin ko'ra oladi.
+    match /tariff-payment-receipts/{sellerId}/{fileName} {
+      allow read: if request.auth != null &&
+        (request.auth.uid == sellerId ||
+         (request.auth.token.get("loginMethod", "") != "password" &&
+          firestore.exists(/databases/(default)/documents/admins/$(request.auth.uid))));
+      allow write: if request.auth != null && request.auth.uid == sellerId && isValidImageUpload();
     }
 
     // MAHSULOT SHARHIGA BIRIKTIRILGAN RASMLAR — sharhlarning o'zi

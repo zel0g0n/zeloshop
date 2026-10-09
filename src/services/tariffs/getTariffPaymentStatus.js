@@ -2,13 +2,12 @@ import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase/config";
 
 /**
- * Sotuvchi Atmos checkout sahifasidan qaytgach (yoki sahifani qayta
- * ochib, "hali kutilmoqda" holatini yangilash uchun) — to'lov holatini
- * tekshiradi. Batafsil izoh: `functions/atmosPayments.js`dagi
+ * Sotuvchi o'z tarif to'lovining (qo'lda tasdiqlash, to'lov cheki)
+ * holatini so'raydi. Batafsil izoh: `functions/tariffPayments.js`dagi
  * `getTariffPaymentStatus`.
  *
- * @param {string|number} transactionId
- * @returns {Promise<{status: "created"|"paid", plan: string, paidUntilMs?: number, amountSom?: number}>}
+ * @param {string} transactionId - Firestore hujjat ID'si (`submitManualTariffPayment` qaytargan `paymentDocId`)
+ * @returns {Promise<{status: "paid"|"pending_review"|"rejected", plan: string, paidUntilMs?: number, amountSom?: number, rejectReason?: string|null}>}
  */
 const getTariffPaymentStatus = async (transactionId) => {
   const callable = httpsCallable(functions, "getTariffPaymentStatus");

@@ -4,7 +4,7 @@ import { ArrowLeft, Check, Send, Gift, Users, Sparkles } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
 import { buildSellerInviteLink } from "@/utils/shareLink";
-import { getTelegramWebApp } from "@/config/telegram";
+import { openTelegramLinkSafe } from "@/config/telegram";
 import getSellerReferrals from "@/services/sellers/getSellerReferrals";
 
 // MUHIM: bu qiymat `functions/sellerReferrals.js`dagi
@@ -68,15 +68,10 @@ const SellerReferralPage = () => {
   }, [inviteLink]);
 
   const handleShare = useCallback(() => {
-    const webApp = getTelegramWebApp();
     const shareText = t("sellerReferral.shareText");
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(inviteLink)}&text=${encodeURIComponent(shareText)}`;
 
-    if (webApp?.openTelegramLink) {
-      webApp.openTelegramLink(shareUrl);
-    } else {
-      window.open(shareUrl, "_blank");
-    }
+    openTelegramLinkSafe(shareUrl);
   }, [inviteLink, t]);
 
   // "subscribed" - taklif qilingan sotuvchining Pro obunasi admin
@@ -94,7 +89,7 @@ const SellerReferralPage = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] dark:bg-slate-950 pb-36 pt-4 transition-colors duration-300">
-      <div className="max-w-md mx-auto px-4 mb-6 flex items-center justify-between">
+      <div className="max-w-md lg:max-w-none mx-auto px-4 mb-6 flex items-center justify-between">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -105,7 +100,7 @@ const SellerReferralPage = () => {
         <h1 className="text-lg font-bold text-[#1e293b] dark:text-white flex-1 text-center mr-10">{t("sellerReferral.pageTitle")}</h1>
       </div>
 
-      <div className="max-w-md mx-auto px-4 space-y-4">
+      <div className="max-w-md lg:max-w-none mx-auto px-4 space-y-4">
         <div className="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-[28px] p-6 text-white text-center shadow-lg shadow-indigo-600/20">
           <div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center mx-auto mb-3">
             <Gift size={26} />

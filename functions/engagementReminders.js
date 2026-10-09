@@ -415,8 +415,8 @@ exports.sendRepurchaseReminders = onSchedule(
             sellerId: order.sellerId, clientId: order.clientId, type: "repurchaseReminder",
             title: "Qayta sotib olish taklifi", message: text,
             // Kelajakda "qaysi tsikl uzunligi ko'proq xarid keltirdi"
-            // kabi HAQIQIY tahlil qilish uchun - real ATMOS
-            // tranzaksiyalari bilan birga, statik taxminiy jadvalni
+            // kabi HAQIQIY tahlil qilish uchun - real xarid
+            // ma'lumotlari bilan birga, statik taxminiy jadvalni
             // (`lib/replenishmentCycles.js`) haqiqiy ma'lumot bilan
             // tekshirish/moslashtirish shu orqali bo'ladi.
             meta: { cycleDaysUsed: effectiveCycleDays },

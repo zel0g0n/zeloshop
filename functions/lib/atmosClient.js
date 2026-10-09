@@ -26,19 +26,26 @@ const { ProxyAgent } = require("undici");
  *      esa ZAXIRA reconciliation yo'li (`atmosPayments.js`dagi
  *      `getTariffPaymentStatus`).
  *
- * MUHIM, HALI TO'LIQ TASDIQLANMAGAN 2 nuqta (sandboxda tekshirish SHART,
+ * MUHIM, HALI TO'LIQ TASDIQLANMAGAN nuqta (sandboxda tekshirish SHART,
  * hujjat o'zi aniq ko'rsatmagan):
- *   a) `checkout/invoice/create`/`get` so'rovlarida FAQAT `Authorization:
- *      Bearer` sarlavhasi ko'rsatilgan (hujjat namunasida) — LEKIN shu
+ *   a) (2026-09-14 — 2026-09-15 orasida OCHIQ qolgan, ENDI SINALMOQDA)
+ *      `checkout/invoice/create`/`get` so'rovlarida hujjat NAMUNASIDA
+ *      FAQAT `Authorization: Bearer` sarlavhasi ko'rsatilgan — LEKIN shu
  *      bo'lim joylashgan "Эквайринг Visa/Mastercard (МПС)" bo'limining
  *      UMUMIY kirish qismida "партнеру выдается уникальный API ключ,
  *      который должен быть включен в любой запрос... в виде заголовка
- *      apikey" deyilgan. Bu ALOHIDA, karta-darajasidagi MPS-operatsiyalar
- *      (bind/create/apply) uchun berilgan kalit bo'lishi mumkin — pastdagi
- *      `ATMOS_API_KEY` esa BOSHQA maqsad uchun (Callback imzo tekshirish)
- *      ishlatiladi, shuning uchun bu yerda ATAYLAB ishlatilmadi (noto'g'ri
- *      taxmin qilmaslik uchun). Sandbox `checkout/invoice/create` chaqiruvi
- *      401/403 bilan qaytsa — BIRINCHI shu yerni tekshiring.
+ *      apikey" deyilgan. Oldin bu ALOHIDA, karta-darajasidagi MPS-operatsiyalar
+ *      (bind/create/apply) uchun berilgan kalit bo'lishi mumkin deb, ATAYLAB
+ *      qo'shilmagan edi — LEKIN barcha boshqa maydon-darajasidagi urinishlar
+ *      (store_id turi, package_code/mark_code, expiration_date, request_id
+ *      snake_case) bir xil umumiy "Invalid request format" xatosini
+ *      o'zgartirmagach, bu ENG YIRIK sinalmagan farq bo'lib qoldi.
+ *      2026-09-15'dan boshlab `atmosPostRaw` HAR BIR so'rovga (create HAM,
+ *      get HAM) `apikey` sarlavhasini (`ATMOS_API_KEY` qiymati bilan)
+ *      qo'shadi. Agar bu NOTO'G'RI kalit bo'lib chiqsa (masalan Callback
+ *      imzo kaliti checkout/invoice uchun yaroqsiz) — sandbox javobi
+ *      401/403'ga aylanishi yoki xato matni o'zgarishi kutiladi, bu esa
+ *      o'zi diagnostik foydali bo'ladi (hozirgi umumiy xato o'rniga).
  *   b) Callback body'dagi `invoice` maydoni ("идентификатор оплаченного
  *      инвойса") `checkout/invoice/create` javobidagi `payment_id` bilan
  *      BIR XIL deb TAXMIN qilingan (`atmosPayments.js`dagi webhook shu
@@ -54,12 +61,28 @@ const { ProxyAgent } = require("undici");
  *   2) foydalanuvchi `buildCheckoutUrl` havolasiga o'tkaziladi;
  *   3) xuddi yuqoridagidek, Callback API orqali tasdiqlanadi.
  *
- * ATAYLAB QO'SHILMAGAN: karta-raqam+OTP orqali to'g'ridan-to'g'ri API
- * chaqiruvi (`pay/pre-apply`+`pay/apply`), karta bog'lash (card
- * binding/card_token) — булар xom karta ma'lumotini bizning serverimiz
- * orqali o'tkazishni talab qiladi (PCI-ga yaqinroq xavfsizlik yuki) va
- * foydalanuvchi "qo'lda oyma-oy to'lash" qarorida (2026-09) buning
- * hojati yo'q.
+ * ATAYLAB QO'SHILMAGAN (PRODUCTIONGA — hali ham!): karta-raqam+OTP orqali
+ * to'g'ridan-to'g'ri API chaqiruvi (`pay/pre-apply`+`pay/apply`), karta
+ * bog'lash (card binding/card_token) — булар xom karta ma'lumotini
+ * bizning serverimiz orqali o'tkazishni talab qiladi (PCI-ga yaqinroq
+ * xavfsizlik yuki) va foydalanuvchi "qo'lda oyma-oy to'lash" qarorida
+ * (2026-09) buning hojati yo'q.
+ *
+ * 2026-09-18 QO'SHIMCHA (FAQAT DIAGNOSTIKA/TADQIQOT UCHUN): `checkout/
+ * invoice/create`ning OFD-`items` muammosini chetlab o'tish variantini
+ * baholash uchun pastda `bindCardInit`/`bindCardConfirm`/`listLinkedCards`/
+ * `removeLinkedCard` funksiyalari qo'shildi (Atmos hujjati: "Card Linking" +
+ * "Recurring Payments" bo'limi). MUHIM OGOHLANTIRISH — bu ATAYLAB
+ * qo'shilmagan narsani ataylab qo'shish: `bind-card/init` so'rovi HAQIQIY
+ * karta raqamini (`card_number`, 16 xonali) va amal qilish muddatini
+ * to'g'ridan-to'g'ri BIZNING serverimiz orqali Atmos'ga yuboradi — bu
+ * `checkout/invoice/create` (Atmos'ning O'Z sahifasi, biz karta ma'lumotini
+ * UMUMAN ko'rmaymiz) bilan solishtirganda PCI-DSS doirasini SEZILARLI
+ * kengaytiradi. Shu sababli bu funksiyalar `atmosProxyTest.js`da FAQAT
+ * admin-diagnostika sifatida (token bilan himoyalangan, productionda
+ * FOYDALANUVCHI oqimida ISHLATILMAYDI) qo'shildi — productionga chiqarish
+ * qarori ALOHIDA, ongli ravishda (va ehtimol PCI-DSS maslahatchisi bilan)
+ * qabul qilinishi kerak.
  *
  * STATIK-IP PROKSI HAQIDA (2026-09, TUZATILGAN xulosa): loyihada bir
  * marta (faqat Atmos'ning OMMAVIY texnik hujjatiga asoslanib) "statik
@@ -264,15 +287,33 @@ async function atmosPost(path, payload) {
  * BOSHQA shaklda bildiradi (`result` emas, `status` obyekti, VA
  * `code` qiymati ham boshqacha: "OK" yoki "0" — endpointga qarab).
  * Chaqiruvchi funksiya javob tanasini O'ZI tekshiradi.
+ *
+ * MUHIM QO'SHIMCHA (2026-09-15, uzoq davom etgan "Invalid request format"
+ * xatosidan keyin — YANGI gumon): fayl boshidagi izohda (a) bandida
+ * qayd etilganidek, hujjatning shu bo'lim ("Эквайринг Visa/Mastercard
+ * (МПС)") joylashgan UMUMIY kirish qismida "партнеру выдается
+ * уникальный API ключ, который должен быть включен в любой запрос...
+ * в виде заголовка apikey" deyilgan — LEKIN bu HECH QACHON qo'shilmagan
+ * edi (faqat `Authorization: Bearer` yuborilgan). Barcha maydon-darajasidagi
+ * tuzatishlar (store_id turi, package_code/mark_code, expiration_date,
+ * request_id snake_case) AYNAN BIR XIL umumiy xatoni o'zgartirmagani
+ * uchun — bu, hali sinalmagan, ENG YIRIK qolgan farq. Endi `ATMOS_API_KEY`
+ * (avval faqat Callback imzosini tekshirish uchun ishlatilgan) shu
+ * sarlavha sifatida HAM yuborilmoqda. TASDIQLANMAGAN: agar bu ikkita
+ * BOSHQA-BOSHQA kalit bo'lib chiqsa (masalan Callback imzo kaliti
+ * checkout/invoice uchun yaroqsiz), buni sandbox javobidan (401/403
+ * yoki xato matni o'zgarishi) bilib olamiz.
  */
 async function atmosPostRaw(path, payload) {
   const accessToken = await getAccessToken();
+  const apiKey = trimAtmosValue(ATMOS_API_KEY.value());
   const dispatcher = getProxyDispatcher();
   const response = await fetch(`${ATMOS_API_BASE}${path}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
+      ...(apiKey ? { apikey: apiKey } : {}),
     },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -417,10 +458,19 @@ async function getCheckoutInvoiceStatus({ paymentId, token } = {}) {
  * uchun (va mavjud testlar sababli) olib tashlanmagan.
  *
  * Черновik tranzaksiya yaratadi (`/merchant/pay/create`).
- * @param {{amountSom: number, account: string, lang?: string}} params
+ *
+ * `cardToken` (IXTIYORIY, 2026-09-18 qo'shildi) — `bindCardConfirm`dan
+ * olingan bog'langan-karta tokeni berilsa, Atmos hujjatiga ko'ra bu
+ * tranzaksiya kartadan OTP/checkout-sahifasiz to'g'ridan-to'g'ri
+ * (rekurrent/avtomatik) yechib olinishi KUTILADI — LEKIN bu HALI
+ * sandboxda tasdiqlanmagan (ehtimol qo'shimcha `pay/pre-apply`+`pay/apply`
+ * bosqichi kerak bo'lib qolishi mumkin — hujjat bu ikkisining o'zaro
+ * bog'lanishini aniq ko'rsatmagan). Diagnostika shuni tekshiradi.
+ *
+ * @param {{amountSom: number, account: string, lang?: string, cardToken?: string}} params
  * @returns {Promise<{transactionId: number}>}
  */
-async function createTransaction({ amountSom, account, lang = "uz" }) {
+async function createTransaction({ amountSom, account, lang = "uz", cardToken }) {
   if (!Number.isFinite(amountSom) || amountSom <= 0) {
     throw new Error("createTransaction: amountSom musbat son bo'lishi kerak.");
   }
@@ -432,12 +482,15 @@ async function createTransaction({ amountSom, account, lang = "uz" }) {
     throw new Error("ATMOS_STORE_ID sozlanmagan (firebase functions:secrets:set).");
   }
 
-  const body = await atmosPost("/merchant/pay/create", {
+  const payload = {
     amount: Math.round(amountSom * 100), // so'm -> tiyin
     account: String(account),
     store_id: storeId,
     lang,
-  });
+  };
+  if (cardToken) payload.card_token = cardToken;
+
+  const body = await atmosPost("/merchant/pay/create", payload);
 
   const transactionId = body?.transaction_id;
   if (!transactionId) {
@@ -469,6 +522,79 @@ async function getTransaction({ transactionId }) {
     statusMessage: body?.store_transaction?.status_message || null,
     raw: body,
   };
+}
+
+/**
+ * KARTA BOG'LASH, BOSQICH 1 (`/partner/bind-card/init`) — FAQAT
+ * DIAGNOSTIKA/TADQIQOT uchun (fayl boshidagi 2026-09-18 izohiga qarang).
+ * Karta egasining haqiqiy karta raqami/amal qilish muddatini Atmos'ga
+ * yuboradi; Atmos kartaga bog'liq telefon raqamiga SMS-kod (`otp`)
+ * yuboradi va operatsiya identifikatorini (`transaction_id`) qaytaradi.
+ *
+ * XAVFSIZLIK: `cardNumber` HECH QACHON `console.error`/log/Sentry'ga
+ * yozilmasin — chaqiruvchi kod (`atmosProxyTest.js`) buni ta'minlaydi.
+ *
+ * @param {{cardNumber: string, expiry: string}} params `expiry` — "YYmm".
+ * @returns {Promise<{transactionId: number, phone: string|null}>}
+ */
+async function bindCardInit({ cardNumber, expiry }) {
+  if (!cardNumber || !expiry) {
+    throw new Error("bindCardInit: cardNumber va expiry talab qilinadi.");
+  }
+  const body = await atmosPost("/partner/bind-card/init", {
+    card_number: String(cardNumber),
+    expiry: String(expiry),
+  });
+  const transactionId = body?.transaction_id;
+  if (!transactionId) {
+    throw new Error("Atmos bindCardInit: javobda transaction_id yo'q.");
+  }
+  return { transactionId, phone: body?.phone || null };
+}
+
+/**
+ * KARTA BOG'LASH, BOSQICH 2 (`/partner/bind-card/confirm`) — karta
+ * egasi SMS orqali olgan kodni tasdiqlaydi; muvaffaqiyatli bo'lsa,
+ * Atmos doimiy `card_token` qaytaradi (bu token orqali keyinchalik
+ * `card_token`ni `createTransaction`ga berib, qayta-qayta yechib olish
+ * mumkin bo'ladi — OTP/karta raqami QAYTA so'ralmaydi).
+ *
+ * @param {{transactionId: number|string, otp: string}} params
+ * @returns {Promise<{cardToken: string|null, raw: object}>}
+ */
+async function bindCardConfirm({ transactionId, otp }) {
+  if (!transactionId || !otp) {
+    throw new Error("bindCardConfirm: transactionId va otp talab qilinadi.");
+  }
+  const body = await atmosPost("/partner/bind-card/confirm", {
+    transaction_id: transactionId,
+    otp: String(otp),
+  });
+  return { cardToken: body?.data?.card_token || null, raw: body?.data || null };
+}
+
+/**
+ * Bog'langan kartalar ro'yxatini so'raydi (`/partner/list-cards`) —
+ * diagnostika/tozalash (test kartani keyin o'chirish uchun topish) uchun.
+ */
+async function listLinkedCards({ page, pageSize } = {}) {
+  const payload = {};
+  if (page) payload.page = page;
+  if (pageSize) payload.page_size = pageSize;
+  const body = await atmosPost("/partner/list-cards", payload);
+  return body?.cardDataSmallList || [];
+}
+
+/**
+ * Bog'langan kartani o'chiradi (`/partner/remove-card`) — diagnostika
+ * paytida yaratilgan test-tokenlarni tozalash uchun.
+ */
+async function removeLinkedCard({ cardToken }) {
+  if (!cardToken) {
+    throw new Error("removeLinkedCard: cardToken talab qilinadi.");
+  }
+  await atmosPost("/partner/remove-card", { card_token: cardToken });
+  return { success: true };
 }
 
 /**
@@ -526,6 +652,10 @@ module.exports = {
   createTransaction,
   getTransaction,
   buildCheckoutUrl,
+  bindCardInit,
+  bindCardConfirm,
+  listLinkedCards,
+  removeLinkedCard,
   computeCallbackSign,
   verifyCallbackSign,
   _testables: { assertOk, ATMOS_API_BASE, CHECKOUT_BASE_PRODUCTION, CHECKOUT_BASE_SANDBOX, getProxyDispatcher },

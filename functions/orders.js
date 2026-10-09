@@ -46,7 +46,7 @@ async function handleCreateOrder(request) {
     throw new HttpsError("invalid-argument", "Mijoz ma'lumotlari to'liq emas.");
   }
 
-  // ATMOS hali ulanmagani uchun (2026-09 punkt-royxati, 14-band) —
+  // Platformada avtomatik to'lov shlyuzi yo'q (2026-09 punkt-royxati, 14-band) —
   // mijoz "Karta orqali" (`paymentMethod: "card"`) to'lovni tanlagan
   // bo'lsa, sotuvchining shaxsiy kartasiga o'tkazma qilib, TO'LOV
   // CHEKI SKRINSHOTINI albatta biriktirishi shart — aks holda sotuvchi

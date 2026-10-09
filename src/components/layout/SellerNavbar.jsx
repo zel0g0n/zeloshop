@@ -63,7 +63,7 @@ const SellerNavbar = () => {
 
   return (
     <div
-      className={`fixed bottom-4 left-0 right-0 z-40 transition-transform duration-200 ${
+      className={`lg:hidden fixed bottom-4 left-0 right-0 z-40 transition-transform duration-200 ${
         isKeyboardVisible ? "translate-y-[calc(100%+2rem)]" : "translate-y-0"
       }`}
     >

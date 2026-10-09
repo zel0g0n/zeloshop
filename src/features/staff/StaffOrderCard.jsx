@@ -6,9 +6,12 @@ import changeOrderStatus from "@/services/orders/changeOrderStatus";
 import { getOrderStatusInfo, NEXT_STATUS_ACTION, CAN_CANCEL_STATUSES } from "@/constants/orderStatus";
 import { formatRelativeTime } from "@/utils/relativeTime";
 import { assignOrderToCourier, resendTrackingLink } from "@/services/couriers/courierManagement";
-import { isCourierAssignedPending, isCourierActiveDelivery } from "@/utils/orderCourierLogic";
+import { httpsCallable } from "firebase/functions";
+import { functions } from "@/firebase/config";
+import { canDispatchYandex, isCourierAssignedPending, isCourierActiveDelivery, YANDEX_STATUS_LABEL_KEYS } from "@/utils/orderCourierLogic";
 import CancelReasonModal from "@/features/seller/components/order/CancelReasonModal";
 import CourierPickerModal from "@/features/seller/components/order/CourierPickerModal";
+import YandexTariffModal from "@/features/seller/components/order/YandexTariffModal";
 
 // Sotuvchi tomonidagi `sellerOrders.*` bilan bir xil - kuryer holati
 // yorlig'i uchun (qarang: `OrderCard.jsx`dagi izoh).
@@ -22,9 +25,11 @@ const COURIER_DELIVERY_STATUS_LABEL_KEYS = {
 /**
  * `order/OrderCard.jsx`ning xodim Mini App'i uchun LEAN nusxasi.
  *
- * ATAYLAB OLIB TASHLANGAN: Yandex kuryer chaqirish (bu ATAYLAB
- * BUTUN platformada o'chirilgan — `src/config/platformFlags.js`,
- * 13-band). Shaxsiy kuryerga biriktirish esa ENDI (2026-09
+ * YANDEX (2026-10-08): Yandex kuryer chaqirish endi xodimga ham
+ * ochiq - lekin FAQAT `manageCouriers` ruxsati bo'lsa (backend
+ * `dispatchYandexDelivery` ham shuni qayta tekshiradi). Holatni
+ * kuzatish/bekor qilish sahifasi xodim ilovasida yo'q - bu yerda
+ * faqat joriy holat matni ko'rsatiladi. Shaxsiy kuryerga biriktirish esa ENDI (2026-09
  * punkt-royxati, 3/10-bandlar) MAVJUD — lekin FAQAT `manageCouriers`
  * ruxsatiga ega xodimga (`canManageCouriers` prop).
  *
@@ -42,7 +47,7 @@ const COURIER_DELIVERY_STATUS_LABEL_KEYS = {
  * xizmatining O'ZI to'g'ridan-to'g'ri chaqiriladi — xodim Mini App'ida
  * Redux `store` mavjud emas.
  */
-const StaffOrderCard = ({ order, orderNumber, canManageCouriers = false, couriers = [], staffId = null, staffName = null }) => {
+const StaffOrderCard = ({ order, orderNumber, canManageCouriers = false, couriers = [], staffId = null, staffName = null, store = null }) => {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const statusInfo = getOrderStatusInfo(order.status);
@@ -60,6 +65,9 @@ const StaffOrderCard = ({ order, orderNumber, canManageCouriers = false, courier
   const [showCourierPickerModal, setShowCourierPickerModal] = useState(false);
   const [courierAssigning, setCourierAssigning] = useState(false);
   const [courierError, setCourierError] = useState(null);
+  const [showYandexTariffModal, setShowYandexTariffModal] = useState(false);
+  const [yandexDispatching, setYandexDispatching] = useState(false);
+  const [yandexError, setYandexError] = useState(null);
   const [resendPending, setResendPending] = useState(false);
   const [resendError, setResendError] = useState(null);
   const [resendSuccess, setResendSuccess] = useState(false);
@@ -109,6 +117,24 @@ const StaffOrderCard = ({ order, orderNumber, canManageCouriers = false, courier
     }
     handleAdvanceStatus();
   };
+
+  const handleDispatchYandex = async (taxiClass) => {
+    setShowYandexTariffModal(false);
+    setYandexDispatching(true);
+    setYandexError(null);
+    try {
+      const dispatch = httpsCallable(functions, "dispatchYandexDelivery");
+      await dispatch({ orderId: order.id, taxiClass });
+    } catch (err) {
+      setYandexError(err.message || t("sellerOrders.yandexDispatchError"));
+    } finally {
+      setYandexDispatching(false);
+    }
+  };
+
+  // Faqat `manageCouriers` ruxsatli xodimga (sotuvchidagi bilan bir xil
+  // shart-mantiq - `canDispatchYandex`).
+  const canDispatch = canManageCouriers && canDispatchYandex(order, store);
 
   const handleAssignCourier = async (courierId) => {
     if (courierAssigning) return;
@@ -293,6 +319,18 @@ const StaffOrderCard = ({ order, orderNumber, canManageCouriers = false, courier
           </div>
 
           <div className="space-y-2 pt-1">
+            {order.yandexClaimId && (
+              <div className="bg-blue-50 dark:bg-blue-500/10 rounded-xl p-3 flex items-center gap-2">
+                <Truck size={15} className="text-blue-600 dark:text-blue-400 shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] font-bold text-blue-700 dark:text-blue-400 uppercase tracking-wide">{t("sellerOrders.yandexDeliveryLabel")}</p>
+                  <p className="text-xs font-bold text-blue-800 dark:text-blue-300">
+                    {t(`sellerOrders.${YANDEX_STATUS_LABEL_KEYS[order.yandexStatus] || "yandexStatusSearching"}`)}
+                  </p>
+                </div>
+              </div>
+            )}
+            {canDispatch && yandexError && <p className="text-[11px] text-rose-500 font-semibold">{yandexError}</p>}
             {actionError && <p className="text-[11px] text-rose-500 font-semibold">{actionError}</p>}
             {courierError && <p className="text-[11px] text-rose-500 font-semibold">{courierError}</p>}
             {(courierAssignedPending || courierActiveDelivery) && resendError && <p className="text-[11px] text-rose-500 font-semibold">{resendError}</p>}
@@ -352,6 +390,17 @@ const StaffOrderCard = ({ order, orderNumber, canManageCouriers = false, courier
               </>
             ) : (
               <div className="flex items-center gap-2">
+                {canDispatch && (
+                  <button
+                    type="button"
+                    onClick={() => setShowYandexTariffModal(true)}
+                    disabled={yandexDispatching}
+                    className="flex-1 py-2.5 bg-[#514be3] hover:bg-[#433cc7] text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 dark:shadow-none disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  >
+                    {yandexDispatching ? <Loader2 size={13} className="animate-spin" /> : <Truck size={13} />}
+                    {yandexDispatching ? t("sellerOrders.yandexDispatching") : t("sellerOrders.yandexDispatchButton")}
+                  </button>
+                )}
                 {nextAction && (
                   <button
                     onClick={handlePrimaryAction}
@@ -382,6 +431,14 @@ const StaffOrderCard = ({ order, orderNumber, canManageCouriers = false, courier
           busy={pendingAction}
           onConfirm={handleConfirmCancel}
           onClose={() => setShowCancelModal(false)}
+        />
+      )}
+
+      {showYandexTariffModal && (
+        <YandexTariffModal
+          busy={yandexDispatching}
+          onSelect={handleDispatchYandex}
+          onClose={() => setShowYandexTariffModal(false)}
         />
       )}
 

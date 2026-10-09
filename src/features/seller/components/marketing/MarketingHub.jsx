@@ -54,13 +54,13 @@ const MarketingHub = () => {
   });
 
   return (
-    <div className="min-h-screen bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased pb-36 transition-colors duration-300">
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center gap-3">
-        <button type="button" onClick={() => navigate(-1)} className="p-1 text-slate-500 dark:text-slate-300 active:scale-95 transition-transform">
+    <div className="min-h-screen lg:min-h-0 bg-[#F4F5F9] dark:bg-slate-950 lg:bg-transparent lg:dark:bg-transparent text-slate-900 dark:text-white font-sans antialiased pb-36 lg:pb-6 transition-colors duration-300">
+      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center gap-3 lg:static lg:bg-transparent lg:dark:bg-transparent lg:shadow-none lg:px-0 lg:pt-0 lg:pb-5">
+        <button type="button" onClick={() => navigate(-1)} className="lg:hidden p-1 text-slate-500 dark:text-slate-300 active:scale-95 transition-transform">
           <ArrowLeft size={20} />
         </button>
         <div className="flex-1 min-w-0">
-          <h1 className="text-base font-black text-slate-800 dark:text-white truncate">{t("marketing.title")}</h1>
+          <h1 className="text-base lg:text-2xl lg:tracking-tight font-black text-slate-800 dark:text-white truncate">{t("marketing.title")}</h1>
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider truncate">{t("marketing.subtitle")}</p>
         </div>
         <button
@@ -73,8 +73,8 @@ const MarketingHub = () => {
         </button>
       </div>
 
-      <div className="p-4 pb-0">
-        <div className="grid grid-cols-3 gap-1.5 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+      <div className="p-4 pb-0 lg:p-0">
+        <div className="grid grid-cols-3 gap-1.5 lg:max-w-lg bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={() => setActiveTab("coupons")}

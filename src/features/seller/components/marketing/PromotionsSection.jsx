@@ -220,8 +220,8 @@ const PromotionsSection = () => {
       : { discountPrice: product.discountPrice, discountExpiresAt: product.discountExpiresAt };
 
   return (
-    <div className="p-4 space-y-2.5">
-      <div className="relative">
+    <div className="p-4 space-y-2.5 lg:p-0 lg:pt-5 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">
+      <div className="relative lg:col-span-2 lg:max-w-md">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
         <input
           value={search}

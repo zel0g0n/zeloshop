@@ -1,5 +1,5 @@
 /**
- * Platforma darajasidagi vaqtinchalik ON/OFF kalitlar.
+ * Platforma darajasidagi ON/OFF kalitlar.
  *
  * Bu yerdagi bayroqlar - kod ichida tarqoq shart yozishdan ko'ra, BITTA
  * markazlashgan joyda boshqarish uchun. Har birining nima uchun
@@ -8,17 +8,12 @@
  */
 
 /**
- * ATMOS to'lov tizimi hali ulanmagan (2026-08). Shu sababli:
- *  - Yandex Delivery kuryer chaqirish tugmasi seller buyurtma
- *    boshqaruvida YASHIRILADI - chunki Yandex Delivery pulni
- *    to'g'ridan-to'g'ri platforma egasining (Alisher) o'z Yandex
- *    balansidan yechib oladi, ATMOS orqali avtomatik hisob-kitob
- *    bo'lmagani uchun bu hozircha xavfli/nazoratsiz.
- *  - Online (karta) to'lov - ATMOS emas, "qo'lda karta" oqimi orqali
- *    ishlaydi (seller kartasiga o'tkazma + chek skrinshoti).
- *
- * ATMOS ulangandan keyin bu qiymatni `true`ga o'zgartirish kifoya -
- * Yandex tugmasi avtomatik qayta ko'rinadi (`canDispatchYandex`
- * shartiga bog'langan, src/utils/orderCourierLogic.js).
+ * Yandex Delivery kuryer chaqirish tugmasi (sotuvchi va ruxsatli xodim
+ * buyurtma kartochkasida) ko'rinadimi. Har bir sotuvchi Yandex Delivery
+ * hisobini O'ZI yaratadi va "Yetkazib berish" sozlamalarida O'Z tokenini
+ * ulaydi - Yandex puli shu sotuvchining o'z hisobidan yechiladi, ZeloShop
+ * platformasida hech qanday pul aylanmasi yo'q. Tugma baribir faqat
+ * do'konda Yandex yoqilgan, mijozning koordinatasi bor va buyurtma
+ * "Yig'ilmoqda" bosqichida bo'lsagina ko'rinadi. Yashirish uchun: `false`.
  */
-export const ATMOS_PAYMENT_CONNECTED = false;
+export const YANDEX_DISPATCH_VISIBLE = true;

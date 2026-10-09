@@ -25,7 +25,7 @@ export const TARIFF_LIMITS = {
 export const TRIAL_DAYS = 7;
 export const NEXT_TRIAL_TIER = { start: "pro", pro: "biznes" };
 
-// HAQIQIY TO'LOV (ATMOS, 2026-09) — `functions/lib/tariffs.js`ning
+// TARIF TO'LOVI (2026-09) — `functions/lib/tariffs.js`ning
 // ko'zgusi, IKKALASI ham BIR XIL qiymatda ushlanishi SHART. Batafsil
 // izoh — backend faylida.
 export const TARIFF_MONTHLY_PRICE_SOM = { start: 49000, pro: 199000 };
@@ -146,7 +146,7 @@ export function isTariffPastDue(store, nowMs = Date.now()) {
 }
 
 /**
- * Bu tarifni HAQIQIY (Atmos orqali avtomatik) pulga sotib olish
+ * Bu tarifni to'lov orqali sotib olish
  * mumkinmi. Hozircha faqat Z-Start/Z-Pro.
  */
 export function isTariffPurchasable(plan) {

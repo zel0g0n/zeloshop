@@ -5,7 +5,7 @@
 > bilan ishlaydigan, DROPSHIPPING uslubidagi do'kon. Mijoz faqat "Alisherning
 > katta do'koni"ni ko'radi, qaysi sotuvchidan ekanini katalogda BILMAYDI;
 > buyurtma esa to'g'ridan-to'g'ri haqiqiy sotuvchining ZeloShop hisobiga
-> tushadi. Narxga ustama/komissiya va ATMOS HALI HAM bu bosqichga KIRITILMAGAN
+> tushadi. Narxga ustama/komissiya va onlayn to'lov HALI HAM bu bosqichga KIRITILMAGAN
 > (5-bo'limga qarang) — to'lov hozirgidek, mijoz va sotuvchi o'rtasida.
 
 ## 1. Model — qisqacha
@@ -98,9 +98,9 @@ Savatga kirilganda:
 
 **Muhim cheklov**: hozircha HAQIQIY SUBSIDIYA (masalan "ikkinchi yetkazib
 berish bepul") YO'Q — bunday chegirma komissiya daromadidan
-moliyalashtirilishi kerak, komissiya esa hali yo'q (ATMOS kutilmoqda).
+moliyalashtirilishi kerak, komissiya esa hali yo'q (onlayn to'lov tizimi hozircha yo'q).
 Shuning uchun bu bosqichdagi "optimal yechim" — FAQAT shaffoflik va
-maslahat, real chegirma emas. Real subsidiya — ATMOS/komissiya paydo
+maslahat, real chegirma emas. Real subsidiya — to'lov tizimi/komissiya paydo
 bo'lgach qo'shiladigan keyingi qadam.
 
 ### 3.3 Checkout (buyurtma berish)
@@ -119,7 +119,7 @@ ko'radi va bajaradi, Alisher hech narsaga aralashmaydi.
 
 Kichik, deyarli bepul qo'shimcha: har bir shunday yaratilgan buyurtmaga
 `orderSource: "marketplace"` maydoni yoziladi — hozircha hech narsaga ta'sir
-qilmaydi, lekin ATMOS/komissiya kelganda kerak bo'ladigan hisobot uchun
+qilmaydi, lekin to'lov tizimi/komissiya kelganda kerak bo'ladigan hisobot uchun
 oldindan tayyorgarlik.
 
 ### 3.4 "Bepul" keladigan narsalar (chunki bu haqiqiy sotuvchi hisobi)
@@ -154,7 +154,7 @@ Cloud Function'lar (`requestMarketplaceJoin`, `reviewMarketplaceRequest`,
 ## 5. Bu bosqichga KIRITILMAGAN (keyingi qadam)
 
 - Narxga ustama/komissiya ko'rsatish.
-- ATMOS yoki har qanday avtomatik to'lov bo'linishi.
+- Har qanday avtomatik to'lov bo'linishi.
 - Yetkazib berishga REAL subsidiya (masalan "ikkinchisi bepul") — komissiya
   daromadi paydo bo'lgach qo'shiladi.
 - Sotuvchi profili sahifasi — MODELGA MOS EMASLIGI SABABLI BUTUNLAY OLIB
@@ -248,7 +248,7 @@ Cloud Function'lar (`requestMarketplaceJoin`, `reviewMarketplaceRequest`,
 
 **Hozircha KIRITILMAGAN (keyingi bosqich)**
 25. Narxga ustama/komissiya.
-26. ATMOS yoki har qanday avtomatik to'lov bo'linishi.
+26. Har qanday avtomatik to'lov bo'linishi.
 27. Yetkazib berishga REAL subsidiya (masalan "ikkinchisi bepul").
 28. Push-bildirishnoma uchun alohida infratuzilma — bot orqali AVTOMATIK
     keladi, qo'shimcha ish shart emas.

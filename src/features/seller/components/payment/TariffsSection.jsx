@@ -1,14 +1,15 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
-import { Check, Sparkles, Send, Zap, Clock, CreditCard, AlertTriangle, Loader2 } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { Check, Sparkles, Send, Zap, Clock, CreditCard, AlertTriangle, Loader2, Copy, ImageUp, X as XIcon } from "lucide-react";
 import { httpsCallable } from "firebase/functions";
-import { functions } from "@/firebase/config";
+import { functions, auth } from "@/firebase/config";
 import { useSession } from "@/context/SessionContext";
 import StatusModal from "@/components/ui/StatusModal";
 import { useLanguage } from "@/context/LanguageContext";
+import { useUploadImage } from "@/hooks/storage/useUploadStorage";
 import startTariffTrial from "@/services/tariffs/startTariffTrial";
-import createTariffPayment from "@/services/tariffs/createTariffPayment";
 import getTariffPaymentStatus from "@/services/tariffs/getTariffPaymentStatus";
+import getManualTariffPaymentInfo from "@/services/tariffs/getManualTariffPaymentInfo";
+import submitManualTariffPayment from "@/services/tariffs/submitManualTariffPayment";
 import {
   TARIFF_LIMITS, TRIAL_DAYS, TARIFF_MONTHLY_PRICE_SOM, getEffectiveTariffPlan, getNextTrialTier,
   hasUsedTrial, hasActiveTrial, getTrialExpiresAtMs, normalizeTariffPlan,
@@ -24,13 +25,14 @@ function formatSomPerMonth(amountSom) {
 
 // MUHIM (2026-09, "tarif to'lov tizimini ishga tushirish" bo'limi):
 // bu yerdagi "sotib olish" — FAQAT TARIF (Z-Start/Z-Pro) to'lovi,
-// Atmos orqali (`functions/atmosPayments.js`). MAHSULOT/CHECKOUT
+// qo'lda tasdiqlash orqali (to'lov cheki, `functions/manualTariffPayments.js`).
+// MAHSULOT/CHECKOUT
 // to'lovi bilan ADASHTIRMASLIK kerak — u hamon eski, decentralizatsiya-
 // lashgan strukturada qoladi (har bir sotuvchi o'z Click/Payme
 // hisobini ulaydi, pul to'g'ridan-to'g'ri sotuvchiga tushadi — bu
 // yerda hech narsa o'zgarmadi). Tarif puli esa ZeloShop'ning O'ZIGA
-// tegishli (xizmat haqi) — shuning uchun markazlashtirilgan, avtomatik
-// Atmos to'lovi mantiqan va huquqiy jihatdan toza.
+// tegishli (xizmat haqi) — shuning uchun markazlashtirilgan, alohida
+// oqim.
 //
 // Z-Biznes hamon "ishlab chiqilmoqda" (narx yakunlanmagan) — shuning
 // uchun HAMON faqat "qiziqish bildirish" (`contactAdmin`) orqali.
@@ -128,6 +130,16 @@ function formatDaysRemaining(expiresAtMs) {
   return days;
 }
 
+// QO'LDA TASDIQLASH (bank o'tkazmasi, 2026-09-25) — sotuvchi so'nggi
+// yuborgan chekining hujjat ID'si shu yerda (localStorage, sotuvchi
+// bo'yicha ajratilgan) saqlanadi, shunda sahifa qayta ochilganda ham
+// (Firestore'da qo'shimcha so'rov/index shart bo'lmasdan) holatni
+// `getTariffPaymentStatus` orqali qayta tekshirish mumkin — bu
+// funksiya `functions/tariffPayments.js`da.
+function manualPaymentStorageKey(uid) {
+  return `zeloshop_manualTariffPaymentId_${uid || "anon"}`;
+}
+
 /**
  * "Tariflar" bo'limining ICHKI KONTENTI — sarlavha/orqaga tugmasi/
  * tashqi to'liq ekran o'rovisiz.
@@ -143,7 +155,6 @@ function formatDaysRemaining(expiresAtMs) {
 const TariffsSection = () => {
   const { t } = useLanguage();
   const { store, patchStore } = useSession();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const basePlan = normalizeTariffPlan(store?.tariffPlan);
   const effectivePlan = getEffectiveTariffPlan(store);
@@ -152,7 +163,7 @@ const TariffsSection = () => {
   const nextTrialTier = getNextTrialTier(basePlan);
   const trialDaysLeft = activeTrial ? formatDaysRemaining(getTrialExpiresAtMs(store)) : 0;
 
-  // ATMOS TO'LOVI (2026-09) — batafsil izoh: yuqoridagi fayl sarlavhasi.
+  // TARIF TO'LOVI — batafsil izoh: yuqoridagi fayl sarlavhasi.
   const billingRequired = isBillingRequired(store);
   const pastDue = isTariffPastDue(store);
   const paidUntilMs = getPaidUntilMs(store);
@@ -171,107 +182,130 @@ const TariffsSection = () => {
   const [trialError, setTrialError] = useState(null);
   const [error, setError] = useState(null);
 
-  const [payingId, setPayingId] = useState(null);
-  const [payError, setPayError] = useState(null);
-  const [awaitingCheckoutPlanId, setAwaitingCheckoutPlanId] = useState(null);
-  const [paymentResultModal, setPaymentResultModal] = useState(null); // {variant, title, message}
-  const [checkingPaymentStatus, setCheckingPaymentStatus] = useState(false);
-  const pollAttemptsRef = useRef(0);
+  // QO'LDA TASDIQLASH (to'lov cheki) — batafsil izoh:
+  // `functions/manualTariffPayments.js`.
+  const [manualPaymentInfo, setManualPaymentInfo] = useState(null); // {enabled, cardNumber, cardHolderName}
+  const [manualPanelPlanId, setManualPanelPlanId] = useState(null); // qaysi tarif kartasi ochilgan
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualSubmitError, setManualSubmitError] = useState(null);
+  const [manualPending, setManualPending] = useState(null); // {plan, status, rejectReason}
+  const [cardCopied, setCardCopied] = useState(false);
+  const { uploadImage: uploadManualReceipt, progress: manualReceiptProgress, loading: manualReceiptUploading } = useUploadImage();
+  const [manualReceiptUrl, setManualReceiptUrl] = useState(null);
+  const [manualReceiptError, setManualReceiptError] = useState(null);
 
-  const handlePayNow = useCallback(
-    async (plan) => {
-      setPayingId(plan.id);
-      setPayError(null);
-      try {
-        const { checkoutUrl } = await createTariffPayment(plan.id);
-        setAwaitingCheckoutPlanId(plan.id);
-        // Loyihada allaqachon qabul qilingan konvensiya — tashqi
-        // havolalar `window.open(..., "_blank")` orqali ochiladi
-        // (`ShareStoreModal.jsx`, `ConnectionsPage.jsx` va h.k.).
-        window.open(checkoutUrl, "_blank");
-      } catch (err) {
-        setPayError(err.message || t("tariffs.paymentStartError"));
-      } finally {
-        setPayingId(null);
-      }
-    },
-    [t]
-  );
-
-  // Checkout'dan qaytgach (`?atmosTxn=...`) — to'lov holatini
-  // tekshiradi. Webhook AVTORITET manba (Firestore'ni to'g'ridan-to'g'ri
-  // yangilaydi) — bu yerdagi so'rov faqat TEZKOR fikr-mulohaza (UI
-  // darhol yangilansin) uchun, shuning uchun kechiksa/muvaffaqiyatsiz
-  // bo'lsa ham jiddiy muammo emas (sotuvchi sahifani qayta ochganda
-  // baribir to'g'ri holatni ko'radi, `verifyTelegramAuth` qayta
-  // chaqirilganda).
+  // Karta ma'lumotini BIR MARTA yuklaymiz — admin hali sozlamagan/
+  // o'chirib qo'ygan bo'lsa, `enabled:false` bilan tugma butunlay
+  // yashirin qoladi (pastdagi render qismida tekshiriladi).
   useEffect(() => {
-    const transactionId = searchParams.get("atmosTxn");
-    if (!transactionId) return;
-
     let cancelled = false;
-    pollAttemptsRef.current = 0;
-    setCheckingPaymentStatus(true);
-
-    const cleanUrl = () => {
-      const next = new URLSearchParams(searchParams);
-      next.delete("atmosTxn");
-      setSearchParams(next, { replace: true });
-    };
-
-    const poll = async () => {
-      try {
-        const result = await getTariffPaymentStatus(transactionId);
-        if (cancelled) return;
-
-        if (result.status === "paid") {
-          patchStore({
-            tariffPlan: result.plan,
-            tariffPaidUntil: result.paidUntilMs,
-          });
-          setPaymentResultModal({
-            variant: "success",
-            title: t("tariffs.paymentSuccessTitle"),
-            message: t("tariffs.paymentSuccessMessage", { plan: t(`tariffs.plan${result.plan.charAt(0).toUpperCase()}${result.plan.slice(1)}Name`) }),
-          });
-          setCheckingPaymentStatus(false);
-          cleanUrl();
-          return;
-        }
-
-        pollAttemptsRef.current += 1;
-        if (pollAttemptsRef.current < 5) {
-          setTimeout(poll, 2500);
-        } else {
-          setPaymentResultModal({
-            variant: "info",
-            title: t("tariffs.paymentPendingTitle"),
-            message: t("tariffs.paymentPendingMessage"),
-          });
-          setCheckingPaymentStatus(false);
-          cleanUrl();
-        }
-      } catch (err) {
-        if (cancelled) return;
-        setPaymentResultModal({
-          variant: "info",
-          title: t("tariffs.paymentPendingTitle"),
-          message: err.message || t("tariffs.paymentPendingMessage"),
-        });
-        setCheckingPaymentStatus(false);
-        cleanUrl();
-      }
-    };
-
-    poll();
+    getManualTariffPaymentInfo()
+      .then((info) => {
+        if (!cancelled) setManualPaymentInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setManualPaymentInfo({ enabled: false });
+      });
     return () => {
       cancelled = true;
     };
-    // Faqat `atmosTxn` o'zgarganda ishga tushishi kerak — `searchParams`/
-    // `setSearchParams` har renderda yangi obyekt bo'lishi mumkin,
-    // ularni dependency qilish cheksiz tsiklga olib kelardi.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams.get("atmosTxn")]);
+  }, []);
+
+  // Sahifa qayta ochilganda — so'nggi yuborilgan qo'lda-to'lov chekining
+  // holatini tekshiramiz (agar bo'lsa). "paid" bo'lib qolgan bo'lsa —
+  // saqlangan ID endi kerak emas (sotuvchi holati allaqachon
+  // `store.tariffPlan`da ko'rinadi, sessiya keyingi ochilishda
+  // yangilanadi), shuning uchun tozalanadi.
+  useEffect(() => {
+    const uid = auth.currentUser?.uid;
+    const storageKey = manualPaymentStorageKey(uid);
+    const storedId = (() => {
+      try {
+        return localStorage.getItem(storageKey);
+      } catch {
+        return null;
+      }
+    })();
+    if (!storedId) return;
+
+    let cancelled = false;
+    getTariffPaymentStatus(storedId)
+      .then((result) => {
+        if (cancelled) return;
+        if (result.status === "pending_review") {
+          setManualPending({ plan: result.plan, status: "pending_review" });
+        } else if (result.status === "rejected") {
+          setManualPending({ plan: result.plan, status: "rejected", rejectReason: result.rejectReason });
+        } else {
+          try {
+            localStorage.removeItem(storageKey);
+          } catch {
+            // localStorage mavjud bo'lmasa ham (masalan xususiy rejim) — muammo emas.
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleToggleManualPanel = useCallback((planId) => {
+    setManualPanelPlanId((current) => (current === planId ? null : planId));
+    setManualSubmitError(null);
+    setManualReceiptUrl(null);
+    setManualReceiptError(null);
+  }, []);
+
+  const handleManualReceiptFileChange = useCallback(
+    async (e) => {
+      const file = e.target.files?.[0];
+      e.target.value = "";
+      const uid = auth.currentUser?.uid;
+      if (!file || !uid) return;
+      setManualReceiptError(null);
+      try {
+        const url = await uploadManualReceipt(file, `tariff-payment-receipts/${uid}`);
+        setManualReceiptUrl(url);
+      } catch (err) {
+        setManualReceiptError(err.message || t("checkout.receiptUploadError"));
+      }
+    },
+    [uploadManualReceipt, t]
+  );
+
+  const handleCopyManualCardNumber = useCallback(() => {
+    if (!manualPaymentInfo?.cardNumber) return;
+    navigator.clipboard?.writeText(manualPaymentInfo.cardNumber).then(() => {
+      setCardCopied(true);
+      setTimeout(() => setCardCopied(false), 2000);
+    }).catch(() => {});
+  }, [manualPaymentInfo]);
+
+  const handleSubmitManualPayment = useCallback(
+    async (plan) => {
+      if (!manualReceiptUrl) return;
+      setManualSubmitting(true);
+      setManualSubmitError(null);
+      try {
+        const result = await submitManualTariffPayment(plan.id, manualReceiptUrl);
+        const uid = auth.currentUser?.uid;
+        try {
+          localStorage.setItem(manualPaymentStorageKey(uid), result.paymentDocId);
+        } catch {
+          // localStorage mavjud bo'lmasa ham — so'rov allaqachon yuborilgan, muammo emas.
+        }
+        setManualPending({ plan: plan.id, status: "pending_review" });
+        setManualPanelPlanId(null);
+        setManualReceiptUrl(null);
+      } catch (err) {
+        setManualSubmitError(err.message || t("tariffs.manualPaySubmitError"));
+      } finally {
+        setManualSubmitting(false);
+      }
+    },
+    [manualReceiptUrl, t]
+  );
 
   const handleExpressInterest = useCallback(
     async (plan) => {
@@ -347,10 +381,20 @@ const TariffsSection = () => {
           </div>
         )}
 
-        {checkingPaymentStatus && (
-          <div className="bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-700 p-3.5 rounded-2xl flex items-center gap-2.5">
-            <Loader2 size={16} className="text-slate-500 dark:text-slate-400 shrink-0 animate-spin" />
-            <p className="text-xs font-semibold text-slate-600 dark:text-slate-300 leading-relaxed">{t("tariffs.paymentChecking")}</p>
+        {manualPending?.status === "pending_review" && (
+          <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 p-3.5 rounded-2xl flex items-center gap-2.5">
+            <Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-xs font-semibold text-amber-700 dark:text-amber-300 leading-relaxed">{t("tariffs.manualPayPendingBanner")}</p>
+          </div>
+        )}
+
+        {manualPending?.status === "rejected" && (
+          <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 p-3.5 rounded-2xl flex items-center gap-2.5">
+            <AlertTriangle size={16} className="text-rose-600 dark:text-rose-400 shrink-0" />
+            <p className="text-xs font-semibold text-rose-700 dark:text-rose-300 leading-relaxed">
+              {t("tariffs.manualPayRejectedBanner")}
+              {manualPending.rejectReason ? ` ${t("tariffs.manualPayRejectReasonPrefix")} ${manualPending.rejectReason}` : ""}
+            </p>
           </div>
         )}
 
@@ -361,14 +405,13 @@ const TariffsSection = () => {
           const isAlreadyIncluded = planIndex < currentPlanIndex;
           const isSent = sentPlanId === plan.id;
           const isSending = sendingId === plan.id;
-          const isPaying = payingId === plan.id;
 
           // "Sinash" tugmasi FAQAT shu tarif - sotuvchining KEYINGI
           // tarifi bo'lsa (bir pog'ona yuqori), faol sinov yo'q bo'lsa,
           // VA bu tarif ILGARI sinalmagan bo'lsa ko'rsatiladi.
           const canTrialThis = plan.id === nextTrialTier && !activeTrial && !hasUsedTrial(store, plan.id);
 
-          // HAQIQIY TO'LOV (Atmos) — bu tarif to'g'ridan-to'g'ri
+          // TO'LOV — bu tarif to'g'ridan-to'g'ri
           // sotib olinishi mumkinmi. `isCurrent`dan QAT'I NAZAR
           // ko'rsatiladi (renewal/oldindan to'lash uchun ham kerak) —
           // faqat sotuvchi ALLAQACHON yuqoriroq tarifda bo'lsa (masalan
@@ -442,22 +485,86 @@ const TariffsSection = () => {
                 </button>
               )}
 
-              {canPayThis && (
+              {/* TO'LOV (qo'lda tasdiqlash): sotuvchi kartaga o'tkazma qiladi,
+                  chekni yuboradi, admin tasdiqlaydi. Admin karta
+                  ma'lumotini kiritgan bo'lsagina ko'rinadi. Batafsil izoh:
+                  fayl boshidagi `manualPaymentStorageKey` izohi. */}
+              {canPayThis && manualPaymentInfo?.enabled && manualPaymentInfo?.cardNumber && (
                 <button
                   type="button"
-                  onClick={() => handlePayNow(plan)}
-                  disabled={isPaying}
-                  className={`w-full h-11 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-transform disabled:opacity-70 ${classes.btn}`}
+                  onClick={() => handleToggleManualPanel(plan.id)}
+                  className={`w-full h-11 font-black text-xs rounded-xl flex items-center justify-center gap-1.5 active:scale-95 transition-transform ${classes.btn}`}
                 >
-                  {isPaying ? (
-                    <><Loader2 size={13} className="animate-spin" /> {t("tariffs.paymentStarting")}</>
-                  ) : (
-                    <><CreditCard size={13} /> {isCurrent ? t("tariffs.payRenewButton") : t("tariffs.payButton")}</>
-                  )}
+                  <CreditCard size={13} /> {isCurrent ? t("tariffs.payRenewButton") : t("tariffs.payButton")}
                 </button>
               )}
-              {canPayThis && awaitingCheckoutPlanId === plan.id && (
-                <p className={`text-[10px] font-semibold mt-1.5 text-center ${classes.muted}`}>{t("tariffs.checkoutOpenedHint")}</p>
+
+              {canPayThis && manualPanelPlanId === plan.id && (
+                <div className="mt-3 p-3.5 rounded-2xl border border-gray-200 dark:border-slate-700 bg-white/70 dark:bg-slate-950/40 space-y-3">
+                  <p className={`text-[11px] leading-relaxed ${plan.accent === "indigo" ? "text-white/90" : "text-gray-500 dark:text-slate-400"}`}>
+                    {t("tariffs.manualPayInstructions", { amount: formatSomPerMonth(TARIFF_MONTHLY_PRICE_SOM[plan.id]).replace("/oy", "") })}
+                  </p>
+
+                  <div className="bg-gray-50 dark:bg-slate-900 rounded-2xl p-3.5 border border-gray-100 dark:border-slate-800">
+                    <p className="text-[10px] font-bold text-gray-400 dark:text-slate-500 uppercase tracking-wider">{t("paymentSettings.cardNumberLabel")}</p>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-sm font-mono font-black tracking-wider text-gray-800 dark:text-white">
+                        {manualPaymentInfo.cardNumber.replace(/(\d{4})(?=\d)/g, "$1 ")}
+                      </span>
+                      <button type="button" onClick={handleCopyManualCardNumber} className="shrink-0 text-indigo-600 dark:text-indigo-400">
+                        {cardCopied ? <Check size={15} /> : <Copy size={15} />}
+                      </button>
+                    </div>
+                    <p className="text-xs font-semibold text-gray-600 dark:text-slate-300 mt-1.5">{manualPaymentInfo.cardHolderName}</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 dark:text-slate-400 mb-1.5">{t("checkout.receiptUploadLabel")}</label>
+                    {manualReceiptUrl ? (
+                      <div className="relative inline-block">
+                        <img src={manualReceiptUrl} alt="receipt" className="w-20 h-20 object-cover rounded-xl border border-indigo-200 dark:border-indigo-500/30" />
+                        <button
+                          type="button"
+                          onClick={() => setManualReceiptUrl(null)}
+                          className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md"
+                        >
+                          <XIcon size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center gap-1.5 w-full h-20 rounded-xl border-2 border-dashed border-indigo-200 dark:border-indigo-500/30 bg-white/60 dark:bg-slate-900/40 cursor-pointer">
+                        {manualReceiptUploading ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin text-indigo-500" />
+                            <span className="text-[10px] font-bold text-indigo-500">{manualReceiptProgress}%</span>
+                          </>
+                        ) : (
+                          <>
+                            <ImageUp size={16} className="text-indigo-400" />
+                            <span className="text-[11px] font-bold text-indigo-500">{t("checkout.receiptUploadButton")}</span>
+                          </>
+                        )}
+                        <input type="file" accept="image/*" className="hidden" onChange={handleManualReceiptFileChange} disabled={manualReceiptUploading} />
+                      </label>
+                    )}
+                    {manualReceiptError && <p className="text-[11px] text-rose-500 font-semibold mt-1">{manualReceiptError}</p>}
+                  </div>
+
+                  {manualSubmitError && <p className="text-[11px] text-rose-500 font-semibold">{manualSubmitError}</p>}
+
+                  <button
+                    type="button"
+                    onClick={() => handleSubmitManualPayment(plan)}
+                    disabled={!manualReceiptUrl || manualSubmitting}
+                    className="w-full h-10 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white flex items-center justify-center gap-1.5 disabled:opacity-60"
+                  >
+                    {manualSubmitting ? (
+                      <><Loader2 size={13} className="animate-spin" /> {t("tariffs.manualPaySubmitting")}</>
+                    ) : (
+                      t("tariffs.manualPaySubmitButton")
+                    )}
+                  </button>
+                </div>
               )}
 
               {!canPayThis && !isCurrent && !isAlreadyIncluded && (
@@ -479,7 +586,6 @@ const TariffsSection = () => {
         })}
 
         {trialError && <p className="text-[11px] text-rose-500 font-semibold text-center">{trialError}</p>}
-        {payError && <p className="text-[11px] text-rose-500 font-semibold text-center">{payError}</p>}
         {error && <p className="text-[11px] text-rose-500 font-semibold text-center">{error}</p>}
 
         <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-100 dark:border-amber-500/20 p-3.5 rounded-2xl">
@@ -498,14 +604,6 @@ const TariffsSection = () => {
         />
       )}
 
-      {paymentResultModal && (
-        <StatusModal
-          variant={paymentResultModal.variant}
-          title={paymentResultModal.title}
-          message={paymentResultModal.message}
-          onClose={() => setPaymentResultModal(null)}
-        />
-      )}
     </>
   );
 };

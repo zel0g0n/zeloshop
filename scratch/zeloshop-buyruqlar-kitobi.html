@@ -1,0 +1,853 @@
+<title>ZeloShop Buyruqlar Kitobi</title>
+<style>
+  :root {
+    --bg: #eef1f5;
+    --surface: #ffffff;
+    --surface-2: #f5f7fa;
+    --border: #dde2e9;
+    --text: #161a20;
+    --text-2: #5b6673;
+    --text-3: #88919c;
+    --accent: #a8571a;
+    --accent-soft: rgba(168, 87, 26, 0.1);
+    --accent-soft-2: rgba(168, 87, 26, 0.18);
+    --tag-once: #2f5f8f;
+    --tag-once-soft: rgba(47, 95, 143, 0.1);
+    --tag-deploy: #a8571a;
+    --tag-deploy-soft: rgba(168, 87, 26, 0.1);
+    --tag-needed: #5c6470;
+    --tag-needed-soft: rgba(92, 100, 112, 0.1);
+    --code-bg: #12161d;
+    --code-text: #e6e9f0;
+    --code-cmt: #7c8798;
+    --code-border: #232a35;
+    --shadow: 0 1px 2px rgba(20, 24, 30, 0.04), 0 8px 24px -12px rgba(20, 24, 30, 0.12);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #14171d;
+      --surface: #1b1f27;
+      --surface-2: #20242d;
+      --border: #2b303a;
+      --text: #e9ecf1;
+      --text-2: #a3abb8;
+      --text-3: #767f8c;
+      --accent: #e0924c;
+      --accent-soft: rgba(224, 146, 76, 0.14);
+      --accent-soft-2: rgba(224, 146, 76, 0.24);
+      --tag-once: #7ba7d6;
+      --tag-once-soft: rgba(123, 167, 214, 0.14);
+      --tag-deploy: #e0924c;
+      --tag-deploy-soft: rgba(224, 146, 76, 0.14);
+      --tag-needed: #a3abb8;
+      --tag-needed-soft: rgba(163, 171, 184, 0.12);
+      --code-bg: #0c0f14;
+      --code-text: #e6e9f0;
+      --code-cmt: #6d7784;
+      --code-border: #262c36;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -12px rgba(0, 0, 0, 0.4);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #14171d;
+    --surface: #1b1f27;
+    --surface-2: #20242d;
+    --border: #2b303a;
+    --text: #e9ecf1;
+    --text-2: #a3abb8;
+    --text-3: #767f8c;
+    --accent: #e0924c;
+    --accent-soft: rgba(224, 146, 76, 0.14);
+    --accent-soft-2: rgba(224, 146, 76, 0.24);
+    --tag-once: #7ba7d6;
+    --tag-once-soft: rgba(123, 167, 214, 0.14);
+    --tag-deploy: #e0924c;
+    --tag-deploy-soft: rgba(224, 146, 76, 0.14);
+    --tag-needed: #a3abb8;
+    --tag-needed-soft: rgba(163, 171, 184, 0.12);
+    --code-bg: #0c0f14;
+    --code-text: #e6e9f0;
+    --code-cmt: #6d7784;
+    --code-border: #262c36;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.2), 0 8px 24px -12px rgba(0, 0, 0, 0.4);
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--text);
+  }
+
+  body {
+    margin: 0;
+    font-family: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent); }
+
+  h1, h2, h3 { text-wrap: balance; font-family: "IBM Plex Sans", sans-serif; }
+
+  code, pre, .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+
+  .page {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding-inline: 20px;
+  }
+
+  /* ---------- Header ---------- */
+
+  header.top {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .top-inner {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex: 1 1 auto;
+    min-width: 220px;
+  }
+
+  .brand .mark {
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border: 1px solid var(--accent-soft-2);
+    border-radius: 6px;
+    padding: 3px 7px;
+    letter-spacing: 0.02em;
+  }
+
+  .brand h1 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .search-wrap {
+    position: relative;
+    flex: 0 1 280px;
+    min-width: 180px;
+  }
+
+  #search {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 12px 8px 32px;
+    font-size: 13.5px;
+    font-family: inherit;
+  }
+
+  #search:focus { outline: 2px solid var(--accent-soft-2); border-color: var(--accent); }
+
+  .search-wrap svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 14px;
+    height: 14px;
+    color: var(--text-3);
+    pointer-events: none;
+  }
+
+  /* ---------- Layout ---------- */
+
+  .layout {
+    display: grid;
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: 36px;
+    padding-block: 28px 64px;
+    align-items: start;
+  }
+
+  @media (max-width: 860px) {
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    nav.toc { display: none; }
+    nav.toc-mobile { display: block; }
+  }
+
+  nav.toc {
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 66px);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: calc(100vh - 90px);
+    overflow-y: auto;
+  }
+
+  nav.toc a {
+    color: var(--text-2);
+    text-decoration: none;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    border-left: 2px solid transparent;
+  }
+
+  nav.toc a .num { color: var(--text-3); font-family: "IBM Plex Mono", monospace; margin-right: 6px; }
+
+  nav.toc a:hover { background: var(--surface-2); color: var(--text); }
+
+  nav.toc a.active {
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-left-color: var(--accent);
+    font-weight: 500;
+  }
+
+  nav.toc-mobile {
+    display: none;
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 62px);
+    z-index: 15;
+    background: var(--bg);
+    padding-block: 10px;
+    border-bottom: 1px solid var(--border);
+    margin: 0 -20px;
+    padding-inline: 20px;
+  }
+
+  nav.toc-mobile .row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  nav.toc-mobile .row::-webkit-scrollbar { display: none; }
+
+  nav.toc-mobile a {
+    flex: 0 0 auto;
+    color: var(--text-2);
+    text-decoration: none;
+    font-size: 12.5px;
+    white-space: nowrap;
+    padding: 6px 11px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  /* ---------- Intro ---------- */
+
+  .intro { margin-bottom: 8px; }
+  .intro p { color: var(--text-2); max-width: 62ch; margin: 6px 0 0; }
+  .intro .files { margin-top: 10px; font-size: 12.5px; color: var(--text-3); }
+  .intro .files code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+
+  /* ---------- Sections ---------- */
+
+  main { min-width: 0; }
+
+  section.sec { scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 78px); margin-bottom: 40px; }
+
+  .sec-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+
+  .sec-head .idx {
+    font-family: "IBM Plex Mono", monospace;
+    color: var(--text-3);
+    font-size: 13px;
+  }
+
+  .sec-head h2 {
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+  }
+
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  .tag {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+  }
+  .tag.once { color: var(--tag-once); background: var(--tag-once-soft); }
+  .tag.deploy { color: var(--tag-deploy); background: var(--tag-deploy-soft); }
+  .tag.needed { color: var(--tag-needed); background: var(--tag-needed-soft); }
+
+  .sec-note { color: var(--text-2); font-size: 13.5px; margin: 4px 0 16px; max-width: 68ch; }
+  .sec-note code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+
+  /* ---------- Command blocks ---------- */
+
+  .cmdblock {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    margin-bottom: 14px;
+    overflow: hidden;
+  }
+
+  .cmdblock .label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+
+  .cmdblock .label span.t {
+    font-size: 12.5px;
+    color: var(--text-2);
+    font-weight: 500;
+  }
+
+  .copy-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 11.5px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .copy-btn svg { width: 12px; height: 12px; }
+  .copy-btn.copied { color: var(--accent); border-color: var(--accent); }
+
+  pre {
+    margin: 0;
+    padding: 13px 15px;
+    background: var(--code-bg);
+    color: var(--code-text);
+    overflow-x: auto;
+    font-size: 12.8px;
+    line-height: 1.65;
+  }
+  pre code { font-family: inherit; }
+  .cmt { color: var(--code-cmt); }
+
+  /* ---------- Quick table ---------- */
+
+  .quickref {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .quickref th, .quickref td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .quickref th {
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-weight: 600;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .quickref tr:last-child td { border-bottom: none; }
+  .quickref td.situ { color: var(--text-2); width: 40%; }
+  .quickref td code {
+    font-family: "IBM Plex Mono", monospace;
+    background: var(--code-bg);
+    color: var(--code-text);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 12px;
+    display: inline-block;
+  }
+
+  .tblwrap { overflow-x: auto; }
+
+  footer.pagefoot {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 28px 20px 60px;
+    color: var(--text-3);
+    font-size: 12.5px;
+    border-top: 1px solid var(--border);
+  }
+
+  [hidden] { display: none !important; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    html { scroll-behavior: smooth; }
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <span class="mark">$_</span>
+      <h1>ZeloShop buyruqlar kitobi</h1>
+    </div>
+    <div class="search-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="search" type="text" placeholder="Buyruq qidirish… (masalan: deploy, secrets, proksi)" autocomplete="off">
+    </div>
+  </div>
+  <nav class="toc-mobile">
+    <div class="row" id="tocMobileRow"></div>
+  </nav>
+</header>
+
+<div class="page">
+  <div class="layout">
+    <nav class="toc" id="tocNav"></nav>
+
+    <main>
+      <div class="intro">
+        <p>ZeloShop loyihasi (frontend + Cloud Functions) bo'yicha kerak bo'ladigan barcha terminal buyruqlari — sozlashdan tortib deploy, test va diagnostikagacha. Har bir blok qachon kerakligini yorliq bilan ko'rsatadi: <span class="tag once" style="vertical-align:2px">bir marta</span> <span class="tag deploy" style="vertical-align:2px">har deploy'da</span> <span class="tag needed" style="vertical-align:2px">kerak bo'lganda</span>.</p>
+        <p class="files">Batafsil: <code>CI_CD_VA_STAGING_SOZLASH.md</code> (GitHub/CI-CD), <code>FIRESTORE_BACKUP_SOZLASH.md</code> (zaxira nusxa) — loyiha papkasida.</p>
+      </div>
+
+      <!-- 1 -->
+      <section class="sec" id="setup">
+        <div class="sec-head">
+          <span class="idx">01</span>
+          <h2>Loyihani birinchi marta sozlash</h2>
+          <div class="tags"><span class="tag once">bir marta</span></div>
+        </div>
+        <div class="cmdblock">
+          <div class="label"><span class="t">Paketlar, Firebase CLI, login, loyiha tanlash</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code><span class="cmt"># Loyiha papkasiga kirib, frontend paketlarini o'rnatish</span>
+npm install
+
+<span class="cmt"># Backend (Cloud Functions) paketlarini o'rnatish</span>
+cd functions
+npm install
+cd ..
+
+<span class="cmt"># Firebase CLI o'rnatilmagan bo'lsa</span>
+npm install -g firebase-tools
+
+<span class="cmt"># Firebase hisobingizga kirish (brauzer ochiladi)</span>
+firebase login
+
+<span class="cmt"># Qaysi Firebase loyihasi bilan ishlashni tanlash</span>
+firebase use commerce-zelo</code></pre>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="sec" id="secrets">
+        <div class="sec-head">
+          <span class="idx">02</span>
+          <h2>Maxfiy kalitlar (secrets)</h2>
+          <div class="tags"><span class="tag once">bir marta</span><span class="tag needed">kerak bo'lganda</span></div>
+        </div>
+        <p class="sec-note">Har birini alohida ishga tushiring — terminal qiymatni so'raydi, uni yozib Enter bosing (ekranda ko'rinmaydi, bu normal).</p>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Telegram botlar</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase functions:secrets:set BOT_TOKEN
+firebase functions:secrets:set TELEGRAM_WEBHOOK_SECRET
+firebase functions:secrets:set COURIER_BOT_TOKEN
+firebase functions:secrets:set COURIER_TELEGRAM_WEBHOOK_SECRET
+firebase functions:secrets:set STAFF_BOT_TOKEN
+firebase functions:secrets:set STAFF_TELEGRAM_WEBHOOK_SECRET
+firebase functions:secrets:set CUSTOM_BOT_WEBHOOK_SECRET</code></pre>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">AI (Gemini)</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase functions:secrets:set GEMINI_API_KEY</code></pre>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Xato kuzatuvi (Sentry)</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase functions:secrets:set SENTRY_DSN</code></pre>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">ATMOS to'lov shlyuzi (4 ta + proksi tokeni)</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase functions:secrets:set ATMOS_CONSUMER_KEY
+firebase functions:secrets:set ATMOS_CONSUMER_SECRET
+firebase functions:secrets:set ATMOS_STORE_ID
+firebase functions:secrets:set ATMOS_API_KEY
+firebase functions:secrets:set ATMOS_PROXY_TOKEN</code></pre>
+        </div>
+        <p class="sec-note"><code>ATMOS_PROXY_TOKEN</code> — VM'dagi <code>atmos-secure-proxy-server.js</code>ni ishga tushirganda bergan <code>PROXY_AUTH_TOKEN</code> bilan aynan bir xil qiymat bo'lishi shart.</p>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Qaysi sekretlar sozlanganini ko'rish</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase functions:secrets:access ATMOS_CONSUMER_KEY
+firebase functions:secrets:list</code></pre>
+        </div>
+      </section>
+
+      <!-- 3 -->
+      <section class="sec" id="config">
+        <div class="sec-head">
+          <span class="idx">03</span>
+          <h2>Oddiy sozlamalar (maxfiy emas)</h2>
+          <div class="tags"><span class="tag once">bir marta</span><span class="tag needed">kerak bo'lganda</span></div>
+        </div>
+        <p class="sec-note">Bular <code>firebase functions:secrets:set</code> bilan EMAS — <code>functions/.env.commerce-zelo</code> faylida oddiy qator sifatida yoziladi:</p>
+        <div class="cmdblock">
+          <div class="label"><span class="t">functions/.env.commerce-zelo</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>ATMOS_ENV=production
+ATMOS_PROXY_URL=http://35.211.129.224:3128</code></pre>
+        </div>
+        <p class="sec-note">Sandbox rejimida sinash uchun <code>ATMOS_ENV=sandbox</code> qiling. Statik-IP proksi hali sozlanmagan bo'lsa, <code>ATMOS_PROXY_URL</code> qatorini butunlay o'chirib qo'ying (yoki bo'sh qoldiring) — kod avtomatik to'g'ridan-to'g'ri ishlaydi.</p>
+      </section>
+
+      <!-- 4 -->
+      <section class="sec" id="deploy">
+        <div class="sec-head">
+          <span class="idx">04</span>
+          <h2>Deploy qilish</h2>
+          <div class="tags"><span class="tag deploy">har deploy'da</span></div>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Hammasini birdan (odatiy holat)</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase deploy</code></pre>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Faqat Cloud Functions</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase deploy --only functions</code></pre>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Faqat bitta funksiya (tezroq, kichik tuzatishda)</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase deploy --only functions:createTariffPayment</code></pre>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Faqat frontend (Hosting)</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>npm run build
+firebase deploy --only hosting</code></pre>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Faqat Firestore xavfsizlik qoidalari va indexlar</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase deploy --only firestore:rules,firestore:indexes</code></pre>
+        </div>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Faqat Storage qoidalari</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>firebase deploy --only storage</code></pre>
+        </div>
+      </section>
+
+      <!-- 5 -->
+      <section class="sec" id="test">
+        <div class="sec-head">
+          <span class="idx">05</span>
+          <h2>Test, lint, build</h2>
+          <div class="tags"><span class="tag deploy">har deploy'da tavsiya</span></div>
+        </div>
+        <p class="sec-note">Deploy qilishdan OLDIN tekshirish.</p>
+        <div class="cmdblock">
+          <div class="label"><span class="t">Frontend + backend</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code><span class="cmt"># Frontend</span>
+npm run lint
+npm run test
+npm run build
+
+<span class="cmt"># Backend (functions papkasidan)</span>
+cd functions
+npm test
+cd ..</code></pre>
+        </div>
+      </section>
+
+      <!-- 6 -->
+      <section class="sec" id="proxy">
+        <div class="sec-head">
+          <span class="idx">06</span>
+          <h2>Statik-IP proksi — VM tomonidagi sozlash</h2>
+          <div class="tags"><span class="tag once">bir marta</span><span class="tag needed">yangilaganda</span></div>
+        </div>
+        <p class="sec-note">GCP konsolida VM'ning "SSH" tugmasi orqali brauzerda terminal oching, so'ng:</p>
+        <div class="cmdblock">
+          <div class="label"><span class="t">VM ichida</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code><span class="cmt"># 1) Eski (faqat /whoami) test-serverni to'xtatish</span>
+pkill -f test-server.js
+
+<span class="cmt"># 2) Kuchli, tasodifiy token yaratish (buni saqlab qo'ying — Firebase'ga ham shu qiymatni kiritasiz)</span>
+openssl rand -hex 32
+
+<span class="cmt"># 3) atmos-secure-proxy-server.js faylini VM'ga joylashtirish</span>
+nano atmos-secure-proxy-server.js
+<span class="cmt"># (kodni joylashtiring: Ctrl+Shift+V yoki o'ng tugma → Paste)</span>
+<span class="cmt"># Saqlash: Ctrl+O → Enter → Ctrl+X</span>
+
+<span class="cmt"># 4) Serverni ishga tushirish (2-qadamdagi tokenni shu yerga qo'ying)</span>
+PROXY_AUTH_TOKEN="&lt;2-qadamdagi_token&gt;" nohup node atmos-secure-proxy-server.js > proxy.log 2>&1 &
+
+<span class="cmt"># Tekshirish</span>
+curl http://localhost:3128/whoami
+cat proxy.log</code></pre>
+        </div>
+
+        <p class="sec-note"><strong>Firewall</strong> (agar 3128-port hali ochilmagan bo'lsa) — GCP konsoli → VPC network → Firewall → "Create Firewall Rule": Name <code>allow-atmos-proxy</code>, Targets — All instances in the network, Source IPv4 ranges <code>0.0.0.0/0</code>, Protocols/ports — TCP, port <code>3128</code>.</p>
+
+        <div class="cmdblock">
+          <div class="label"><span class="t">Tashqi tomondan tekshirish</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code>curl http://35.211.129.224:3128/whoami</code></pre>
+        </div>
+      </section>
+
+      <!-- 7 -->
+      <section class="sec" id="backup">
+        <div class="sec-head">
+          <span class="idx">07</span>
+          <h2>Firestore zaxira nusxa (backup)</h2>
+          <div class="tags"><span class="tag once">bir marta sozlash</span></div>
+        </div>
+        <div class="cmdblock">
+          <div class="label"><span class="t">Zaxira jadvallarini yaratish va ko'rish</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code><span class="cmt"># Kunlik zaxira (7 kun saqlanadi)</span>
+gcloud firestore backups schedules create \
+  --database='(default)' \
+  --recurrence=daily \
+  --retention=7d \
+  --project=commerce-zelo
+
+<span class="cmt"># Haftalik zaxira (8 hafta saqlanadi, yakshanba kuni)</span>
+gcloud firestore backups schedules create \
+  --database='(default)' \
+  --recurrence=weekly \
+  --day-of-week=SUN \
+  --retention=8w \
+  --project=commerce-zelo
+
+<span class="cmt"># Mavjud zaxira jadvallarini ko'rish</span>
+gcloud firestore backups schedules list --database='(default)' --project=commerce-zelo
+
+<span class="cmt"># Mavjud zaxiralarni ko'rish</span>
+gcloud firestore backups list --project=commerce-zelo</code></pre>
+        </div>
+      </section>
+
+      <!-- 8 -->
+      <section class="sec" id="git">
+        <div class="sec-head">
+          <span class="idx">08</span>
+          <h2>Git / GitHub / CI-CD</h2>
+          <div class="tags"><span class="tag once">bir marta</span><span class="tag needed">kundalik</span></div>
+        </div>
+        <p class="sec-note">To'liq jarayon <code>CI_CD_VA_STAGING_SOZLASH.md</code>da. Eng ko'p ishlatiladiganlari:</p>
+        <div class="cmdblock">
+          <div class="label"><span class="t">Kundalik ish oqimi</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code><span class="cmt"># O'zgarishlarni ko'rish</span>
+git status
+git diff
+
+<span class="cmt"># Yangi branch ochib, o'zgarish qilish</span>
+git checkout -b feature/nom
+git add .
+git commit -m "tavsif"
+git push -u origin feature/nom
+<span class="cmt"># (keyin GitHub'da Pull Request oching → develop'ga)</span>
+
+<span class="cmt"># develop'dan main'ga chiqarish (production'ga deploy uchun)</span>
+git checkout main
+git pull
+git merge develop
+git push</code></pre>
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section class="sec" id="monitor">
+        <div class="sec-head">
+          <span class="idx">09</span>
+          <h2>Kuzatuv va diagnostika</h2>
+          <div class="tags"><span class="tag needed">kerak bo'lganda</span></div>
+        </div>
+        <div class="cmdblock">
+          <div class="label"><span class="t">Loglar, emulator, faol loyiha</span><button class="copy-btn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg><span class="lbl">Nusxalash</span></button></div>
+          <pre><code><span class="cmt"># Cloud Functions loglarini ko'rish (jonli)</span>
+firebase functions:log
+
+<span class="cmt"># Muayyan funksiya logi</span>
+firebase functions:log --only createTariffPayment
+
+<span class="cmt"># Lokal test muhiti (emulator)</span>
+firebase emulators:start
+
+<span class="cmt"># Qaysi Firebase loyihasi faol ekanini tekshirish</span>
+firebase use</code></pre>
+        </div>
+      </section>
+
+      <!-- Quick ref -->
+      <section class="sec" id="cheatsheet">
+        <div class="sec-head">
+          <span class="idx">★</span>
+          <h2>Qisqa eslatma — qaysi buyruq qachon kerak</h2>
+        </div>
+        <div class="tblwrap">
+          <table class="quickref">
+            <thead><tr><th>Vaziyat</th><th>Buyruq</th></tr></thead>
+            <tbody>
+              <tr><td class="situ">Yangi kod yozdim, productionga chiqaraman</td><td><code>npm run build && firebase deploy</code></td></tr>
+              <tr><td class="situ">Faqat bitta funksiyani tuzatdim</td><td><code>firebase deploy --only functions:funksiyaNomi</code></td></tr>
+              <tr><td class="situ">Firestore qoidasini o'zgartirdim</td><td><code>firebase deploy --only firestore:rules</code></td></tr>
+              <tr><td class="situ">Yangi maxfiy kalit qo'shdim</td><td><code>firebase functions:secrets:set NOM</code> so'ng <code>firebase deploy --only functions</code></td></tr>
+              <tr><td class="situ">Xatoni tekshirmoqchiman</td><td><code>firebase functions:log</code></td></tr>
+              <tr><td class="situ">Atmos productionga o'tdi (haqiqiy kalit keldi)</td><td>5 ta <code>ATMOS_*</code> sekretni qayta <code>secrets:set</code> qiling, <code>ATMOS_ENV=production</code> qiling, <code>firebase deploy --only functions</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<footer class="pagefoot">
+  ZeloShop · loyiha buyruqlari · manba: <code class="mono">BARCHA_BUYRUQLAR.md</code>
+</footer>
+
+<script>
+(function () {
+  var sections = Array.prototype.slice.call(document.querySelectorAll("section.sec"));
+  var tocNav = document.getElementById("tocNav");
+  var tocMobileRow = document.getElementById("tocMobileRow");
+
+  sections.forEach(function (sec) {
+    var h2 = sec.querySelector("h2");
+    var idx = sec.querySelector(".idx");
+    if (!h2) return;
+    var a = document.createElement("a");
+    a.href = "#" + sec.id;
+    a.innerHTML = '<span class="num">' + (idx ? idx.textContent : "") + "</span>" + h2.textContent;
+    tocNav.appendChild(a);
+
+    var am = document.createElement("a");
+    am.href = "#" + sec.id;
+    am.textContent = h2.textContent;
+    tocMobileRow.appendChild(am);
+  });
+
+  var tocLinks = Array.prototype.slice.call(tocNav.querySelectorAll("a"));
+  if ("IntersectionObserver" in window) {
+    var obs = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          var link = tocNav.querySelector('a[href="#' + entry.target.id + '"]');
+          if (!link) return;
+          if (entry.isIntersecting) {
+            tocLinks.forEach(function (l) { l.classList.remove("active"); });
+            link.classList.add("active");
+          }
+        });
+      },
+      { rootMargin: "-15% 0px -70% 0px" }
+    );
+    sections.forEach(function (sec) { obs.observe(sec); });
+  }
+
+  // Copy buttons
+  document.querySelectorAll(".copy-btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var pre = btn.closest(".cmdblock").querySelector("pre code");
+      var text = pre.textContent;
+      var done = function () {
+        var lbl = btn.querySelector(".lbl");
+        var prevText = lbl.textContent;
+        btn.classList.add("copied");
+        lbl.textContent = "Nusxalandi!";
+        setTimeout(function () {
+          btn.classList.remove("copied");
+          lbl.textContent = prevText;
+        }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(function () { fallbackCopy(pre); done(); });
+      } else {
+        fallbackCopy(pre);
+        done();
+      }
+    });
+  });
+
+  function fallbackCopy(node) {
+    try {
+      var range = document.createRange();
+      range.selectNodeContents(node);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) { /* no-op */ }
+  }
+
+  // Search / filter
+  var searchInput = document.getElementById("search");
+  var blocks = Array.prototype.slice.call(document.querySelectorAll(".cmdblock"));
+  searchInput.addEventListener("input", function () {
+    var q = searchInput.value.trim().toLowerCase();
+    sections.forEach(function (sec) {
+      if (sec.id === "cheatsheet") return;
+      var secBlocks = Array.prototype.slice.call(sec.querySelectorAll(".cmdblock"));
+      var anyVisible = false;
+      var secTextMatches = sec.querySelector("h2").textContent.toLowerCase().indexOf(q) !== -1;
+      if (secBlocks.length === 0) {
+        sec.hidden = q !== "" && !secTextMatches;
+        return;
+      }
+      secBlocks.forEach(function (block) {
+        var match = q === "" || secTextMatches || block.textContent.toLowerCase().indexOf(q) !== -1;
+        block.hidden = !match;
+        if (match) anyVisible = true;
+      });
+      sec.hidden = q !== "" && !anyVisible;
+    });
+  });
+})();
+</script>

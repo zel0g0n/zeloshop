@@ -108,6 +108,18 @@ describe("handleDeleteSellerPermanently — ruxsat nazorati", () => {
   });
 });
 
+describe("handleDeleteSellerPermanently — parol (veb) sessiyasi admin bo'la olmaydi", () => {
+  test("admin ID'li, lekin loginMethod=password tokenli foydalanuvchi — permission-denied", async () => {
+    const mod = loadModule({ db: buildMockDb({ admins: { "admin-1": true } }), firestore: buildMockFirestore({}) });
+    await expect(
+      mod._testables.handleDeleteSellerPermanently({
+        auth: { uid: "admin-1", token: { loginMethod: "password" } },
+        data: { sellerId: "s1", confirmStoreName: "x" },
+      })
+    ).rejects.toMatchObject({ code: "permission-denied" });
+  });
+});
+
 describe("handleDeleteSellerPermanently — kirish ma'lumotlarini tekshirish", () => {
   test("sellerId berilmagan — invalid-argument", async () => {
     const mod = loadModule({ db: buildMockDb({ admins: { u1: true } }), firestore: buildMockFirestore({}) });

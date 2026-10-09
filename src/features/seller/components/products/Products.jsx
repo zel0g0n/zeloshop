@@ -16,6 +16,10 @@ import ProductsList from "./ProductsList";
 import BulkActionBar from "./BulkActionBar";
 import ProductsSkeleton from "./ProductsSkeleton";
 import StatusModal from "@/components/ui/StatusModal";
+import { useIsDesktop } from "@/hooks/useIsDesktop";
+import DesktopProducts from "./DesktopProducts";
+import { getEffectiveCategoriesForStore } from "@/config/categoryCustomization";
+import { getEffectiveTariffPlan } from "@/utils/tariffLimits";
 
 // KATALOG BOSHQARUVI — Senior Level Inventory Management.
 //
@@ -36,6 +40,7 @@ const Products = () => {
   const { sellerId, store } = useSession();
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const { products: sellerProducts = [], loading, error, hasMore, loadMore } = useGetProductsData(sellerId);
   const isAiCeoEnabled = store?.aiCeoEnabled === true;
   // MUHIM: bu hook FAQAT `aiCeoEnabled` sotuvchilar uchun ma'noli -
@@ -123,6 +128,49 @@ const Products = () => {
       setBulkBusy(false);
     }
   }, [selectedIds]);
+
+  const handleSelectAll = useCallback((ids) => setSelectedIds(new Set(ids)), []);
+  const handleClearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  if (isDesktop) {
+    return (
+      <>
+        <DesktopProducts
+          products={filteredProducts}
+          counts={statusCounts}
+          inventoryValue={inventoryValue}
+          categories={getEffectiveCategoriesForStore(store).map((c) => c.value)}
+          showAnalytics={getEffectiveTariffPlan(store) !== "start"}
+          aiDraftCount={isAiCeoEnabled ? readyForReview.length : 0}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          statusFilter={statusFilter}
+          onStatusChange={setStatusFilter}
+          categoryFilter={categoryFilter}
+          onCategoryChange={setCategoryFilter}
+          sortBy={sortBy}
+          onSortChange={setSortBy}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onSelectAll={handleSelectAll}
+          onClearSelection={handleClearSelection}
+          bulkBusy={bulkBusy}
+          onBulk={handleBulkAction}
+          onEdit={handleEditProduct}
+          onDuplicate={handleDuplicateProduct}
+          onToggleActive={handleToggleActive}
+          onDelete={handleDeleteProduct}
+          hasMore={hasMore}
+          onLoadMore={loadMore}
+          loading={loading}
+          error={error}
+        />
+        {actionError && (
+          <StatusModal variant="error" title={t("sellerProducts.errorTitle")} message={actionError} onClose={() => setActionError(null)} />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">

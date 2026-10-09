@@ -8,6 +8,11 @@ import FullScreenSpinner from "@/components/ui/FullScreenSpinner";
 // qachon ko'rmaydi, shuning uchun uni ham dangasa (lazy) yuklaymiz.
 const AdminApp = lazy(() => import("@/features/admin/AdminApp"));
 
+// Brauzerda (Telegramsiz) ochilganda — login/parol bilan kirish sahifasi
+// (`functions/webAppAuth.js`). Telegram ichidagi foydalanuvchilar buni
+// hech qachon ko'rmaydi, shuning uchun u ham dangasa yuklanadi.
+const WebLoginPage = lazy(() => import("@/features/auth/WebLoginPage"));
+
 /**
  * Sessiya hali aniqlanmagan bo'lsa (Cloud Function javob kutilmoqda),
  * butun ilova o'rniga oddiy yuklanish ekranini ko'rsatadi. Shu bilan
@@ -69,6 +74,14 @@ const SessionGate = ({ children }) => {
         <p className="text-sm font-bold text-gray-800 dark:text-white">Kirishda xatolik yuz berdi</p>
         <p className="text-xs text-gray-500 dark:text-slate-400">{error || "Iltimos, ilovani qayta oching."}</p>
       </div>
+    );
+  }
+
+  if (status === "login-required") {
+    return (
+      <Suspense fallback={<FullScreenSpinner />}>
+        <WebLoginPage />
+      </Suspense>
     );
   }
 

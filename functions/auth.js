@@ -239,7 +239,16 @@ async function handleVerifyTelegramAuth(request) {
       verified = await verifyTelegramInitData(initData, BOT_TOKEN.value());
     } catch (err) {
       console.error("Telegram auth tekshiruvi muvaffaqiyatsiz:", err.message);
-      throw new HttpsError("unauthenticated", "Telegram autentifikatsiyasi tasdiqlanmadi.");
+      // Sentry'da SABAB ko'rinsin (konsol qatori "[Filtered]" bo'lib
+      // qoladi). Eskirgan initData yoki replay - foydalanuvchi ilovani
+      // uzoq vaqt ochiq qoldirgani (kutilgan holat), Sentry'ga
+      // yuborilmaydi. Imzo mos kelmasa (masalan BOT_TOKEN noto'g'ri)
+      // esa HAMON yuboriladi - bu haqiqiy sozlama xatosi bo'lishi mumkin.
+      const reason = String(err.message || "");
+      const authErr = new HttpsError("unauthenticated", "Telegram autentifikatsiyasi tasdiqlanmadi.");
+      authErr.extraContext = { telegramAuthFailureReason: reason.slice(0, 200) };
+      authErr.isExpected = /eskirgan|allaqachon ishlatilgan/.test(reason);
+      throw authErr;
     }
   }
 

@@ -279,8 +279,8 @@ const CheckoutPage = () => {
   // MIJOZ endi TO'LOV USULINI o'zi tanlaydi (agar sotuvchi ikkalasini
   // ham yoqqan bo'lsa) — OLDIN bu yerda faqat ma'lumot sifatida
   // ko'rsatilardi, haqiqiy tanlov YO'Q edi (2026-09 punkt-royxati,
-  // 14-band). "cod" = naqd (kuryerga), "prepay" = karta orqali (ATMOS
-  // hali ulanmagani uchun — sotuvchining shaxsiy kartasiga qo'lda
+  // 14-band). "cod" = naqd (kuryerga), "prepay" = karta orqali
+  // (platformada avtomatik shlyuz yo'q — sotuvchining shaxsiy kartasiga qo'lda
   // o'tkazma + chek skrinshoti).
   //
   // MUHIM: bu deklaratsiya ATAYLAB shu yerda, pastdagi "BO'LIB TO'LASH"

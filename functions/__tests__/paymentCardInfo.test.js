@@ -1,8 +1,8 @@
 /**
  * `paymentCardInfo.js` uchun testlar — checkout paytida mijozga
  * sotuvchining shaxsiy karta ma'lumotini (raqam + F.I.SH) qaytaruvchi
- * TOR doiradagi onCall funksiya (2026-09 punkt-royxati, 14-band — ATMOS
- * hali ulanmagani uchun, mijoz "Karta orqali" tanlaganda sotuvchining
+ * TOR doiradagi onCall funksiya (2026-09 punkt-royxati, 14-band — platformada
+ * to'lov shlyuzi yo'qligi uchun, mijoz "Karta orqali" tanlaganda sotuvchining
  * shaxsiy kartasiga qo'lda o'tkazma qilishi kerak).
  *
  * MUHIM E'TIBOR: bu funksiya `sellers/{id}/private/paymentConfig`

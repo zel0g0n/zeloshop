@@ -4,6 +4,7 @@ const { admin, db } = require("./lib/admin");
 const { checkRateLimit } = require("./lib/rateLimit");
 const yandex = require("./lib/yandexDelivery");
 const { withSentry, SENTRY_DSN } = require("./lib/sentry");
+const { resolveActingSellerContext } = require("./lib/staffAccess");
 
 // Yandex'ning "bekor qilingan" holatlari - frontend
 // (`YandexDeliveryPage.jsx`)dagi bilan bir xil ro'yxat, ikkalasi
@@ -87,13 +88,18 @@ async function handleDispatchYandexDelivery(request) {
   }
   await checkRateLimit(`dispatchYandexDelivery:${request.auth.uid}`, 20, 3600);
 
+  // 2026-10-08: Yandex'ni endi sotuvchining O'ZI yoki `manageCouriers`
+  // ruxsatli faol xodim chaqira oladi (`assignOrderToCourier` bilan bir
+  // xil naqsh). `sellerId` har doim HAQIQIY do'kon egasining uid'i.
+  const { sellerId, isStaff } = await resolveActingSellerContext(db, request.auth.uid, "manageCouriers");
+
   const orderRef = db.collection("orders").doc(orderId);
   const orderSnap = await orderRef.get();
   if (!orderSnap.exists) {
     throw new HttpsError("not-found", "Buyurtma topilmadi.");
   }
   const order = orderSnap.data();
-  if (order.sellerId !== request.auth.uid) {
+  if (order.sellerId !== sellerId) {
     throw new HttpsError("permission-denied", "Faqat o'z buyurtmangizni jo'nata olasiz.");
   }
   if (order.yandexClaimId) {
@@ -103,12 +109,12 @@ async function handleDispatchYandexDelivery(request) {
     throw new HttpsError("failed-precondition", "Bu buyurtmada mijozning aniq (xaritadagi) joylashuvi yo'q.");
   }
 
-  const ydSnap = await db.collection("sellers").doc(request.auth.uid).collection("private").doc("yandexDelivery").get();
+  const ydSnap = await db.collection("sellers").doc(sellerId).collection("private").doc("yandexDelivery").get();
   if (!ydSnap.exists || !ydSnap.data().enabled) {
     throw new HttpsError("failed-precondition", "Yandex Delivery ulanmagan.");
   }
   const yd = ydSnap.data();
-  const sellerSnap = await db.collection("sellers").doc(request.auth.uid).get();
+  const sellerSnap = await db.collection("sellers").doc(sellerId).get();
   const storeName = sellerSnap.data()?.storeName || "Do'kon";
 
   try {
@@ -150,6 +156,7 @@ async function handleDispatchYandexDelivery(request) {
       yandexClaimId: claim.id,
       yandexStatus: claim.status || "new",
       yandexDispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...(isStaff ? { yandexDispatchedByStaffId: String(request.auth.uid) } : {}),
     });
 
     // `accept` — alohida qadam, chunki `create`dan keyin holat darhol

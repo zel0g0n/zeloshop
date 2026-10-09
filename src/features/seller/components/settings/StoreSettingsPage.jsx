@@ -123,21 +123,21 @@ const StoreSettingsPage = () => {
   const isBusy = saving || uploading;
 
   return (
-    <div className="min-h-screen bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased pb-36 transition-colors duration-300">
+    <div className="min-h-screen lg:min-h-0 bg-[#F4F5F9] dark:bg-slate-950 lg:bg-transparent lg:dark:bg-transparent text-slate-900 dark:text-white font-sans antialiased pb-36 lg:pb-6 transition-colors duration-300">
 
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center gap-3">
-        <button type="button" onClick={() => navigate(-1)} className="p-1 text-slate-500 dark:text-slate-300 active:scale-95 transition-transform">
+      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center gap-3 lg:static lg:bg-transparent lg:dark:bg-transparent lg:shadow-none lg:px-0 lg:pt-0 lg:pb-5">
+        <button type="button" onClick={() => navigate(-1)} className="lg:hidden p-1 text-slate-500 dark:text-slate-300 active:scale-95 transition-transform">
           <ArrowLeft size={20} />
         </button>
         <div>
-          <h1 className="text-base font-black text-slate-800 dark:text-white">{t("storeSettings.title")}</h1>
+          <h1 className="text-base lg:text-2xl lg:tracking-tight font-black text-slate-800 dark:text-white">{t("storeSettings.title")}</h1>
           <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">{t("storeSettings.subtitle")}</p>
         </div>
       </div>
 
-      <form onSubmit={handleSubmit} className="p-4 space-y-4">
+      <form onSubmit={handleSubmit} className="p-4 space-y-4 lg:p-0 lg:space-y-0 lg:block lg:columns-2 lg:gap-5 lg:max-w-5xl lg:[&>*]:break-inside-avoid lg:[&>*]:mb-5 lg:[&>*]:w-full lg:[&>button[type=submit]]:[column-span:all] lg:[&>button[type=submit]]:max-w-xs">
         {error && (
-          <div className="bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 p-3 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400">
+          <div className="lg:[column-span:all] bg-rose-50 dark:bg-rose-500/10 border border-rose-100 dark:border-rose-500/20 p-3 rounded-xl text-xs font-semibold text-rose-600 dark:text-rose-400">
             {error}
           </div>
         )}

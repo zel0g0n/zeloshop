@@ -273,6 +273,191 @@ describe("createTransaction", () => {
       /Noto'g'ri store/
     );
   });
+
+  // 2026-09-18: bog'langan-karta (card linking) diagnostikasi uchun qo'shildi.
+  test("cardToken berilsa - payloadga card_token qo'shadi", async () => {
+    const fetchMock = fetchSequence({
+      tokenBody: { access_token: "tok", expires_in: 3600 },
+      createBody: { result: { code: "OK" }, transaction_id: 777 },
+    });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    await atmosClient.createTransaction({ amountSom: 1000, account: "acc-1", cardToken: "card-tok-abc" });
+
+    const payload = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(payload.card_token).toBe("card-tok-abc");
+  });
+
+  test("cardToken berilmasa - payloadda card_token maydoni bo'lmaydi", async () => {
+    const fetchMock = fetchSequence({
+      tokenBody: { access_token: "tok", expires_in: 3600 },
+      createBody: { result: { code: "OK" }, transaction_id: 777 },
+    });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    await atmosClient.createTransaction({ amountSom: 1000, account: "acc-1" });
+
+    const payload = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(payload).not.toHaveProperty("card_token");
+  });
+});
+
+describe("bindCardInit", () => {
+  function fetchSequence({ tokenBody, initBody }) {
+    return jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => tokenBody })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => initBody });
+  }
+
+  test("to'g'ri so'rov yuboradi va transactionId/phone'ni qaytaradi", async () => {
+    const fetchMock = fetchSequence({
+      tokenBody: { access_token: "tok", expires_in: 3600 },
+      initBody: { result: { code: "OK" }, transaction_id: 111, phone: "+998 90 *** ** 45" },
+    });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    const result = await atmosClient.bindCardInit({ cardNumber: "8600123456781234", expiry: "2712" });
+
+    expect(result).toEqual({ transactionId: 111, phone: "+998 90 *** ** 45" });
+    const [url, options] = fetchMock.mock.calls[1];
+    expect(url).toBe("https://apigw.atmos.uz/partner/bind-card/init");
+    expect(JSON.parse(options.body)).toEqual({ card_number: "8600123456781234", expiry: "2712" });
+  });
+
+  test("cardNumber/expiry bo'lmasa - so'rov yubormasdan xato tashlaydi", async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    await expect(atmosClient.bindCardInit({ cardNumber: "", expiry: "2712" })).rejects.toThrow(/cardNumber/);
+    await expect(atmosClient.bindCardInit({ cardNumber: "8600123456781234", expiry: "" })).rejects.toThrow(/expiry/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("javobda transaction_id yo'q bo'lsa - xato tashlaydi", async () => {
+    const fetchMock = fetchSequence({
+      tokenBody: { access_token: "tok", expires_in: 3600 },
+      initBody: { result: { code: "OK" } },
+    });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    await expect(
+      atmosClient.bindCardInit({ cardNumber: "8600123456781234", expiry: "2712" })
+    ).rejects.toThrow(/transaction_id/);
+  });
+});
+
+describe("bindCardConfirm", () => {
+  function fetchSequence({ tokenBody, confirmBody }) {
+    return jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => tokenBody })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => confirmBody });
+  }
+
+  test("to'g'ri so'rov yuboradi va cardToken'ni qaytaradi", async () => {
+    const fetchMock = fetchSequence({
+      tokenBody: { access_token: "tok", expires_in: 3600 },
+      confirmBody: { result: { code: "OK" }, data: { card_token: "card-tok-xyz", pan: "8600 12** **** 1234" } },
+    });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    const result = await atmosClient.bindCardConfirm({ transactionId: 111, otp: "111111" });
+
+    expect(result.cardToken).toBe("card-tok-xyz");
+    const [url, options] = fetchMock.mock.calls[1];
+    expect(url).toBe("https://apigw.atmos.uz/partner/bind-card/confirm");
+    expect(JSON.parse(options.body)).toEqual({ transaction_id: 111, otp: "111111" });
+  });
+
+  test("transactionId/otp bo'lmasa - so'rov yubormasdan xato tashlaydi", async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    await expect(atmosClient.bindCardConfirm({ transactionId: null, otp: "111111" })).rejects.toThrow(
+      /transactionId/
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("javobda data.card_token yo'q bo'lsa - cardToken:null qaytaradi (xato tashlamaydi)", async () => {
+    const fetchMock = fetchSequence({
+      tokenBody: { access_token: "tok", expires_in: 3600 },
+      confirmBody: { result: { code: "OK" }, data: {} },
+    });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    const result = await atmosClient.bindCardConfirm({ transactionId: 111, otp: "111111" });
+    expect(result.cardToken).toBeNull();
+  });
+});
+
+describe("listLinkedCards", () => {
+  test("bog'langan kartalar ro'yxatini qaytaradi", async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: "tok", expires_in: 3600 }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ result: { code: "OK" }, cardDataSmallList: [{ card_token: "t1" }] }),
+      });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    const cards = await atmosClient.listLinkedCards({});
+
+    expect(cards).toEqual([{ card_token: "t1" }]);
+    const [url, options] = fetchMock.mock.calls[1];
+    expect(url).toBe("https://apigw.atmos.uz/partner/list-cards");
+    expect(JSON.parse(options.body)).toEqual({});
+  });
+
+  test("ro'yxat bo'lmasa - bo'sh massiv qaytaradi", async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: "tok", expires_in: 3600 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ result: { code: "OK" } }) });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    expect(await atmosClient.listLinkedCards({})).toEqual([]);
+  });
+});
+
+describe("removeLinkedCard", () => {
+  test("to'g'ri so'rov yuboradi", async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ access_token: "tok", expires_in: 3600 }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ result: { code: "OK" } }) });
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    const result = await atmosClient.removeLinkedCard({ cardToken: "card-tok-abc" });
+
+    expect(result).toEqual({ success: true });
+    const [url, options] = fetchMock.mock.calls[1];
+    expect(url).toBe("https://apigw.atmos.uz/partner/remove-card");
+    expect(JSON.parse(options.body)).toEqual({ card_token: "card-tok-abc" });
+  });
+
+  test("cardToken bo'lmasa - so'rov yubormasdan xato tashlaydi", async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock;
+    const atmosClient = loadModule();
+
+    await expect(atmosClient.removeLinkedCard({})).rejects.toThrow(/cardToken/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe("getTransaction", () => {
@@ -357,6 +542,9 @@ describe("createCheckoutInvoice", () => {
     const [url, options] = fetchMock.mock.calls[1];
     expect(url).toBe("https://apigw.atmos.uz/checkout/invoice/create");
     expect(options.headers.Authorization).toBe("Bearer tok");
+    // 2026-09-15: hujjatning umumiy kirish qismida talab qilingan `apikey`
+    // sarlavhasi endi HAR BIR checkout/invoice so'roviga qo'shiladi.
+    expect(options.headers.apikey).toBe("test-api-key");
     const payload = JSON.parse(options.body);
     expect(payload).toEqual({
       request_id: "req-1",

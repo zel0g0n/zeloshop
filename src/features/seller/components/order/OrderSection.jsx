@@ -14,6 +14,8 @@ import { filterOrders, computeOrderNumbers, computeDeliveredRevenue, computeActi
 import { getCourierList } from '@/services/couriers/getCourierList';
 import { playNewOrderChime } from '@/utils/notificationSound';
 import { getEffectiveTariffPlan } from '@/utils/tariffLimits';
+import { useIsDesktop } from '@/hooks/useIsDesktop';
+import DesktopOrders from './DesktopOrders';
 
 // Har bir bo'limda (tab) bir vaqtning o'zida ko'rsatiladigan
 // buyurtmalar soni - ro'yxat uzun bo'lib ketmasligi uchun. "Yana
@@ -27,6 +29,7 @@ const PAGE_SIZE = 8;
 const SellerOrdersPage = () => {
   const { t } = useLanguage();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const [activeTab, setActiveTab] = useState('new');
   const [searchQuery, setSearchQuery] = useState('');
   const { sellerId, store } = useSession();
@@ -150,6 +153,43 @@ const SellerOrdersPage = () => {
     }
   }, [selectedIds]);
 
+  const handleClearSelection = useCallback(() => setSelectedIds(new Set()), []);
+
+  const desktopCount = Math.max(visibleCount, 20);
+
+  if (isDesktop) {
+    return (
+      <>
+        <DesktopOrders
+          orders={orders}
+          visibleOrders={filteredOrders.slice(0, desktopCount)}
+          filteredCount={filteredOrders.length}
+          orderNumbers={orderNumbers}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          searchQuery={searchQuery}
+          onSearchChange={setSearchQuery}
+          totalRevenue={totalRevenue}
+          activeOrdersCount={activeOrdersCount}
+          showAnalytics={showAnalyticsChip}
+          selectedIds={selectedIds}
+          onToggleSelect={handleToggleSelect}
+          onClearSelection={handleClearSelection}
+          bulkBusy={bulkBusy}
+          onBulkStatus={handleBulkAction}
+          onBulkHide={handleBulkHide}
+          bulkError={bulkError}
+          couriers={couriers}
+          onCopied={() => setToastMessage(t("sellerOrders.copied"))}
+          loading={isLoading}
+          canShowMore={filteredOrders.length > desktopCount || hasMore}
+          onShowMore={() => (filteredOrders.length > desktopCount ? setVisibleCount(desktopCount + 20) : loadMore())}
+        />
+        {toastMessage && <Toast message={toastMessage} onDone={() => setToastMessage(null)} />}
+      </>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col bg-[#f8fafc] dark:bg-slate-950 transition-colors duration-300">
 
@@ -220,7 +260,7 @@ const SellerOrdersPage = () => {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-36 pt-3 max-w-md mx-auto w-full">
+      <div className="flex-1 overflow-y-auto px-4 pb-36 pt-3 max-w-md lg:max-w-none mx-auto w-full">
         {bulkError && <div className="text-center py-2 text-rose-500 dark:text-rose-400 text-xs font-semibold">{bulkError}</div>}
 
         {selectedIds.size > 0 && (

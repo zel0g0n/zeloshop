@@ -1,20 +1,28 @@
 import { Routes, Route, NavLink } from "react-router-dom";
-import { BarChart3, Store, Wallet } from "lucide-react";
+import { BarChart3, Store, Wallet, ReceiptText } from "lucide-react";
 import { useKeyboardVisible } from "@/hooks/useKeyboardVisible";
 import AdminDashboard from "./AdminDashboard";
 import AdminSellersPage from "./AdminSellersPage";
 import AdminTariffRequestsPage from "./AdminTariffRequestsPage";
+import AdminManualTariffPaymentsPage from "./AdminManualTariffPaymentsPage";
 
 // Admin panel — SessionGate orqali oddiy sotuvchi/mijoz marshrutlaridan
 // TASHQARIDA ko'rsatiladi (faqat `admins/{uid}` hujjati mavjud
 // foydalanuvchilar uchun). O'zining alohida, sodda navigatsiyasi bor.
 //
 // "Tariflar" (2026-09) — sotuvchilardan kelgan Z-Pro/Z-Biznes tarif
-// almashtirish so'rovlari uchun (`AdminTariffRequestsPage.jsx`).
+// almashtirish so'rovlari uchun (`AdminTariffRequestsPage.jsx`, ESKI,
+// chekvsiz "qiziqish bildirish" oqimi).
+//
+// "To'lov tekshiruvi" (2026-09-25) — BUTUNLAY ALOHIDA, YANGI oqim:
+// sotuvchi HAQIQATAN ZeloShop kartasiga o'tkazma qilib, chek
+// skrinshotini yuklagan (`manualTariffPayments.js`) — admin shu yerda
+// chekni ko'rib, tasdiqlaydi/rad etadi (`AdminManualTariffPaymentsPage.jsx`).
 const navItems = [
   { path: "/", label: "Bosh sahifa", icon: BarChart3, end: true },
   { path: "/sellers", label: "Sotuvchilar", icon: Store },
   { path: "/tariff-requests", label: "Tariflar", icon: Wallet },
+  { path: "/manual-tariff-payments", label: "To'lovlar", icon: ReceiptText },
 ];
 
 const AdminApp = () => {
@@ -39,6 +47,7 @@ const AdminApp = () => {
         <Route path="/" element={<AdminDashboard />} />
         <Route path="/sellers" element={<AdminSellersPage />} />
         <Route path="/tariff-requests" element={<AdminTariffRequestsPage />} />
+        <Route path="/manual-tariff-payments" element={<AdminManualTariffPaymentsPage />} />
       </Routes>
 
       <div className={`fixed bottom-4 left-0 right-0 z-40 transition-transform duration-200 ${isKeyboardVisible ? "translate-y-[calc(100%+2rem)]" : "translate-y-0"}`}>

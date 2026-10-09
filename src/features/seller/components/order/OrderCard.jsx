@@ -9,7 +9,7 @@ import useChangeOrderStatus from '@/hooks/seller/useChangeOrderStatus';
 import { getOrderStatusInfo, NEXT_STATUS_ACTION, CAN_CANCEL_STATUSES } from '@/constants/orderStatus';
 import { formatRelativeTime } from '@/utils/relativeTime';
 import { assignOrderToCourier, resendTrackingLink } from '@/services/couriers/courierManagement';
-import { canDispatchYandex, isCourierAssignedPending, isCourierActiveDelivery } from '@/utils/orderCourierLogic';
+import { canDispatchYandex, isCourierAssignedPending, isCourierActiveDelivery, YANDEX_STATUS_LABEL_KEYS } from '@/utils/orderCourierLogic';
 import { formatDeliverySlotAbsolute } from '@/utils/deliverySlots';
 import CancelReasonModal from './CancelReasonModal';
 import YandexTariffModal from './YandexTariffModal';
@@ -26,31 +26,10 @@ const COURIER_DELIVERY_STATUS_LABEL_KEYS = {
   failed: "courierStatusFailed",
 };
 
-// Yandex'ning to'liq status ro'yxatidan, sotuvchiga TUSHUNARLI
-// qisqa yorliqlarga moslashtirilgan qism — barcha texnik holatlarni
-// emas, faqat eng muhim bosqichlarni ko'rsatamiz.
-const YANDEX_STATUS_LABEL_KEYS = {
-  new: "yandexStatusSearching",
-  estimating: "yandexStatusSearching",
-  ready_for_approval: "yandexStatusSearching",
-  accepted: "yandexStatusSearching",
-  performer_lookup: "yandexStatusSearching",
-  performer_draft: "yandexStatusSearching",
-  performer_found: "yandexStatusCourierFound",
-  pickup_arrived: "yandexStatusCourierFound",
-  pickuped: "yandexStatusOnTheWay",
-  delivery_arrived: "yandexStatusOnTheWay",
-  delivered_finish: "yandexStatusDelivered",
-  cancelled: "yandexStatusCancelled",
-  cancelled_with_payment: "yandexStatusCancelled",
-  cancelled_by_taxi: "yandexStatusCancelled",
-  failed: "yandexStatusCancelled",
-};
-
-const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, couriers = [] }) => {
+const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, couriers = [], defaultOpen = false, hideSelect = false }) => {
   const { t } = useLanguage();
   const { store } = useSession();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(defaultOpen);
   const { changeOrderStatus } = useChangeOrderStatus();
   const statusInfo = getOrderStatusInfo(order.status);
   const nextAction = NEXT_STATUS_ACTION[order.status];
@@ -207,14 +186,16 @@ const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, co
 
       <div className="flex items-start justify-between gap-2 cursor-pointer" onClick={() => setIsOpen((v) => !v)}>
         <div className="flex items-start gap-2.5">
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onToggleSelect(order.id); }}
-            className={`shrink-0 mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelected ? "bg-indigo-600 border-indigo-600" : "border-slate-300 dark:border-slate-600"}`}
-            aria-label={t("sellerOrders.select")}
-          >
-            {isSelected && <Check size={12} className="text-white" strokeWidth={3} />}
-          </button>
+          {!hideSelect && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onToggleSelect(order.id); }}
+              className={`shrink-0 mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelected ? "bg-indigo-600 border-indigo-600" : "border-slate-300 dark:border-slate-600"}`}
+              aria-label={t("sellerOrders.select")}
+            >
+              {isSelected && <Check size={12} className="text-white" strokeWidth={3} />}
+            </button>
+          )}
           <div>
             <span className="font-bold text-[#514be3] dark:text-[#8b85f5] text-sm">#{orderNumber}</span>
             <p className="text-[11px] text-gray-500 dark:text-slate-400 font-medium">{formatRelativeTime(order.createdAt)}</p>
@@ -297,8 +278,8 @@ const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, co
           {/* Karta orqali to'langan buyurtmalar uchun — mijoz yuklagan
               to'lov cheki skrinshoti. Sotuvchi buni "Tasdiqlash"dan
               OLDIN ko'rib, pul o'zining kartasiga tushganini tekshirishi
-              kerak (2026-09 punkt-royxati, 14-band — ATMOS o'rniga
-              qo'lda tekshirish bosqichi). */}
+              kerak (2026-09 punkt-royxati, 14-band — qo'lda
+              tekshirish bosqichi). */}
           {order.paymentMethod === "card" && order.paymentReceiptUrl && (
             <a
               href={order.paymentReceiptUrl}

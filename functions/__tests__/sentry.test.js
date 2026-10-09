@@ -100,6 +100,35 @@ describe("lib/sentry", () => {
       expect(captureSpy).toHaveBeenCalledWith(err, { extra: { uid: "seller42" } });
     });
 
+    test("kutilgan mijoz xatosi (HttpsError failed-precondition) Sentry'ga yuborilmaydi, lekin qayta tashlanadi", async () => {
+      jest.spyOn(sentryLib.SENTRY_DSN, "value").mockReturnValue("https://fake@example.ingest.sentry.io/1");
+      const { HttpsError } = require("firebase-functions/v2/https");
+      const err = new HttpsError("failed-precondition", "Bu tavsiya endi amal qilmaydi.");
+      const wrapped = sentryLib.withSentry(jest.fn().mockRejectedValue(err));
+      await expect(wrapped({ auth: { uid: "s1" } })).rejects.toBe(err);
+      expect(captureSpy).not.toHaveBeenCalled();
+    });
+
+    test("server tomoni HttpsError (internal) HAMON Sentry'ga yuboriladi", async () => {
+      jest.spyOn(sentryLib.SENTRY_DSN, "value").mockReturnValue("https://fake@example.ingest.sentry.io/1");
+      const { HttpsError } = require("firebase-functions/v2/https");
+      const err = new HttpsError("internal", "Ichki xato");
+      const wrapped = sentryLib.withSentry(jest.fn().mockRejectedValue(err));
+      await expect(wrapped({})).rejects.toBe(err);
+      expect(captureSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("`unauthenticated` HttpsError (masalan noto'g'ri BOT_TOKEN) Sentry'ga yuboriladi, `isExpected` belgilangani esa yuborilmaydi", async () => {
+      jest.spyOn(sentryLib.SENTRY_DSN, "value").mockReturnValue("https://fake@example.ingest.sentry.io/1");
+      const { HttpsError } = require("firebase-functions/v2/https");
+      const bad = new HttpsError("unauthenticated", "imzo");
+      await expect(sentryLib.withSentry(jest.fn().mockRejectedValue(bad))({})).rejects.toBe(bad);
+      expect(captureSpy).toHaveBeenCalledTimes(1);
+      const stale = Object.assign(new HttpsError("unauthenticated", "eskirgan"), { isExpected: true });
+      await expect(sentryLib.withSentry(jest.fn().mockRejectedValue(stale))({})).rejects.toBe(stale);
+      expect(captureSpy).toHaveBeenCalledTimes(1);
+    });
+
     test("`auth` bo'lmagan chaqiruvda (onSchedule/onRequest kabi) uid `null` sifatida yuboriladi", async () => {
       jest.spyOn(sentryLib.SENTRY_DSN, "value").mockReturnValue("https://fake@example.ingest.sentry.io/1");
       const err = new Error("cron xatosi");

@@ -451,7 +451,9 @@ async function handleRegisterTelegramWebhook(request) {
     throw new HttpsError("unauthenticated", "Tizimga kirgan bo'lishingiz kerak.");
   }
   const adminSnap = await db.collection("admins").doc(request.auth.uid).get();
-  if (!adminSnap.exists) {
+  // Parol bilan (veb) kirilgan sessiya HECH QACHON admin huquqiga ega emas
+  // (`webAppAuth.js`dagi `loginMethod: "password"` da'vosi) — admin faqat Telegram orqali.
+  if (!adminSnap.exists || request.auth.token?.loginMethod === "password") {
     throw new HttpsError("permission-denied", "Bu amal faqat administratorlar uchun.");
   }
 

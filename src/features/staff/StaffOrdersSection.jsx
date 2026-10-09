@@ -23,7 +23,7 @@ import StaffOrderCard from "./StaffOrderCard";
  */
 const StaffOrdersSection = () => {
   const { t } = useLanguage();
-  const { sellerId, staffId, staffName, permissions } = useStaffSession();
+  const { sellerId, staffId, staffName, permissions, store } = useStaffSession();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("new");
@@ -107,6 +107,7 @@ const StaffOrdersSection = () => {
               couriers={couriers}
               staffId={staffId}
               staffName={staffName}
+              store={store}
             />
           ))
         )}

@@ -266,3 +266,75 @@ describe("handleDispatchYandexDelivery - taxiClass o'tishi", () => {
     expect(createAndAcceptClaim.mock.calls[0][1].taxiClass).toBeUndefined();
   });
 });
+
+describe("handleDispatchYandexDelivery - xodim (staff) ruxsati", () => {
+  const orderData = {
+    sellerId: "seller-1",
+    yandexClaimId: null,
+    customer: { fullName: "Mijoz", phone: "+998901112233", address: "Toshkent", location: { lat: 41.31, lng: 69.24 } },
+    orders: [{ name: "Krem", quantity: 1, price: 50000 }],
+  };
+  const yandexDeliveryData = { enabled: true, oauthToken: "token-123", pickupLat: 41.3, pickupLng: 69.27, pickupAddress: "Do'kon" };
+  const sellerData = { storeName: "Lg Shop", phone: "+998901110000" };
+
+  // `buildDispatchMockDb`ni `staff/{id}` hujjati bilan kengaytiradi.
+  const withStaff = (db, staffDoc) => {
+    const original = db.collection;
+    db.collection = (name) => {
+      if (name === "staff") {
+        return { doc: () => ({ get: async () => (staffDoc ? { exists: true, data: () => staffDoc } : { exists: false }) }) };
+      }
+      return original(name);
+    };
+    return db;
+  };
+  const staffRequest = () => ({ auth: { uid: "staff-9" }, data: { orderId: "order-1", taxiClass: "express" } });
+  const yandexMocks = () => ({
+    createAndAcceptClaim: jest.fn().mockResolvedValue({ id: "claim-s", status: "new" }),
+    getClaimInfo: jest.fn().mockResolvedValue({ status: "ready_for_approval", version: 1 }),
+    acceptClaim: jest.fn().mockResolvedValue({}),
+  });
+
+  test("manageCouriers ruxsatli faol xodim egasining buyurtmasini Yandex'ga jo'nata oladi va o'zi qayd etiladi", async () => {
+    const db = withStaff(
+      buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData }),
+      { sellerId: "seller-1", status: "active", permissions: { manageCouriers: true } }
+    );
+    const mocks = yandexMocks();
+    const { _testables } = loadModule(db, mocks);
+    await expect(_testables.handleDispatchYandexDelivery(staffRequest())).resolves.toMatchObject({ success: true, claimId: "claim-s" });
+    expect(mocks.createAndAcceptClaim).toHaveBeenCalledTimes(1);
+    expect(db.__updateCalls[0]).toMatchObject({ yandexClaimId: "claim-s", yandexDispatchedByStaffId: "staff-9" });
+  });
+
+  test("manageCouriers ruxsati yo'q xodim rad etiladi", async () => {
+    const db = withStaff(
+      buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData }),
+      { sellerId: "seller-1", status: "active", permissions: { manageOrders: true } }
+    );
+    const mocks = yandexMocks();
+    const { _testables } = loadModule(db, mocks);
+    await expect(_testables.handleDispatchYandexDelivery(staffRequest())).rejects.toMatchObject({ code: "permission-denied" });
+    expect(mocks.createAndAcceptClaim).not.toHaveBeenCalled();
+  });
+
+  test("nofaol xodim rad etiladi", async () => {
+    const db = withStaff(
+      buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData }),
+      { sellerId: "seller-1", status: "inactive", permissions: { manageCouriers: true } }
+    );
+    const { _testables } = loadModule(db, yandexMocks());
+    await expect(_testables.handleDispatchYandexDelivery(staffRequest())).rejects.toMatchObject({ code: "permission-denied" });
+  });
+
+  test("boshqa do'kon xodimi bu buyurtmani jo'nata olmaydi", async () => {
+    const db = withStaff(
+      buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData }),
+      { sellerId: "seller-OTHER", status: "active", permissions: { manageCouriers: true } }
+    );
+    const mocks = yandexMocks();
+    const { _testables } = loadModule(db, mocks);
+    await expect(_testables.handleDispatchYandexDelivery(staffRequest())).rejects.toMatchObject({ code: "permission-denied" });
+    expect(mocks.createAndAcceptClaim).not.toHaveBeenCalled();
+  });
+});

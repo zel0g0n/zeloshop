@@ -34,16 +34,35 @@ export const getTelegramUser = () => {
 /**
  * Ilova Telegram ichida ochilganmi yoki oddiy brauzerdami.
  *
- * OLDIN: bu funksiya `initData` bo'sh emasligini talab qilardi. Lekin
- * ba'zi Telegram mijozlarida (ayniqsa Desktop'da "sovuq" ochilishda)
- * `WebApp` obyekti allaqachon mavjud bo'lsa-da, `initData`ning o'zi
- * bir necha o'n millisoniyaga bo'sh bo'lib turishi mumkin — bu esa
- * ilovani "Telegram ichida emasmiz" deb noto'g'ri xulosaga keltirib,
- * zaxira (dev-fallback) rejimiga o'tkazib yuborardi. Endi faqat
- * `WebApp` obyektining mavjudligi tekshiriladi — bu ancha barqaror
- * signal, chunki u skript yuklanishi bilan darhol paydo bo'ladi.
+ * MUHIM (2026-10, veb-kirish): `index.html` Telegram SDK skriptini
+ * HAR DOIM yuklaydi, shuning uchun `window.Telegram.WebApp` obyekti
+ * oddiy brauzerda ham mavjud bo'ladi — faqat uning `platform` maydoni
+ * "unknown" bo'lib qoladi (haqiqiy Telegram mijozlari buni URL
+ * parametri orqali "android"/"ios"/"tdesktop"/"web..." deb o'rnatadi,
+ * va bu `initData`dan OLDIN, skript yuklanishi bilan darhol ma'lum
+ * bo'ladi — "sovuq" ochilishda `initData` bir zumga bo'sh bo'lsa ham
+ * adashmaydi). Shuning uchun: `initData` to'liq bo'lsa YOKI `platform`
+ * "unknown" emas bo'lsa — Telegram ichidamiz.
  */
-export const isRunningInTelegram = () => Boolean(getTelegramWebApp());
+export const isRunningInTelegram = () => {
+  const webApp = getTelegramWebApp();
+  if (!webApp) return false;
+  if (webApp.initData) return true;
+  return Boolean(webApp.platform) && webApp.platform !== "unknown";
+};
+
+/**
+ * Telegram havolasini (masalan "ulashish") ochadi: Telegram ichida —
+ * uning o'z oynasi bilan, oddiy brauzerda — yangi tabda.
+ */
+export const openTelegramLinkSafe = (url) => {
+  const webApp = getTelegramWebApp();
+  if (isRunningInTelegram() && webApp?.openTelegramLink) {
+    webApp.openTelegramLink(url);
+  } else {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+};
 
 /**
  * `initData` hali bo'sh bo'lsa, uni bir necha marta (qisqa oraliqlar
@@ -58,17 +77,6 @@ export const waitForInitData = async (maxAttempts = 20, delayMs = 100) => {
   }
   return getTelegramWebApp()?.initData || "";
 };
-
-/**
- * DEV / LOKAL TEST rejimi uchun zaxira ID'lar.
- * MUHIM: bular faqat Telegram tashqarisida (masalan localhost'da) ishlaganda
- * ishlatiladi. Productionda WebApp.initData mavjud bo'lgani uchun ular
- * hech qachon ishlatilmaydi. Haqiqiy Firestore'dagi mavjud test
- * hujjatlariga mos keladi — shuning uchun loyihani localhost'da ochib
- * ko'rish darhol ishlaydi.
- */
-export const DEV_FALLBACK_SELLER_ID = "yGsq7Cmn2C3IF103gtGm";
-export const DEV_FALLBACK_CLIENT_ID = "QdPK91xipZh6c6JHaupV";
 
 /**
  * Botning Telegram username'i (@ belgisisiz). Do'kon havolasini

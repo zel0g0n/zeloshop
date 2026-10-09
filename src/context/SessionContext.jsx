@@ -1,15 +1,17 @@
-import { createContext, useContext, useEffect, useMemo, useState, useCallback } from "react";
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { httpsCallable } from "firebase/functions";
-import { signInWithCustomToken } from "firebase/auth";
+import { signInWithCustomToken, onAuthStateChanged } from "firebase/auth";
 import { auth, functions } from "@/firebase/config";
-import {
-  getTelegramWebApp,
-  isRunningInTelegram,
-  waitForInitData,
-  DEV_FALLBACK_SELLER_ID,
-  DEV_FALLBACK_CLIENT_ID,
-} from "@/config/telegram";
+import { getTelegramWebApp, isRunningInTelegram, waitForInitData } from "@/config/telegram";
 import { AUTH_RETRY_DELAYS_MS, isLikelyNetworkError } from "@/utils/authErrorClassifier";
+import { loginWithPassword, fetchWebSession, logoutWeb } from "@/services/auth/webSession";
+import {
+  ACTIVITY_WRITE_THROTTLE_MS,
+  clearLastActive,
+  isIdleExpired,
+  readLastActive,
+  writeLastActive,
+} from "@/utils/webSessionIdle";
 
 /**
  * SessionContext — butun ilova uchun BITTA joriy sotuvchi/mijoz manbai.
@@ -54,6 +56,93 @@ import { AUTH_RETRY_DELAYS_MS, isLikelyNetworkError } from "@/utils/authErrorCla
  */
 const SessionContext = createContext(null);
 
+/**
+ * Brauzer (Telegramsiz) sessiyasini aniqlaydi: Firebase'ning o'zi saqlagan
+ * (IndexedDB) kirishni tiklaydi va FAQAT `loginMethod: "password"` tokenli,
+ * harakatsizlik muddati o'tmagan sessiyani qabul qiladi.
+ */
+const loggedOutState = (error = null) => ({
+  status: "login-required",
+  sellerId: null,
+  clientId: null,
+  isSeller: false,
+  isAdmin: false,
+  needsOnboarding: false,
+  telegramUser: null,
+  security: null,
+  dashboardSummary: null,
+  store: null,
+  deepLinkPath: null,
+  sellerInviterId: null,
+  isWebSession: true,
+  error,
+});
+
+const readyWebState = (data) => ({
+  status: "ready",
+  sellerId: data.sellerId,
+  clientId: null,
+  isSeller: true,
+  isAdmin: false, // parol bilan kirilgan sessiya HECH QACHON admin emas
+  needsOnboarding: false,
+  telegramUser: { id: data.sellerId, firstName: null, lastName: null, username: null },
+  store: data.store,
+  security: data.security,
+  dashboardSummary: data.dashboardSummary,
+  deepLinkPath: null,
+  sellerInviterId: null,
+  isWebSession: true,
+  error: null,
+});
+
+async function resolveWebSession(isCancelled, setState) {
+  try {
+    await auth.authStateReady();
+    const user = auth.currentUser;
+    if (!user) {
+      if (!isCancelled()) setState(loggedOutState());
+      return;
+    }
+
+    // Faqat parol bilan olingan token qabul qilinadi (boshqa har qanday
+    // eski/begona sessiya — masalan Telegram tokeni — tozalanadi).
+    const tokenResult = await user.getIdTokenResult();
+    if (tokenResult.claims.loginMethod !== "password") {
+      await logoutWeb();
+      if (!isCancelled()) setState(loggedOutState());
+      return;
+    }
+
+    if (isIdleExpired(readLastActive(), Date.now())) {
+      await logoutWeb();
+      clearLastActive();
+      if (!isCancelled()) setState(loggedOutState("idle-expired"));
+      return;
+    }
+
+    const data = await fetchWebSession();
+    if (isCancelled()) return;
+    writeLastActive();
+    setState(readyWebState(data));
+  } catch (err) {
+    if (isCancelled()) return;
+    const code = err?.code || "";
+    // Server sessiyani rad etdi (masalan do'kon o'chirilgan) — tozalab, qayta kirishga yo'naltiramiz.
+    if (code.includes("permission-denied") || code.includes("unauthenticated") || code.includes("not-found")) {
+      await logoutWeb().catch(() => {});
+      setState(loggedOutState(err?.message || null));
+      return;
+    }
+    console.error("Veb sessiyani aniqlashda xatolik:", err);
+    setState((prev) => ({
+      ...prev,
+      isWebSession: true,
+      status: isLikelyNetworkError(err) ? "network-error" : "error",
+      error: err?.message || "Noma'lum xatolik",
+    }));
+  }
+}
+
 export const SessionProvider = ({ children }) => {
   const [state, setState] = useState({
     status: "loading", // 'loading' | 'ready' | 'error' | 'network-error'
@@ -84,8 +173,13 @@ export const SessionProvider = ({ children }) => {
     // `createSeller()`ga uzatadi (`sellerReferrals.js`ga qarang).
     // Faqat `needsOnboarding: true` bilan birga ma'noli.
     sellerInviterId: null,
+    // Brauzerda (Telegramsiz), login/parol bilan kirilgan sessiyami
+    // (`functions/webAppAuth.js`). `status: "login-required"` — hali
+    // kirilmagan, `SessionGate.jsx` Kirish sahifasini ko'rsatadi.
+    isWebSession: false,
     error: null,
   });
+  const [loggingIn, setLoggingIn] = useState(false);
 
   // 2026-09 QO'SHILDI (13/14-band): "Qayta urinish" tugmasi shu sonni
   // oshiradi — bu pastdagi `useEffect`ni qaytadan ishga tushiradi va
@@ -99,26 +193,14 @@ export const SessionProvider = ({ children }) => {
       const webApp = getTelegramWebApp();
       const inTelegram = isRunningInTelegram();
 
-      // Telegram tashqarisida (masalan localhost'da test qilinayotganda) —
-      // Cloud Function'ni chaqirishning ma'nosi yo'q (initData bo'lmaydi).
-      // Lokal test uchun zaxira ID'lar ishlatiladi.
+      // Telegram TASHQARISIDA (oddiy brauzer) — sotuvchi panelini login/parol
+      // bilan ochish yo'li (`functions/webAppAuth.js`). OLDIN bu yerda
+      // qat'iy yozilgan zaxira (dev-fallback) ID'lar bilan "tizimga
+      // kirilgan" deb ko'rsatilardi — productionda bu xavfli edi, endi
+      // butunlay olib tashlangan: haqiqiy, server tomonidan tasdiqlangan
+      // sessiya bo'lmasa, Kirish sahifasi ko'rsatiladi.
       if (!inTelegram) {
-        if (!cancelled) {
-          setState({
-            status: "ready",
-            sellerId: DEV_FALLBACK_SELLER_ID,
-            clientId: DEV_FALLBACK_CLIENT_ID,
-            isSeller: true,
-            isAdmin: false,
-            needsOnboarding: false,
-            telegramUser: null,
-            store: null,
-            security: null,
-            dashboardSummary: null,
-            sellerInviterId: null,
-            error: null,
-          });
-        }
+        await resolveWebSession(() => cancelled, setState);
         return;
       }
 
@@ -248,6 +330,7 @@ export const SessionProvider = ({ children }) => {
               security: null,
               dashboardSummary: null,
               sellerInviterId: null,
+              isWebSession: false,
               error: null,
             });
           }
@@ -271,6 +354,7 @@ export const SessionProvider = ({ children }) => {
               dashboardSummary: null,
               deepLinkPath: data.deepLinkPath || ownerDeepLinkPath || null,
               sellerInviterId: null,
+              isWebSession: false,
               error: null,
             });
           }
@@ -297,6 +381,7 @@ export const SessionProvider = ({ children }) => {
             security: data.security,
             dashboardSummary: data.dashboardSummary,
             sellerInviterId: !sellerDoc ? (data.sellerInviterId || null) : null,
+            isWebSession: false,
             error: null,
           });
         }
@@ -380,9 +465,92 @@ export const SessionProvider = ({ children }) => {
     setState((prev) => ({ ...prev, security: { ...(prev.security || {}), ...patch } }));
   }, []);
 
+  // --- Brauzer (veb) sessiyasi: kirish / chiqish / harakatsizlik ---
+  const login = useCallback(async (loginCode, password) => {
+    setLoggingIn(true);
+    try {
+      await loginWithPassword(loginCode, password);
+      const data = await fetchWebSession();
+      writeLastActive();
+      setState(readyWebState(data));
+    } catch (err) {
+      // Foydalanuvchiga tushunarli, umumiy xabar (server ichki tafsilotni oshkor qilmaydi).
+      const code = err?.code || "";
+      let message = "Kirishda xatolik yuz berdi. Qayta urinib ko'ring.";
+      if (code.includes("permission-denied")) message = "Login yoki parol noto'g'ri.";
+      else if (code.includes("resource-exhausted")) message = "Juda ko'p urinish. Bir ozdan so'ng qayta urinib ko'ring.";
+      else if (code.includes("invalid-argument")) message = "Login va parolni to'g'ri kiriting.";
+      else if (code.includes("not-found")) message = err?.message || message;
+      else if (isLikelyNetworkError(err)) message = "Internet aloqasi sust. Qayta urinib ko'ring.";
+      await logoutWeb().catch(() => {});
+      throw new Error(message, { cause: err });
+    } finally {
+      setLoggingIn(false);
+    }
+  }, []);
+
+  const logout = useCallback(async (reason = null) => {
+    try {
+      await logoutWeb();
+    } catch (err) {
+      console.error("Chiqishda xatolik:", err);
+    }
+    clearLastActive();
+    try {
+      sessionStorage.removeItem("zeloshop_pin_unlocked");
+    } catch {
+      // jim
+    }
+    setState(loggedOutState(reason));
+  }, []);
+
+  const isReadyWebSession = state.isWebSession && state.status === "ready";
+  const logoutRef = useRef(logout);
+  useEffect(() => {
+    logoutRef.current = logout;
+  }, [logout]);
+
+  // Boshqa tabda chiqilsa — bu tabda ham darhol chiqamiz (Firebase auth
+  // holati tablar orasida umumiy).
+  useEffect(() => {
+    if (!isReadyWebSession) return undefined;
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) logoutRef.current();
+    });
+    return unsubscribe;
+  }, [isReadyWebSession]);
+
+  // Harakatsizlik: so'nggi faollik vaqtini (cheklangan tezlikda) yozib
+  // boramiz va muddati o'tsa avtomatik chiqamiz.
+  useEffect(() => {
+    if (!isReadyWebSession) return undefined;
+    let lastWrite = 0;
+    const markActive = () => {
+      const now = Date.now();
+      if (now - lastWrite < ACTIVITY_WRITE_THROTTLE_MS) return;
+      lastWrite = now;
+      writeLastActive(now);
+    };
+    const checkIdle = () => {
+      if (isIdleExpired(readLastActive(), Date.now())) logoutRef.current("idle-expired");
+    };
+    const events = ["pointerdown", "keydown", "scroll", "touchstart"];
+    events.forEach((e) => window.addEventListener(e, markActive, { passive: true }));
+    const onVisible = () => {
+      if (document.visibilityState === "visible") checkIdle();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = setInterval(checkIdle, 60 * 1000);
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, markActive));
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+    };
+  }, [isReadyWebSession]);
+
   const value = useMemo(
-    () => ({ ...state, completeOnboarding, patchStore, patchDashboardSummary, patchSecurity, retrySession }),
-    [state, completeOnboarding, patchStore, patchDashboardSummary, patchSecurity, retrySession]
+    () => ({ ...state, loggingIn, login, logout, completeOnboarding, patchStore, patchDashboardSummary, patchSecurity, retrySession }),
+    [state, loggingIn, login, logout, completeOnboarding, patchStore, patchDashboardSummary, patchSecurity, retrySession]
   );
 
   return (

@@ -27,7 +27,12 @@ service cloud.firestore {
     // `allow write: if false`) — yangi admin qo'shish FAQAT Firebase
     // Console orqali (platforma egasi tomonidan) qo'lda qilinadi.
     function isAdmin() {
+      // `loginMethod == "password"` — brauzerdan login/parol bilan kirilgan
+      // sessiya (`functions/webAppAuth.js`). Bunday sessiya HECH QACHON
+      // admin huquqiga ega emas: parol o'g'irlansa ham platforma
+      // boshqaruvi xavf ostida qolmaydi (admin faqat Telegram imzosi bilan).
       return isSignedIn() &&
+        request.auth.token.get("loginMethod", "") != "password" &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
@@ -209,8 +214,8 @@ service cloud.firestore {
                     "tariffTrialStartedAt", "tariffTrialExpiresAt", "tariffTrialsUsed",
                     "aiCeoGrantedViaTariff", "activeDiscountCount", "couponCount",
                     "tariffCountersBackfilledAt",
-                    // ATMOS TO'LOV TIZIMI (2026-09): `tariffPaidUntil` va h.k. —
-                    // FAQAT `functions/atmosPayments.js` (Admin SDK) yozadi.
+                    // TARIF TO'LOVI (2026-09): `tariffPaidUntil` va h.k. —
+                    // FAQAT `functions/tariffPayments.js` (Admin SDK) yozadi.
                     // Aks holda sotuvchi brauzer konsolidan o'zining to'lov
                     // muddatini cheksizga o'zgartirib qo'yishi mumkin edi.
                     "tariffPaidUntil", "tariffLastPaymentAt", "tariffPaymentReminderSentAt",
@@ -610,16 +615,30 @@ service cloud.firestore {
     // ham FAQAT `updateCourierOrderStatus` Cloud Function orqali,
     // Admin SDK bilan, quyidagi `allow update` qoidasidan MUSTASNO
     // holda amalga oshiriladi).
-    // --- ATMOS TARIF TO'LOVLARI (2026-09, `functions/atmosPayments.js`) ---
-    // Hujjat ID'si — Atmos tranzaksiya raqami. O'QISH: faqat shu
-    // to'lovning egasi (yoki admin) — sotuvchi checkout'dan qaytgach
-    // holatni tekshirishi uchun. YOZISH: HAR DOIM `false` — faqat
-    // Cloud Function (Admin SDK, `createTariffPayment`/
-    // `atmosPaymentCallback`) yaratadi/yangilaydi, chunki bu yerga
+    // --- TARIF TO'LOVLARI (`functions/tariffPayments.js`, `manualTariffPayments.js`) ---
+    // Kolleksiya nomi `atmosPayments` (mavjud ma'lumotlar uchun
+    // o'zgartirilmagan; ichida qo'lda tasdiqlanadigan tarif to'lovlari turadi).
+    // O'QISH: faqat shu to'lovning egasi (yoki admin). YOZISH: HAR DOIM
+    // `false` — faqat Cloud Function (Admin SDK) yaratadi/yangilaydi, chunki bu yerga
     // "paid" holatini mijoz tomonidan qo'lda yozib qo'yish to'lovsiz
     // tarifni faollashtirishga imkon berardi.
     match /atmosPayments/{transactionId} {
       allow read: if isAdmin() || (isSignedIn() && resource.data.sellerId == request.auth.uid);
+      allow write: if false;
+    }
+
+    // --- QO'LDA TASDIQLASH SOZLAMASI (2026-09-25, `functions/
+    // manualTariffPayments.js`) — tarif to'lovi:
+    // sotuvchi ZeloShop'ning O'Z kartasiga o'tkazma qilib, tarif to'lash
+    // imkoniyati. `settings/manualTariffPayment` — ZeloShop'ning karta
+    // raqami/egasi F.I.SH.ini saqlaydigan BITTA global hujjat.
+    // O'QISH: har qanday tizimga kirgan foydalanuvchi (sotuvchi
+    // "Tariflar" sahifasida karta ma'lumotini ko'rishi uchun — bu yerda
+    // hech qanday maxfiy/shaxsiy ma'lumot yo'q, faqat ZeloShop'ning O'Z
+    // rekvizitlari). YOZISH: HAR DOIM `false` — faqat admin,
+    // `setManualTariffPaymentInfo` Cloud Function orqali (Admin SDK).
+    match /settings/{settingId} {
+      allow read: if isSignedIn();
       allow write: if false;
     }
 
@@ -805,6 +824,17 @@ service cloud.firestore {
     // Function'lar orqali — mijoz/sotuvchi SDK'i bu yerga HECH QACHON
     // to'g'ridan-to'g'ri murojaat qilmaydi.
     match /sellers/{sellerId}/staffInvites/{token} {
+      allow read, write: if false;
+    }
+
+    // --- Veb (brauzer) login/parol juftliklari ---
+    // (`appLogins/{login}`, `functions/webAppAuth.js`)
+    // Hujjat ID'si = tasodifiy yaratilgan login kodi, ichida
+    // sotuvchining ID'si + PAROLNING HASH'I (ochiq parol HECH QACHON
+    // saqlanmaydi) bor. Mijoz/sotuvchi SDK'i bu yerga HECH QACHON
+    // to'g'ridan-to'g'ri murojaat qilmaydi - faqat Cloud Function'lar
+    // (`generateWebAppCredentials`, `webAppLogin`), Admin SDK orqali.
+    match /appLogins/{login} {
       allow read, write: if false;
     }
   }

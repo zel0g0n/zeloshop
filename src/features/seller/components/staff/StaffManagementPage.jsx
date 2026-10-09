@@ -5,7 +5,7 @@ import {
 } from "lucide-react";
 import { useSession } from "@/context/SessionContext";
 import { useLanguage } from "@/context/LanguageContext";
-import { getTelegramWebApp } from "@/config/telegram";
+import { openTelegramLinkSafe } from "@/config/telegram";
 import { getStaffList } from "@/services/staff/getStaffList";
 import { createStaffInvite, setStaffPermissions, setStaffActive, removeStaff } from "@/services/staff/staffManagement";
 import getOrderData from "@/services/orders/getOrderData";
@@ -190,13 +190,8 @@ const StaffManagementPage = () => {
         return;
       }
     }
-    const webApp = getTelegramWebApp();
     const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(newInviteLink)}&text=${encodeURIComponent(shareText)}`;
-    if (webApp?.openTelegramLink) {
-      webApp.openTelegramLink(shareUrl);
-    } else {
-      window.open(shareUrl, "_blank");
-    }
+    openTelegramLinkSafe(shareUrl);
   }, [newInviteLink, t]);
 
   // --- Faollashtirish/o'chirish/ruxsatlar/rol ---

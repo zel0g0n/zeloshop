@@ -30,7 +30,7 @@ export const savePaymentConfig = async (sellerId, config) => {
         paymeMerchantId: config.paymeMerchantId || null,
         paymeKey: config.paymeKey || null,
         paymeEnabled: Boolean(config.paymeEnabled && config.paymeMerchantId && config.paymeKey),
-        // "Jismoniy shaxs" (individual) - ATMOS ulanmagunicha, mijozdan
+        // "Jismoniy shaxs" (individual) - avtomatik shlyuz yo'qligi uchun, mijozdan
         // kartaga qo'lda to'lov qabul qilish uchun (2026-09
         // punkt-royxati, 2/14-band). `individualCardNumber` bu yerda
         // TOZALANGAN (faqat raqamlar) holda saqlanadi - formatlash

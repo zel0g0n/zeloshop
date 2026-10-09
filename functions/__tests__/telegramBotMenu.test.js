@@ -84,7 +84,7 @@ function buildMockDb({ sellerData = null, session = null, orders = [] } = {}) {
   return db;
 }
 
-function loadModule(db, { buildDailyReportMock } = {}) {
+function loadModule(db, { buildDailyReportMock, generateWebAppCredentialsMock } = {}) {
   jest.resetModules();
   jest.doMock("../lib/admin", () => ({
     admin: {
@@ -106,6 +106,14 @@ function loadModule(db, { buildDailyReportMock } = {}) {
   jest.doMock("../aiCeo", () => ({
     buildDailyReport: buildDailyReportMock || jest.fn(),
   }));
+  // `webAppAuth.js`ning HAQIQIY moduli bu yerda kerak emas (o'zining
+  // alohida, batafsil testlari bor - `webAppAuth.test.js`) va uni
+  // haqiqatan yuklash `onCall(...)`ni chaqirib, `SENTRY_DSN` kabi
+  // maydonlarni talab qiladi - shu yerdagi soddalashtirilgan `../lib/admin`
+  // mock'ida ular yo'q. Shuning uchun soddagina stub bilan almashtiramiz.
+  jest.doMock("../webAppAuth", () => ({
+    generateWebAppCredentials: generateWebAppCredentialsMock || jest.fn().mockResolvedValue({ login: "MOCKLOGN", password: "MOCKPASSWORD" }),
+  }));
   return require("../telegramBotMenu");
 }
 
@@ -126,11 +134,11 @@ function mockPhotoFetch() {
 }
 
 describe("buildMainMenuKeyboard / buildPhotoCollectionKeyboard / buildConfirmationKeyboard (sof funksiyalar)", () => {
-  test("asosiy menyu UCHALA tugmani ('Yangi buyurtmalar' BIRINCHI) o'z ichiga oladi", () => {
-    const { buildMainMenuKeyboard, MENU_NEW_ORDERS_TEXT, MENU_REPORT_TEXT, MENU_ADD_PRODUCT_TEXT } = loadModule(buildMockDb());
+  test("asosiy menyu BARCHA TO'RTTA tugmani ('Yangi buyurtmalar' BIRINCHI) o'z ichiga oladi", () => {
+    const { buildMainMenuKeyboard, MENU_NEW_ORDERS_TEXT, MENU_REPORT_TEXT, MENU_APP_LOGIN_TEXT, MENU_ADD_PRODUCT_TEXT } = loadModule(buildMockDb());
     const keyboard = buildMainMenuKeyboard();
     const allTexts = keyboard.keyboard.flat().map((b) => b.text);
-    expect(allTexts).toEqual([MENU_NEW_ORDERS_TEXT, MENU_REPORT_TEXT, MENU_ADD_PRODUCT_TEXT]);
+    expect(allTexts).toEqual([MENU_NEW_ORDERS_TEXT, MENU_REPORT_TEXT, MENU_APP_LOGIN_TEXT, MENU_ADD_PRODUCT_TEXT]);
     expect(keyboard.resize_keyboard).toBe(true);
   });
 
@@ -476,6 +484,66 @@ describe("handleTelegramMessage - hisobot va mahsulot qo'shish marshrutlash", ()
   test("sellerId/chatId bo'lmasa, hech narsa qilmaydi (xato tashlamaydi)", async () => {
     const { handleTelegramMessage } = loadModule(buildMockDb());
     await expect(handleTelegramMessage("mock-token", {})).resolves.toBeUndefined();
+  });
+});
+
+describe("handleTelegramMessage - '🔐 Veb login/parol' tugmasi", () => {
+  test("bosilsa, generateWebAppCredentials chaqiriladi va login+parol xabar sifatida yuboriladi", async () => {
+    const generateWebAppCredentialsMock = jest.fn().mockResolvedValue({ login: "ABCD2345", password: "PASSWORD99" });
+    const db = buildMockDb({ sellerData: { storeName: "Zelo" } });
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn(async () => ({ json: async () => ({ ok: true }) }));
+    try {
+      const { handleTelegramMessage, MENU_APP_LOGIN_TEXT } = loadModule(db, { generateWebAppCredentialsMock });
+      await handleTelegramMessage("mock-token", { text: MENU_APP_LOGIN_TEXT, from: { id: 555 }, chat: { id: 555 } });
+
+      expect(generateWebAppCredentialsMock).toHaveBeenCalledWith("555");
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/sendMessage"),
+        expect.objectContaining({ body: expect.stringContaining("ABCD2345") })
+      );
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/sendMessage"),
+        expect.objectContaining({ body: expect.stringContaining("PASSWORD99") })
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  test("mavjud bo'lmagan sotuvchi (hujjat yo'q) uchun - credential yaratilmaydi, oddiy xabar yuboriladi", async () => {
+    const generateWebAppCredentialsMock = jest.fn();
+    const db = buildMockDb({ sellerData: null });
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn(async () => ({ json: async () => ({ ok: true }) }));
+    try {
+      const { handleTelegramMessage, MENU_APP_LOGIN_TEXT } = loadModule(db, { generateWebAppCredentialsMock });
+      await handleTelegramMessage("mock-token", { text: MENU_APP_LOGIN_TEXT, from: { id: 555 }, chat: { id: 555 } });
+
+      expect(generateWebAppCredentialsMock).not.toHaveBeenCalled();
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining("/sendMessage"),
+        expect.objectContaining({ body: expect.stringContaining("Sotuvchi topilmadi") })
+      );
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  test("to'lov muddati o'tgan sotuvchi uchun HAM ishlaydi (bloklanmaydi - ilovaga kirishning o'zi kerak)", async () => {
+    const generateWebAppCredentialsMock = jest.fn().mockResolvedValue({ login: "ABCD2345", password: "PASSWORD99" });
+    // O'tgan muddat: bepul davr ham, to'lov ham yo'q.
+    const db = buildMockDb({ sellerData: { createdAt: { toMillis: () => Date.now() - 30 * 24 * 60 * 60 * 1000 } } });
+    const originalFetch = global.fetch;
+    global.fetch = jest.fn(async () => ({ json: async () => ({ ok: true }) }));
+    try {
+      const { handleTelegramMessage, MENU_APP_LOGIN_TEXT } = loadModule(db, { generateWebAppCredentialsMock });
+      await handleTelegramMessage("mock-token", { text: MENU_APP_LOGIN_TEXT, from: { id: 555 }, chat: { id: 555 } });
+
+      expect(generateWebAppCredentialsMock).toHaveBeenCalledWith("555");
+    } finally {
+      global.fetch = originalFetch;
+    }
   });
 });
 

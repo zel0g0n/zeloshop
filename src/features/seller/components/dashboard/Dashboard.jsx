@@ -25,6 +25,8 @@ import ShareStoreModal from "./ShareStoreModal";
 import OnboardingChecklist from "./OnboardingChecklist";
 import DashboardSkeleton from "./DashboardSkeleton";
 import Toast from "@/components/ui/Toast";
+import { useIsDesktop } from "@/hooks/useIsDesktop";
+import DesktopDashboard from "./desktop/DesktopDashboard";
 
 const TIMEFRAME_DAYS = { Bugun: 1, Hafta: 7, Oy: 30 };
 
@@ -45,6 +47,7 @@ const TIMEFRAME_DAYS = { Bugun: 1, Hafta: 7, Oy: 30 };
 // alohida so'raladi (davr o'zgarganda).
 const Dashboard = () => {
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const { sellerId, store, dashboardSummary, patchStore } = useSession();
   const { t } = useLanguage();
   // "Tezkor amallar" qatori Z-Start tarifida ko'rsatilmaydi (2026-09
@@ -219,6 +222,46 @@ const Dashboard = () => {
   }, [sellerId, store?.customBotUsername, t]);
 
   const hide = (value) => (isPrivate ? "•••" : value);
+
+  if (isDesktop) {
+    return (
+      <>
+        {isLoading ? (
+          <DashboardSkeleton />
+        ) : (
+          <DesktopDashboard
+            sellerId={sellerId}
+            store={store}
+            dashboardSummary={dashboardSummary}
+            isStart={isStart}
+            timeframe={timeframe}
+            onTimeframeChange={handleTimeframeChange}
+            selectedMonthsAgo={selectedMonthsAgo}
+            onOpenMonthPicker={() => setShowMonthPicker(true)}
+            isPrivate={isPrivate}
+            onTogglePrivate={() => setIsPrivate((v) => !v)}
+            onShare={handleQuickShare}
+            onOpenShareModal={() => setShowShareModal(true)}
+            onOpenAiCeo={() => navigate("/seller/ai-ceo")}
+            stats={effectiveStats}
+            conversionRate={conversionRate}
+            visitorCount={visitorCount}
+            orders={effectiveOrders}
+            products={products}
+            rollupDays={rollupDays}
+            nowMs={mountedAtMs}
+          />
+        )}
+        {showMonthPicker && (
+          <MonthPickerSheet selectedMonthsAgo={selectedMonthsAgo} onSelect={setSelectedMonthsAgo} onClose={() => setShowMonthPicker(false)} />
+        )}
+        {showShareModal && (
+          <ShareStoreModal sellerId={sellerId} storeName={store?.storeName} customBotUsername={store?.customBotUsername} onClose={() => setShowShareModal(false)} />
+        )}
+        {toastMessage && <Toast message={toastMessage} onDone={() => setToastMessage(null)} />}
+      </>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
