@@ -130,6 +130,7 @@ export const translations = {
       comingSoon: "Tez orada",
       logout: "Tizimdan chiqish",
       loggingOut: "Chiqilmoqda...",
+      exportCsv: "CSV yuklab olish",
       monthNamesShort: ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"],
       thisMonth: "Joriy oy",
     },
@@ -880,6 +881,7 @@ export const translations = {
     },
     sellerQuickCreateMenu: {
       title: "Nima yaratmoqchisiz?",
+      subtitle: "Tezkor yaratish",
       addProductName: "Mahsulot qo'shish",
       addProductDesc: "Katalogingizga yangi mahsulot qo'shing",
       createPromotionName: "Aksiya yaratish",
@@ -1019,6 +1021,8 @@ export const translations = {
       courierPhoneError: "Kuryer telefonini olishda xatolik yuz berdi",
       yandexTariffModal: {
         title: "Qaysi tarif bilan chaqiramiz?",
+        subtitle: "Tarifni tanlang — kuryer darhol qidiriladi",
+        note: "Narx Yandex tomonidan hisoblanadi va o'z Yandex hisobingizdan yechiladi.",
         courierLabel: "Kuryer",
         courierDesc: "Oddiy, arzonroq (odatda mototsikl/skuter)",
         expressLabel: "Ekspress",
@@ -1095,6 +1099,7 @@ export const translations = {
       resendTrackingLinkError: "Havolani qayta yuborishda xatolik yuz berdi.",
       courierPickerModal: {
         title: "Kuryer tanlang",
+        subtitle: "Buyurtma shu kuryerga topshiriladi",
         empty: "Hali faol kuryeringiz yo'q",
         emptyDesc: "Buyurtmani kuryerga topshirish uchun avval \"Kuryerlar\" bo'limida kuryer qo'shing.",
         manageButton: "Kuryerlar bo'limiga o'tish",
@@ -2467,6 +2472,7 @@ export const translations = {
       comingSoon: "Скоро",
       logout: "Выйти из аккаунта",
       loggingOut: "Выход...",
+      exportCsv: "Скачать CSV",
       monthNamesShort: ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"],
       thisMonth: "Текущий месяц",
     },
@@ -3213,6 +3219,7 @@ export const translations = {
     },
     sellerQuickCreateMenu: {
       title: "Что вы хотите создать?",
+      subtitle: "Быстрое создание",
       addProductName: "Добавить товар",
       addProductDesc: "Добавьте новый товар в каталог",
       createPromotionName: "Создать акцию",
@@ -3352,6 +3359,8 @@ export const translations = {
       courierPhoneError: "Ошибка при получении номера курьера",
       yandexTariffModal: {
         title: "Каким тарифом вызвать?",
+        subtitle: "Выберите тариф — курьер будет найден сразу",
+        note: "Стоимость рассчитывает Яндекс и списывает с вашего аккаунта Яндекс.",
         courierLabel: "Курьер",
         courierDesc: "Обычный, дешевле (обычно мотоцикл/скутер)",
         expressLabel: "Экспресс",
@@ -3428,6 +3437,7 @@ export const translations = {
       resendTrackingLinkError: "Ошибка при повторной отправке ссылки.",
       courierPickerModal: {
         title: "Выберите курьера",
+        subtitle: "Заказ будет передан выбранному курьеру",
         empty: "У вас пока нет активных курьеров",
         emptyDesc: "Чтобы передать заказ курьеру, сначала добавьте курьера в разделе \"Курьеры\".",
         manageButton: "Перейти в раздел «Курьеры»",
@@ -4800,6 +4810,7 @@ export const translations = {
       comingSoon: "Coming soon",
       logout: "Log out",
       loggingOut: "Logging out...",
+      exportCsv: "Download CSV",
       monthNamesShort: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
       thisMonth: "This month",
     },
@@ -5546,6 +5557,7 @@ export const translations = {
     },
     sellerQuickCreateMenu: {
       title: "What would you like to create?",
+      subtitle: "Quick create",
       addProductName: "Add product",
       addProductDesc: "Add a new product to your catalog",
       createPromotionName: "Create promotion",
@@ -5685,6 +5697,8 @@ export const translations = {
       courierPhoneError: "Error getting courier's phone number",
       yandexTariffModal: {
         title: "Which tariff should we call?",
+        subtitle: "Pick a tariff — a courier is searched right away",
+        note: "The price is calculated by Yandex and charged to your own Yandex account.",
         courierLabel: "Courier",
         courierDesc: "Standard, cheaper (usually motorbike/scooter)",
         expressLabel: "Express",
@@ -5761,6 +5775,7 @@ export const translations = {
       resendTrackingLinkError: "Failed to resend the link.",
       courierPickerModal: {
         title: "Choose a courier",
+        subtitle: "The order will be handed to the selected courier",
         empty: "You don't have any active couriers yet",
         emptyDesc: "To hand this order to a courier, first add one in the \"Couriers\" section.",
         manageButton: "Go to Couriers",

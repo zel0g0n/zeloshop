@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/firebase/config";
-import { X, Search, UserCheck, Truck, PackageCheck, XCircle, PhoneCall, Loader2, Car, RotateCcw, MapPin, Copy, Check } from "lucide-react";
+import { Search, UserCheck, Truck, PackageCheck, XCircle, PhoneCall, Loader2, Car, RotateCcw, MapPin, Copy, Check } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
-import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Sheet from "@/components/ui/Sheet";
 
 // Yandex'ning to'liq (texnik) status ro'yxatini, mijozga TUSHUNARLI
 // 5 ta bosqichdan biriga moslashtiramiz - Yandex Go ilovasidagi
@@ -66,7 +66,6 @@ const YandexDeliveryStatusModal = ({ orderId, initialStatus, onClose }) => {
   const [phone, setPhone] = useState(null);
   const [phoneLoading, setPhoneLoading] = useState(false);
 
-  useEscapeToClose(onClose);
   const [phoneError, setPhoneError] = useState(null);
   const [yandexErrors, setYandexErrors] = useState([]);
   const [trackingLink, setTrackingLink] = useState(null);
@@ -146,21 +145,15 @@ const YandexDeliveryStatusModal = ({ orderId, initialStatus, onClose }) => {
   const currentStageIndex = STAGE_ORDER.indexOf(currentStage);
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[100] flex items-end justify-center" onClick={onClose} role="dialog" aria-modal="true">
-      <div
-        className="bg-white dark:bg-slate-900 w-full max-w-[440px] rounded-t-[28px] p-5 space-y-5 max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-black text-slate-800 dark:text-white">{t("sellerOrders.yandexModal.title")}</h3>
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">{t("sellerOrders.yandexModal.subtitle")}</p>
-          </div>
-          <button type="button" onClick={onClose} className="text-slate-400 dark:text-slate-500 shrink-0">
-            <X size={18} />
-          </button>
-        </div>
-
+    <Sheet
+      onClose={onClose}
+      icon={Car}
+      accent="amber"
+      size="md"
+      title={t("sellerOrders.yandexModal.title")}
+      subtitle={t("sellerOrders.yandexModal.subtitle")}
+    >
+      <div className="space-y-5">
         {loading ? (
           <div className="flex items-center justify-center py-10">
             <Loader2 size={22} className="animate-spin text-blue-500" />
@@ -313,7 +306,7 @@ const YandexDeliveryStatusModal = ({ orderId, initialStatus, onClose }) => {
 
         {error && <p className="text-[11px] text-rose-500 font-semibold text-center">{error}</p>}
       </div>
-    </div>
+    </Sheet>
   );
 };
 

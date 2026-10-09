@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, ShoppingBag, BarChart3, Inbox, Wallet, Activity, ClipboardList, X, CheckCircle2, Truck, Ban, Trash2, MousePointerClick } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
@@ -35,6 +35,28 @@ const DesktopOrders = ({
 }) => {
   const { t } = useLanguage();
   const [pickedId, setPickedId] = useState(null);
+
+  // Yon panelning balandligi doim OYNAGA SIG'ADI: sahifa tepasida
+  // (panel statistika ostidan boshlanganda) ham, pastga skroll qilingach
+  // (yuqori panel ostiga yopishganda) ham. Shunda "Kuryer chaqirish" /
+  // "Kuryerga topshirish" / "Bekor qilish" tugmalari pastga skroll
+  // qilmasdan ko'rinib turadi, uzun mazmun esa panel ichida skroll bo'ladi.
+  const asideRef = useRef(null);
+  useEffect(() => {
+    const update = () => {
+      const el = asideRef.current;
+      if (!el) return;
+      const top = Math.max(el.getBoundingClientRect().top, 80);
+      el.style.setProperty("--panel-max-h", `${Math.max(420, window.innerHeight - top - 16)}px`);
+    };
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, []);
   const picked = visibleOrders.find((o) => o.id === pickedId) || visibleOrders[0] || null;
   const countOf = (status) => orders.filter((o) => o.status === status && !o.hiddenAt).length;
   const isHistoryTab = CAN_HIDE_STATUSES.includes(activeTab);
@@ -180,7 +202,7 @@ const DesktopOrders = ({
           </div>
         </section>
 
-        <aside className="col-span-5 xl:col-span-4 sticky top-6">
+        <aside ref={asideRef} className="col-span-5 xl:col-span-4 sticky self-start" style={{ top: "5rem" }}>
           {picked ? (
             <OrderRow
               key={picked.id}
@@ -192,6 +214,7 @@ const DesktopOrders = ({
               couriers={couriers}
               defaultOpen
               hideSelect
+              variant="panel"
             />
           ) : (
             <div className={`${card} p-10 text-center shadow-xs`}>

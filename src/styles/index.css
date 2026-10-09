@@ -68,9 +68,88 @@ html.dark, html.dark body {
     scrollbar-width: none; /* Firefox uchun */
   }
 }
-/* Kompyuter (lg+): sotuvchi panelidagi yuqori panel (h-16) ostida
-   yopishib turadigan sahifa sarlavhalari uning tagidan boshlansin. */
+/* Kompyuter (lg+): sotuvchi paneli.
+   1) Yuqori panel (h-16) ostida yopishib turuvchi elementlar uning tagidan boshlansin.
+   2) Telefon uchun yozilgan "ichki sahifalar" (`.page-header` + `h-screen overflow-y-auto`)
+      kompyuterda IKKI skroll va suzib yuruvchi sarlavha berardi: endi sarlavha oddiy
+      oqimda (sahifa tepasida), skroll esa faqat bitta (brauzer oynasiniki).
+   "designed" sahifalar (`page-tier-designed`) o'zining lg: sinflari bilan boshqariladi. */
 @media (min-width: 1024px) {
   .seller-main .sticky { top: 4rem; }
   .seller-main .seller-topbar { top: 0; }
+
+  .seller-main .page-tier-default .h-screen.overflow-y-auto,
+  .seller-main .page-tier-wide .h-screen.overflow-y-auto {
+    height: auto;
+    overflow: visible;
+  }
+  .seller-main .page-tier-default .min-h-screen,
+  .seller-main .page-tier-wide .min-h-screen { min-height: 0; }
+  .seller-main .page-tier-default .pb-36,
+  .seller-main .page-tier-wide .pb-36 { padding-bottom: 2.5rem; }
+
+  .seller-main .page-tier-default .page-header,
+  .seller-main .page-tier-wide .page-header {
+    position: static;
+    background: transparent;
+    box-shadow: none;
+    border: 0;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    padding: 0.25rem 1rem 1.25rem;
+    gap: 1rem;
+  }
+  .seller-main .page-tier-default .page-header h1,
+  .seller-main .page-tier-wide .page-header h1 {
+    font-size: 1.375rem;
+    line-height: 1.75rem;
+    letter-spacing: -0.01em;
+  }
+  .seller-main .page-tier-default .page-header h1 + p,
+  .seller-main .page-tier-wide .page-header h1 + p { font-size: 0.6875rem; margin-top: 0.125rem; }
+  /* Orqaga tugmasi: och fonda ko'rinadigan bo'lishi uchun oq + chegara */
+  .seller-main .page-tier-default .page-header button.rounded-full.bg-slate-100,
+  .seller-main .page-tier-wide .page-header button.rounded-full.bg-slate-100 {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+  }
+  .dark .seller-main .page-tier-default .page-header button.rounded-full.bg-slate-100,
+  .dark .seller-main .page-tier-wide .page-header button.rounded-full.bg-slate-100 {
+    background: #0f172a;
+    border-color: #1e293b;
+  }
+  .seller-main .page-header button { cursor: pointer; transition: background-color .15s, filter .15s; }
+  .seller-main .page-header button:hover { filter: brightness(0.96); }
+  .dark .seller-main .page-header button:hover { filter: brightness(1.25); }
+}
+
+/* Modal/Sheet (`components/ui/Sheet.jsx`) animatsiyalari: telefonda pastdan
+   siljib chiqadi, kompyuterda (lg+) markazda yumshoq paydo bo'ladi. */
+@keyframes sheetBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sheetUp { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes dialogPop { from { transform: translateY(8px) scale(0.97); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+.sheet-root { animation: sheetBackdropIn 0.18s ease-out; }
+.sheet-panel { animation: sheetUp 0.26s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (min-width: 1024px) {
+  .sheet-panel { animation: dialogPop 0.2s cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+  /* Eski, hali `Sheet`ga ko'chirilmagan pastdan chiquvchi oynalar ham
+     kompyuterda ekran pastiga yopishmasdan, markazda ochilsin. */
+  .fixed.inset-0.items-end.justify-center:not(.sheet-root) {
+    align-items: center;
+    padding: 1.5rem;
+  }
+  .fixed.inset-0.items-end.justify-center:not(.sheet-root) > div {
+    border-radius: 1.5rem;
+    border-bottom-width: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-root, .sheet-panel { animation: none; }
+}
+
+/* Qorong'i rejimdagi xarita: OpenStreetMap plitkalari qatlami invert
+   qilinadi (`utils/loadLeaflet.js`, `app-map-tiles-dark`). */
+.app-map-tiles-dark {
+  filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9);
 }

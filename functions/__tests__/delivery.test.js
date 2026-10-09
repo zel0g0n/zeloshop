@@ -338,3 +338,61 @@ describe("handleDispatchYandexDelivery - xodim (staff) ruxsati", () => {
     expect(mocks.createAndAcceptClaim).not.toHaveBeenCalled();
   });
 });
+
+describe("handleDispatchYandexDelivery - telefon va xatolarni xaritalash", () => {
+  const orderData = {
+    sellerId: "seller-1",
+    yandexClaimId: null,
+    customer: { fullName: "Mijoz", phone: "+998 90 111 22 33", address: "Toshkent", location: { lat: 41.31, lng: 69.24 } },
+    orders: [{ name: "Krem", quantity: 1, price: 50000 }],
+  };
+  const yandexDeliveryData = { enabled: true, oauthToken: "token-123", pickupLat: 41.3, pickupLng: 69.27, pickupAddress: "Do'kon" };
+  const okInfo = () => jest.fn().mockResolvedValue({ status: "ready_for_approval", version: 1 });
+
+  test("bo'shliqli telefonlar Yandex'ga E.164 ko'rinishida boradi", async () => {
+    const db = buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData: { storeName: "Lg", phone: "90 111 00 00" } });
+    const createAndAcceptClaim = jest.fn().mockResolvedValue({ id: "c1", status: "new" });
+    const { _testables } = loadModule(db, { createAndAcceptClaim, getClaimInfo: okInfo(), acceptClaim: jest.fn().mockResolvedValue({}) });
+    await _testables.handleDispatchYandexDelivery(baseRequest());
+    const arg = createAndAcceptClaim.mock.calls[0][1];
+    expect(arg.pickup.contactPhone).toBe("+998901110000");
+    expect(arg.dropoff.contactPhone).toBe("+998901112233");
+  });
+
+  test("do'kon telefoni bo'sh bo'lsa, Yandex'ga murojaat qilinmaydi", async () => {
+    const db = buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData: { storeName: "Lg", phone: "" } });
+    const createAndAcceptClaim = jest.fn();
+    const { _testables } = loadModule(db, { createAndAcceptClaim });
+    await expect(_testables.handleDispatchYandexDelivery(baseRequest())).rejects.toMatchObject({ code: "failed-precondition" });
+    expect(createAndAcceptClaim).not.toHaveBeenCalled();
+  });
+
+  test("Yandex 401 — token xatosi tushunarli failed-precondition bo'ladi", async () => {
+    const db = buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData: { storeName: "Lg", phone: "+998901110000" } });
+    const err = Object.assign(new Error("unauthorized"), { status: 401 });
+    const { _testables } = loadModule(db, { createAndAcceptClaim: jest.fn().mockRejectedValue(err) });
+    await expect(_testables.handleDispatchYandexDelivery(baseRequest())).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: expect.stringContaining("token"),
+    });
+  });
+
+  test("Yandex 400 — Yandex'ning o'z xabari foydalanuvchiga ko'rsatiladi", async () => {
+    const db = buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData: { storeName: "Lg", phone: "+998901110000" } });
+    const err = Object.assign(new Error("Invalid phone"), { status: 400 });
+    const { _testables } = loadModule(db, { createAndAcceptClaim: jest.fn().mockRejectedValue(err) });
+    await expect(_testables.handleDispatchYandexDelivery(baseRequest())).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: expect.stringContaining("Invalid phone"),
+    });
+  });
+
+  test("da'vo yaratilgandan keyin tasdiqlash xatosi — muvaffaqiyat (accepted:false)", async () => {
+    const db = buildDispatchMockDb({ orderData, yandexDeliveryData, sellerData: { storeName: "Lg", phone: "+998901110000" } });
+    const { _testables } = loadModule(db, {
+      createAndAcceptClaim: jest.fn().mockResolvedValue({ id: "c9", status: "new" }),
+      getClaimInfo: jest.fn().mockRejectedValue(new Error("network")),
+    });
+    await expect(_testables.handleDispatchYandexDelivery(baseRequest())).resolves.toMatchObject({ success: true, claimId: "c9", accepted: false });
+  });
+});

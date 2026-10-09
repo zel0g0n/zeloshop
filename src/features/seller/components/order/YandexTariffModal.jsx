@@ -1,6 +1,6 @@
-import { X, Bike, Car, Truck } from "lucide-react";
+import { Bike, Car, Truck, ChevronRight, Info } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
-import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Sheet from "@/components/ui/Sheet";
 
 // Yandex Delivery - tarif tanlash oynasi.
 //
@@ -17,42 +17,43 @@ const TARIFF_OPTIONS = [
 const YandexTariffModal = ({ onSelect, onClose, busy }) => {
   const { t } = useLanguage();
 
-  useEscapeToClose(onClose, !busy);
-
   return (
-    <div className="fixed inset-0 bg-black/50 z-[100] flex items-end justify-center" onClick={onClose} role="dialog" aria-modal="true">
-      <div
-        className="bg-white dark:bg-slate-900 w-full max-w-[440px] rounded-t-[28px] p-5 space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-black text-slate-800 dark:text-white">{t("sellerOrders.yandexTariffModal.title")}</h3>
-          <button type="button" onClick={onClose} disabled={busy} className="text-slate-400 dark:text-slate-500 disabled:opacity-50">
-            <X size={18} />
+    <Sheet
+      onClose={onClose}
+      busy={busy}
+      icon={Car}
+      accent="amber"
+      title={t("sellerOrders.yandexTariffModal.title")}
+      subtitle={t("sellerOrders.yandexTariffModal.subtitle")}
+      size="sm"
+      footer={
+        <p className="flex items-start gap-2 text-[11px] leading-4 font-medium text-slate-400 dark:text-slate-500">
+          <Info size={13} className="shrink-0 mt-0.5" />
+          <span>{t("sellerOrders.yandexTariffModal.note")}</span>
+        </p>
+      }
+    >
+      <div className="space-y-2">
+        {TARIFF_OPTIONS.map(({ value, icon: Icon, labelKey, descKey }) => (
+          <button
+            key={value}
+            type="button"
+            disabled={busy}
+            onClick={() => onSelect(value)}
+            className="group w-full flex items-center gap-3 text-left px-3.5 py-3 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-amber-300 hover:bg-amber-50/50 dark:hover:border-amber-500/40 dark:hover:bg-amber-500/5 disabled:opacity-50 active:scale-[0.99] transition-all"
+          >
+            <span className="shrink-0 w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 group-hover:bg-amber-100 dark:group-hover:bg-amber-500/10 flex items-center justify-center text-slate-600 group-hover:text-amber-600 dark:text-slate-300 dark:group-hover:text-amber-400 transition-colors">
+              <Icon size={18} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-black text-slate-800 dark:text-white">{t(`sellerOrders.yandexTariffModal.${labelKey}`)}</span>
+              <span className="block text-[11px] leading-4 text-slate-400 dark:text-slate-500 font-medium mt-0.5">{t(`sellerOrders.yandexTariffModal.${descKey}`)}</span>
+            </span>
+            <ChevronRight size={16} className="shrink-0 text-slate-300 dark:text-slate-600 group-hover:text-amber-500 transition-colors" />
           </button>
-        </div>
-
-        <div className="space-y-2">
-          {TARIFF_OPTIONS.map(({ value, icon: Icon, labelKey, descKey }) => (
-            <button
-              key={value}
-              type="button"
-              disabled={busy}
-              onClick={() => onSelect(value)}
-              className="w-full flex items-center gap-3 text-left px-4 py-3 rounded-2xl border border-transparent bg-[#F4F5F9] dark:bg-slate-800 text-slate-700 dark:text-slate-200 disabled:opacity-50 active:scale-[0.99] transition-transform"
-            >
-              <span className="shrink-0 w-9 h-9 rounded-xl bg-white dark:bg-slate-900 flex items-center justify-center text-indigo-500 dark:text-indigo-400">
-                <Icon size={17} />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-xs font-black">{t(`sellerOrders.yandexTariffModal.${labelKey}`)}</span>
-                <span className="block text-[10px] text-slate-400 dark:text-slate-500 font-medium mt-0.5">{t(`sellerOrders.yandexTariffModal.${descKey}`)}</span>
-              </span>
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
-    </div>
+    </Sheet>
   );
 };
 

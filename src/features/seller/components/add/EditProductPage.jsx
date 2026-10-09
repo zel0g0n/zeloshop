@@ -176,7 +176,7 @@ const EditProductPage = () => {
 
   return (
     <div className="h-screen overflow-y-auto bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
-      <div className="sticky top-0 z-30 bg-white dark:bg-slate-900 px-5 py-4 shadow-xs flex items-center gap-3">
+      <div className="page-header sticky top-0 z-30 bg-white dark:bg-slate-900 px-5 py-4 shadow-xs flex items-center gap-3">
         <button
           type="button"
           className="p-1 text-slate-500 dark:text-slate-300 active:scale-95 transition-transform"

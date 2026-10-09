@@ -37,9 +37,22 @@ const DESKTOP_DESIGNED_PATHS = new Set([
   '/seller/pnl', '/seller/crm', '/seller/marketing', '/seller/store-settings',
 ])
 
+// Keng grafik/jadval sahifalari (analitika) — to'liq kenglikdagi ish
+// maydoni emas, lekin 3xl ustun ham torlik qiladi: o'rtacha (6xl) kenglik.
+const WIDE_PATHS = new Set([
+  '/seller/analytics/profit-deep-dive', '/seller/orders/analytics', '/seller/products/analytics',
+  '/seller/marketing/settings',
+])
+
 const SellerLayout = () => {
   const { pathname } = useLocation();
-  const isDesktopPage = DESKTOP_DESIGNED_PATHS.has(pathname.replace(/\/+$/, '') || '/seller');
+  const cleanPath = pathname.replace(/\/+$/, '') || '/seller';
+  const isDesktopPage = DESKTOP_DESIGNED_PATHS.has(cleanPath);
+  const isWidePage = WIDE_PATHS.has(cleanPath);
+  // `page-tier-*` — `styles/index.css`dagi kompyuter qoidalari uchun belgi:
+  // "designed" sahifalar o'zining lg: sinflari bilan boshqariladi, qolganlari
+  // (default/wide) uchun yagona sarlavha/skroll qoidalari qo'llanadi.
+  const tier = isDesktopPage ? 'designed' : isWidePage ? 'wide' : 'default';
   const { security, isSeller, isAdmin, store } = useSession();
   const [unlocked, setUnlocked] = useState(
     () => sessionStorage.getItem("zeloshop_pin_unlocked") === "true"
@@ -121,7 +134,11 @@ const SellerLayout = () => {
       <SellerSidebar/>
       <main className='seller-main lg:pl-64 min-h-screen'>
         <SellerTopbar/>
-        <div className={isDesktopPage ? 'lg:px-8 lg:py-6 lg:max-w-[1600px] lg:mx-auto' : 'md:max-w-2xl lg:max-w-3xl md:mx-auto lg:py-6'}>
+        <div className={`page-tier-${tier} ` + (isDesktopPage
+          ? 'lg:px-8 lg:py-6 lg:max-w-[1600px] lg:mx-auto'
+          : isWidePage
+            ? 'md:max-w-2xl md:mx-auto lg:max-w-6xl lg:px-8 lg:py-6'
+            : 'md:max-w-2xl lg:max-w-3xl md:mx-auto lg:py-6')}>
           <Outlet/>
         </div>
       </main>

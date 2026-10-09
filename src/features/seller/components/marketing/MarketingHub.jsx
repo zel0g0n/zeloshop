@@ -66,15 +66,16 @@ const MarketingHub = () => {
         <button
           type="button"
           onClick={() => navigate("/seller/marketing/settings")}
-          className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 dark:text-slate-400 active:scale-95 transition-transform shrink-0"
+          className="w-9 h-9 lg:w-auto lg:h-10 lg:px-4 lg:gap-2 rounded-full lg:rounded-xl bg-slate-100 dark:bg-slate-800 lg:bg-white lg:dark:bg-slate-900 lg:border lg:border-slate-200 lg:dark:border-slate-800 lg:hover:border-indigo-300 flex items-center justify-center text-slate-500 dark:text-slate-400 lg:text-slate-600 lg:dark:text-slate-300 active:scale-95 transition-transform shrink-0"
           aria-label={t("marketing.settingsAria")}
         >
           <Settings size={15} />
+          <span className="hidden lg:inline text-xs font-bold">{t("marketing.settingsTitle")}</span>
         </button>
       </div>
 
       <div className="p-4 pb-0 lg:p-0">
-        <div className="grid grid-cols-3 gap-1.5 lg:max-w-lg bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+        <div className="grid grid-cols-3 gap-1.5 lg:inline-grid lg:grid-cols-[repeat(3,minmax(9.5rem,1fr))] bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={() => setActiveTab("coupons")}

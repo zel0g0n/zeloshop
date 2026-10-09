@@ -4,7 +4,7 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '@/firebase/config';
 import { useLanguage } from '@/context/LanguageContext';
 import { useSession } from '@/context/SessionContext';
-import { PhoneCall, Send, Copy, MapPin, Truck, X, CheckCircle2, ChevronDown, Check, Loader2, Bike, Clock, RefreshCw, ReceiptText, Layers } from 'lucide-react';
+import { PhoneCall, Send, Copy, MapPin, Truck, X, CheckCircle2, ChevronDown, Check, Loader2, Bike, Clock, RefreshCw, ReceiptText, Layers, AlertCircle } from 'lucide-react';
 import useChangeOrderStatus from '@/hooks/seller/useChangeOrderStatus';
 import { getOrderStatusInfo, NEXT_STATUS_ACTION, CAN_CANCEL_STATUSES } from '@/constants/orderStatus';
 import { formatRelativeTime } from '@/utils/relativeTime';
@@ -26,10 +26,12 @@ const COURIER_DELIVERY_STATUS_LABEL_KEYS = {
   failed: "courierStatusFailed",
 };
 
-const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, couriers = [], defaultOpen = false, hideSelect = false }) => {
+const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, couriers = [], defaultOpen = false, hideSelect = false, variant = 'card' }) => {
+  const isPanel = variant === 'panel';
   const { t } = useLanguage();
   const { store } = useSession();
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [isOpenState, setIsOpen] = useState(defaultOpen);
+  const isOpen = isPanel || isOpenState;
   const { changeOrderStatus } = useChangeOrderStatus();
   const statusInfo = getOrderStatusInfo(order.status);
   const nextAction = NEXT_STATUS_ACTION[order.status];
@@ -181,10 +183,110 @@ const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, co
     ? `https://www.openstreetmap.org/?mlat=${customer.location.lat}&mlon=${customer.location.lng}#map=17/${customer.location.lat}/${customer.location.lng}`
     : `https://www.google.com/maps/search/${encodeURIComponent(customer.address || "")}`;
 
-  return (
-    <div className={`bg-white dark:bg-slate-900 rounded-2xl border p-4 space-y-3 transition-all shadow-sm ${isSelected ? "border-indigo-400 ring-1 ring-indigo-300 dark:ring-indigo-500/40" : "border-gray-100/80 dark:border-slate-800"}`}>
+  // HARAKAT TUGMALARI (telefon kartasi VA kompyuter paneli uchun yagona
+  // dizayn). Kompyuter paneli (`variant="panel"`)da tugmalar skroll
+  // bo'ladigan mazmundan ALOHIDA, panelning pastiga qadalgan
+  // (`shrink-0`) bo'limda turadi — buyurtmada nechta mahsulot bo'lishidan
+  // qat'i nazar, "Kuryer chaqirish" / "Kuryerga topshirish" /
+  // "Bekor qilish" doim ko'rinib turadi. Tugmalar bir xil balandlikda
+  // (h-11), to'liq kenglikda, ustma-ust joylashadi (matn ikki qatorga
+  // o'tib ketmaydi).
+  const panelErrors = [
+    actionError,
+    canDispatch ? yandexError : null,
+    courierError,
+    (courierAssignedPending || courierActiveDelivery) ? resendError : null,
+  ].filter(Boolean);
 
-      <div className="flex items-start justify-between gap-2 cursor-pointer" onClick={() => setIsOpen((v) => !v)}>
+  const btnBase = "w-full h-11 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed";
+  const btnPrimary = `${btnBase} bg-[#514be3] hover:bg-[#433cc7] text-white shadow-sm shadow-indigo-200/60 dark:shadow-none`;
+  const btnSecondary = `${btnBase} bg-indigo-50 hover:bg-indigo-100 text-[#514be3] dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 dark:text-indigo-300`;
+  const btnTeal = `${btnBase} bg-teal-600 hover:bg-teal-700 text-white`;
+  const btnOutline = `${btnBase} border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800`;
+  const btnDanger = `${btnBase} h-10 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10`;
+
+  const cancelButton = canCancel && (
+    <button type="button" onClick={() => setShowCancelModal(true)} disabled={pendingAction} className={btnDanger}>
+      <X size={14} /> {t("sellerOrders.cancelButton")}
+    </button>
+  );
+
+  const infoStrip = (tone, Icon, label, hint) => {
+    const tones = {
+      amber: "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400",
+      teal: "bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-400",
+    };
+    return (
+      <div className={`rounded-xl px-3 py-2.5 flex items-center gap-2.5 ${tones[tone]}`}>
+        <Icon size={16} className="shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-wide">{label}</p>
+          <p className="text-[11px] font-medium opacity-80">{hint}</p>
+        </div>
+      </div>
+    );
+  };
+
+  const panelActions = (
+    <div className="space-y-2">
+      {panelErrors.map((message, i) => (
+        <div key={i} role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2.5 text-rose-600 dark:text-rose-400">
+          <AlertCircle size={15} className="shrink-0 mt-px" />
+          <p className="text-[11.5px] leading-4 font-semibold break-words min-w-0">{message}</p>
+        </div>
+      ))}
+
+      {courierAssignedPending ? (
+        <>
+          {infoStrip("amber", Clock, t("sellerOrders.courierPendingLabel"), t("sellerOrders.courierPendingHint"))}
+          {cancelButton}
+        </>
+      ) : courierActiveDelivery ? (
+        <>
+          {infoStrip("teal", Bike, t("sellerOrders.courierActiveLabel"), t("sellerOrders.courierActiveHint"))}
+          <button type="button" onClick={handleResendTrackingLink} disabled={resendPending} className={btnTeal}>
+            {resendPending ? <Loader2 size={14} className="animate-spin" /> : resendSuccess ? <Check size={14} /> : <RefreshCw size={14} />}
+            {resendSuccess ? t("sellerOrders.resendTrackingLinkSuccess") : t("sellerOrders.resendTrackingLinkButton")}
+          </button>
+          {nextAction && (
+            <button type="button" onClick={handlePrimaryAction} disabled={pendingAction} className={btnOutline}>
+              <CheckCircle2 size={14} />
+              {pendingAction ? "..." : t(`orderStatus.actions.${nextAction.labelKey}`)}
+            </button>
+          )}
+          {cancelButton}
+        </>
+      ) : canDispatch && nextAction ? (
+        <>
+          <button type="button" onClick={() => setShowYandexTariffModal(true)} disabled={yandexDispatching} className={btnPrimary}>
+            {yandexDispatching ? <Loader2 size={14} className="animate-spin" /> : <Truck size={14} />}
+            {yandexDispatching ? t("sellerOrders.yandexDispatching") : t("sellerOrders.yandexDispatchButton")}
+          </button>
+          <button type="button" onClick={handlePrimaryAction} disabled={pendingAction} className={btnSecondary}>
+            <Bike size={14} />
+            {pendingAction ? "..." : t(`orderStatus.actions.${nextAction.labelKey}`)}
+          </button>
+          {cancelButton}
+        </>
+      ) : (
+        <>
+          {nextAction && (
+            <button type="button" onClick={handlePrimaryAction} disabled={pendingAction} className={btnPrimary}>
+              {order.status === "shipped" ? <CheckCircle2 size={14} /> : order.status === "processing" ? <Truck size={14} /> : <Check size={14} strokeWidth={2.5} />}
+              {pendingAction ? "..." : t(`orderStatus.actions.${nextAction.labelKey}`)}
+            </button>
+          )}
+          {cancelButton}
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div className={`bg-white dark:bg-slate-900 rounded-2xl border p-4 space-y-3 transition-all shadow-sm ${isPanel ? "overflow-y-auto overscroll-contain" : ""} ${isSelected ? "border-indigo-400 ring-1 ring-indigo-300 dark:ring-indigo-500/40" : "border-gray-100/80 dark:border-slate-800"}`}
+      style={isPanel ? { maxHeight: "var(--panel-max-h, calc(100vh - 6.5rem))" } : undefined}>
+
+      <div className={`flex items-start justify-between gap-2 ${isPanel ? "" : "cursor-pointer"}`} onClick={isPanel ? undefined : () => setIsOpen((v) => !v)}>
         <div className="flex items-start gap-2.5">
           {!hideSelect && (
             <button
@@ -206,7 +308,7 @@ const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, co
           <span className={`text-[9px] font-black uppercase px-2 py-1 rounded-lg ${statusInfo.color}`}>
             {t(`orderStatus.${statusInfo.key}`)}
           </span>
-          <ChevronDown size={15} className={`text-gray-400 dark:text-slate-500 transition-transform ${isOpen ? "rotate-180 text-[#514be3] dark:text-[#8b85f5]" : ""}`} />
+          {!isPanel && <ChevronDown size={15} className={`text-gray-400 dark:text-slate-500 transition-transform ${isOpen ? "rotate-180 text-[#514be3] dark:text-[#8b85f5]" : ""}`} />}
         </div>
       </div>
 
@@ -394,143 +496,13 @@ const OrderRow = ({ order, orderNumber, isSelected, onToggleSelect, onCopied, co
             </div>
           </div>
 
-          <div className="space-y-2 pt-1">
-            {actionError && <p className="text-[11px] text-rose-500 font-semibold">{actionError}</p>}
-            {canDispatch && yandexError && <p className="text-[11px] text-rose-500 font-semibold">{yandexError}</p>}
-            {courierError && <p className="text-[11px] text-rose-500 font-semibold">{courierError}</p>}
-            {(courierAssignedPending || courierActiveDelivery) && resendError && <p className="text-[11px] text-rose-500 font-semibold">{resendError}</p>}
+          {!isPanel && <div className="pt-1">{panelActions}</div>}
+        </div>
+      )}
 
-            {/* Kuryer biriktirilgan, lekin hali "Boshladim" bosmagan —
-                bu holatda "keyingi bosqich"/Yandex tugmalari o'rniga
-                soatcha ikonkali kutish paneli ko'rsatiladi, faqat
-                "Bekor qilish" hali ochiq qoladi (`order.status` hali
-                "processing" bo'lgani uchun). */}
-            {courierAssignedPending ? (
-              <>
-                <div className="bg-amber-50 dark:bg-amber-500/10 rounded-xl p-3 flex items-center gap-2.5">
-                  <Clock size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-wide">{t("sellerOrders.courierPendingLabel")}</p>
-                    <p className="text-[11px] text-amber-700/80 dark:text-amber-400/80 font-medium">{t("sellerOrders.courierPendingHint")}</p>
-                  </div>
-                </div>
-                {canCancel && (
-                  <button
-                    onClick={() => setShowCancelModal(true)}
-                    disabled={pendingAction}
-                    className="w-full py-2.5 border border-red-100 dark:border-red-500/20 text-red-500 rounded-xl text-xs font-bold hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
-                  >
-                    <X size={14} /> {t("sellerOrders.cancelButton")}
-                  </button>
-                )}
-              </>
-            ) : courierActiveDelivery ? (
-              /* Kuryer haqiqatan yo'lda — kuzatuv havolasi mijozga
-                 allaqachon avtomatik yuborilgan
-                 (`sendCourierTrackingLinkToClient`). Bu yerda faqat
-                 qayta yuborish imkoni (zaxira sifatida) va, agar
-                 kerak bo'lsa, qo'lda keyingi bosqichga o'tkazish
-                 mavjud (kuryer o'z ilovasidan buni bosishi kutiladi,
-                 bu esa faqat zaxira yo'l). */
-              <>
-                <div className="bg-teal-50 dark:bg-teal-500/10 rounded-xl p-3 flex items-center gap-2.5">
-                  <Bike size={16} className="text-teal-600 dark:text-teal-400 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[10px] font-bold text-teal-700 dark:text-teal-400 uppercase tracking-wide">{t("sellerOrders.courierActiveLabel")}</p>
-                    <p className="text-[11px] text-teal-700/80 dark:text-teal-400/80 font-medium">{t("sellerOrders.courierActiveHint")}</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleResendTrackingLink}
-                  disabled={resendPending}
-                  className="w-full h-10 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-md shadow-teal-600/10 flex items-center justify-center gap-1.5 disabled:opacity-60"
-                >
-                  {resendPending ? <Loader2 size={13} className="animate-spin" /> : resendSuccess ? <Check size={14} /> : <RefreshCw size={13} />}
-                  {resendSuccess ? t("sellerOrders.resendTrackingLinkSuccess") : t("sellerOrders.resendTrackingLinkButton")}
-                </button>
-                {nextAction && (
-                  <button
-                    onClick={handlePrimaryAction}
-                    disabled={pendingAction}
-                    className="w-full py-2.5 border border-gray-200 dark:border-slate-700 text-gray-500 dark:text-slate-300 rounded-xl text-xs font-bold disabled:opacity-60 flex items-center justify-center gap-1.5"
-                  >
-                    <CheckCircle2 size={14} />
-                    {pendingAction ? "..." : t(`orderStatus.actions.${nextAction.labelKey}`)}
-                  </button>
-                )}
-                {canCancel && (
-                  <button
-                    onClick={() => setShowCancelModal(true)}
-                    disabled={pendingAction}
-                    className="w-full py-2.5 border border-red-100 dark:border-red-500/20 text-red-500 rounded-xl text-xs font-bold hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
-                  >
-                    <X size={14} /> {t("sellerOrders.cancelButton")}
-                  </button>
-                )}
-              </>
-            ) : /* "Yig'ilmoqda" bosqichida Yandex kuryerini chaqirish va
-                shaxsiy kuryerga topshirish — ikkalasi ham teng
-                darajadagi tanlov, shuning uchun gorizontal qatorda
-                yonma-yon, bir xil rang/o'lchamda (faqat matn bilan
-                farqlanadi) joylashtirilgan; "Bekor qilish" esa pastda,
-                alohida to'liq kenglikdagi qatorda. */
-            canDispatch && nextAction ? (
-              <>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); setShowYandexTariffModal(true); }}
-                    disabled={yandexDispatching}
-                    className="flex-1 h-10 bg-[#514be3] hover:bg-[#433cc7] text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-1.5 disabled:opacity-60"
-                  >
-                    {yandexDispatching ? <Loader2 size={13} className="animate-spin" /> : <Truck size={13} />}
-                    {yandexDispatching ? t("sellerOrders.yandexDispatching") : t("sellerOrders.yandexDispatchButton")}
-                  </button>
-                  <button
-                    onClick={handlePrimaryAction}
-                    disabled={pendingAction}
-                    className="flex-1 h-10 bg-[#514be3] hover:bg-[#433cc7] text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-1.5 disabled:opacity-60"
-                  >
-                    <Truck size={14} />
-                    {pendingAction ? "..." : t(`orderStatus.actions.${nextAction.labelKey}`)}
-                  </button>
-                </div>
-                {canCancel && (
-                  <button
-                    onClick={() => setShowCancelModal(true)}
-                    disabled={pendingAction}
-                    className="w-full py-2.5 border border-red-100 dark:border-red-500/20 text-red-500 rounded-xl text-xs font-bold hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
-                  >
-                    <X size={14} /> {t("sellerOrders.cancelButton")}
-                  </button>
-                )}
-              </>
-            ) : (
-              <div className="flex items-center gap-2">
-                {nextAction && (
-                  <button
-                    onClick={handlePrimaryAction}
-                    disabled={pendingAction}
-                    className="flex-1 py-2.5 bg-[#514be3] hover:bg-[#433cc7] text-white rounded-xl text-xs font-bold shadow-md shadow-indigo-100 dark:shadow-none disabled:opacity-60 flex items-center justify-center gap-1.5"
-                  >
-                    {order.status === "shipped" ? <CheckCircle2 size={14} /> : order.status === "processing" ? <Truck size={14} /> : <Check size={14} strokeWidth={2.5} />}
-                    {pendingAction ? "..." : t(`orderStatus.actions.${nextAction.labelKey}`)}
-                  </button>
-                )}
-
-                {canCancel && (
-                  <button
-                    onClick={() => setShowCancelModal(true)}
-                    disabled={pendingAction}
-                    className="px-3 py-2.5 border border-red-100 dark:border-red-500/20 text-red-500 rounded-xl text-xs font-bold hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors disabled:opacity-60 flex items-center gap-1.5"
-                  >
-                    <X size={14} /> {t("sellerOrders.cancelButton")}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
+      {isPanel && (
+        <div className="sticky bottom-0 z-10 -mx-4 -mb-4 px-4 pt-3 pb-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shadow-[0_-8px_16px_-12px_rgba(15,23,42,0.18)]">
+          {panelActions}
         </div>
       )}
 

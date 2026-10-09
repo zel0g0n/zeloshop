@@ -43,7 +43,7 @@ const PaymentAndTariffsPage = () => {
 
   return (
     <div className="bg-[#F4F5F9] dark:bg-slate-950 min-h-screen text-slate-900 dark:text-white pb-36 transition-colors duration-300">
-      <div className="bg-white dark:bg-slate-900 px-5 py-4 sticky top-0 z-30 shadow-xs flex items-center gap-3">
+      <div className="page-header bg-white dark:bg-slate-900 px-5 py-4 sticky top-0 z-30 shadow-xs flex items-center gap-3">
         <button type="button" onClick={() => navigate(-1)} className="p-1 text-slate-500 dark:text-slate-300">
           <ArrowLeft size={20} strokeWidth={2.5} />
         </button>

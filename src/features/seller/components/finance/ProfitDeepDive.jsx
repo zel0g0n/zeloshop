@@ -8,7 +8,8 @@ import { useOrderRollups } from "@/hooks/seller/useOrderRollups";
 import { buildDailyProfitSeriesFromRollups, computeSeriesInsights } from "@/utils/profitTimeSeries";
 import { exportToCsv } from "@/utils/csvExport";
 import { useLanguage } from "@/context/LanguageContext";
-import { getCalendarMonthRange } from "@/utils/dateRange";
+import { getCalendarMonthRange, formatDayMonth } from "@/utils/dateRange";
+import { useIsDesktop } from "@/hooks/useIsDesktop";
 import MonthPickerSheet from "@/components/ui/MonthPickerSheet";
 
 const money = (n) => `${Math.round(n).toLocaleString()} so'm`;
@@ -38,6 +39,8 @@ const ProfitDeepDive = () => {
   const { t } = useLanguage();
   const { sellerId } = useSession();
   const { isDark } = useTheme();
+  const isDesktop = useIsDesktop();
+  const monthNamesShort = t("common.monthNamesShort");
   const TIME_FILTERS = TIME_FILTER_DAYS.map((f) => ({ ...f, label: t(`pnl.${f.labelKey}`) }));
   const [activeFilter, setActiveFilter] = useState("month");
   // "Oy" filtiri uchun tanlangan aniq oy (0 = joriy oy) - 2026-09
@@ -84,9 +87,9 @@ const ProfitDeepDive = () => {
   const chartData = useMemo(
     () => series.map((d) => ({
       ...d,
-      label: new Date(d.date).toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit" }),
+      label: formatDayMonth(d.date, monthNamesShort),
     })),
-    [series]
+    [series, monthNamesShort]
   );
 
   const handleExport = () => {
@@ -100,7 +103,7 @@ const ProfitDeepDive = () => {
   return (
     <div className="h-screen overflow-y-auto bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
 
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center justify-between gap-3">
+      <div className="page-header sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -115,10 +118,11 @@ const ProfitDeepDive = () => {
           type="button"
           onClick={handleExport}
           disabled={series.length === 0}
-          className="shrink-0 w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
+          className="shrink-0 w-9 h-9 lg:w-auto lg:px-4 lg:gap-2 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
           aria-label={t("pnl.exportAria")}
         >
           <Download size={16} />
+          <span className="hidden lg:inline text-xs font-bold">{t("common.exportCsv")}</span>
         </button>
       </div>
 
@@ -150,7 +154,7 @@ const ProfitDeepDive = () => {
           />
         )}
 
-        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm">
+        <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 lg:p-5 shadow-sm">
           {isLoading ? (
             <div className="h-64 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">{t("pnl.loading")}</div>
           ) : chartData.length === 0 ? (
@@ -158,7 +162,7 @@ const ProfitDeepDive = () => {
               {t("pnl.noOrdersInPeriod")}
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={280}>
+            <ResponsiveContainer width="100%" height={isDesktop ? 360 : 280}>
               <AreaChart data={chartData} margin={{ top: 5, right: 8, left: -4, bottom: 18 }}>
                 <defs>
                   <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
@@ -182,7 +186,9 @@ const ProfitDeepDive = () => {
                   tick={{ fontSize: 10, fill: isDark ? "#64748b" : "#94a3b8" }}
                   axisLine={false}
                   tickLine={false}
-                  interval={Math.max(0, Math.ceil(chartData.length / 7) - 1)}
+                  interval="preserveStartEnd"
+                  minTickGap={28}
+                  padding={{ left: 8, right: 14 }}
                   label={{ value: t("pnl.xAxisLabel"), position: "insideBottom", offset: -10, fontSize: 10, fill: isDark ? "#64748b" : "#94a3b8" }}
                 />
                 <YAxis
@@ -190,18 +196,21 @@ const ProfitDeepDive = () => {
                   axisLine={false}
                   tickLine={false}
                   width={68}
-                  // Nol qiymat uchun "k" qo'shimchasi ma'nosiz bo'lgani
-                  // uchun shunchaki "0" qaytariladi.
+                  // Barcha qiymatlar 0 bo'lsa ham o'q mazmunli bo'lsin
+                  // ("0k 0k 0k" o'rniga 0 ... 10k), kasr tiklar chiqmasin.
+                  domain={[0, (dataMax) => Math.max(dataMax, 10000)]}
+                  allowDecimals={false}
                   tickFormatter={(v) => {
                     if (v === 0) return "0";
-                    if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}mln`;
-                    return `${Math.round(v / 1000)}k`;
+                    if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}mln`;
+                    if (v >= 1000) return `${+(v / 1000).toFixed(1)}k`;
+                    return String(Math.round(v));
                   }}
                   label={{ value: t("pnl.yAxisLabel"), angle: -90, position: "insideLeft", offset: 10, fontSize: 10, fill: isDark ? "#64748b" : "#94a3b8" }}
                 />
                 <Tooltip
                   formatter={(value, name) => [money(value), name === "revenue" ? t("pnl.tooltipRevenue") : t("pnl.tooltipProfit")]}
-                  contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, fontWeight: 600 }}
+                  contentStyle={{ borderRadius: 12, border: isDark ? "1px solid #334155" : "1px solid #e2e8f0", background: isDark ? "#0f172a" : "#ffffff", color: isDark ? "#e2e8f0" : "#0f172a", fontSize: 12, fontWeight: 600 }}
                 />
                 <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} fill="url(#revenueGradient)" />
                 <Area type="monotone" dataKey="profit" stroke="#6366f1" strokeWidth={2} fill="url(#profitGradient)" />
@@ -219,12 +228,12 @@ const ProfitDeepDive = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-3 gap-2.5 lg:gap-4">
           <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3 rounded-xl">
             <Trophy size={14} className="text-amber-500 mb-1.5" />
             <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t("pnl.peakDayLabel")}</p>
             <p className="text-xs font-black text-slate-800 dark:text-white mt-0.5 truncate">
-              {insights.peakDay ? new Date(insights.peakDay.date).toLocaleDateString("uz-UZ", { day: "2-digit", month: "short" }) : "—"}
+              {insights.peakDay ? formatDayMonth(insights.peakDay.date, monthNamesShort) : "—"}
             </p>
             <p className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 truncate">
               {insights.peakDay ? money(insights.peakDay.revenue) : ""}

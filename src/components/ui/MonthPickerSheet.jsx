@@ -1,8 +1,8 @@
 import { memo } from "react";
-import { X, Check, CalendarDays } from "lucide-react";
+import { Check, CalendarDays } from "lucide-react";
 import { useLanguage } from "@/context/LanguageContext";
 import { getRecentMonthOptions } from "@/utils/dateRange";
-import { useEscapeToClose } from "@/hooks/useEscapeToClose";
+import Sheet from "@/components/ui/Sheet";
 
 /**
  * "Oy" filtri bosilganda ochiladigan oy-tanlash paneli (2026-09
@@ -22,26 +22,8 @@ const MonthPickerSheet = ({ selectedMonthsAgo = 0, monthsCount = 12, onSelect, o
   const monthNames = t("common.monthNamesShort");
   const options = getRecentMonthOptions(monthsCount);
 
-  useEscapeToClose(onClose);
-
   return (
-    <div className="fixed inset-0 bg-slate-900/55 z-50 flex items-end justify-center animate-fade-in" role="dialog" aria-modal="true">
-      <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-t-[28px] p-5 space-y-3 shadow-xl border-t border-slate-100 dark:border-slate-800 max-h-[80vh] overflow-y-auto">
-        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-3 sticky -top-5 bg-white dark:bg-slate-900 pt-1">
-          <div className="flex items-center gap-2">
-            <span className="w-8 h-8 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-              <CalendarDays size={15} />
-            </span>
-            <h3 className="font-black text-sm text-slate-800 dark:text-white">{t("monthPicker.title")}</h3>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-300 rounded-full flex items-center justify-center shrink-0"
-          >
-            <X size={13} />
-          </button>
-        </div>
-
+    <Sheet onClose={onClose} icon={CalendarDays} accent="indigo" size="sm" title={t("monthPicker.title")}>
         <div className="space-y-1.5">
           {options.map((opt) => {
             const isSelected = opt.monthsAgo === selectedMonthsAgo;
@@ -54,7 +36,7 @@ const MonthPickerSheet = ({ selectedMonthsAgo = 0, monthsCount = 12, onSelect, o
                 className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all ${
                   isSelected
                     ? "bg-indigo-50 dark:bg-indigo-500/10 border-indigo-500 text-indigo-600 dark:text-indigo-400"
-                    : "bg-slate-50 dark:bg-slate-800 border-transparent text-slate-700 dark:text-slate-200"
+                    : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
                 }`}
               >
                 <span className="font-bold text-sm">
@@ -74,8 +56,7 @@ const MonthPickerSheet = ({ selectedMonthsAgo = 0, monthsCount = 12, onSelect, o
             );
           })}
         </div>
-      </div>
-    </div>
+    </Sheet>
   );
 };
 

@@ -244,7 +244,7 @@ const ProductAnalytics = () => {
   return (
     <div className="h-screen overflow-y-auto bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
 
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center justify-between gap-3">
+      <div className="page-header sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -262,16 +262,17 @@ const ProductAnalytics = () => {
           type="button"
           onClick={handleExport}
           disabled={stats.length === 0}
-          className="shrink-0 w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
+          className="shrink-0 w-9 h-9 lg:w-auto lg:px-4 lg:gap-2 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
           aria-label={t("productAnalytics.exportAria")}
         >
           <Download size={16} />
+          <span className="hidden lg:inline text-xs font-bold">{t("common.exportCsv")}</span>
         </button>
       </div>
 
-      <div className="p-4 space-y-4 pb-36">
+      <div className="p-4 space-y-4 pb-36 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:items-start">
 
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar lg:col-span-2">
           {TIME_FILTERS.map((f) => (
             <button
               key={f.key}
@@ -298,9 +299,9 @@ const ProductAnalytics = () => {
         )}
 
         {isLoading ? (
-          <div className="h-64 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">{t("productAnalytics.loading")}</div>
+          <div className="h-64 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500 lg:col-span-2">{t("productAnalytics.loading")}</div>
         ) : stats.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center gap-2 text-center px-6">
+          <div className="h-64 flex flex-col items-center justify-center gap-2 text-center px-6 lg:col-span-2">
             <Package size={28} className="text-slate-300 dark:text-slate-600" />
             <p className="text-xs text-slate-400 dark:text-slate-500">{t("productAnalytics.noProducts")}</p>
           </div>
@@ -308,7 +309,7 @@ const ProductAnalytics = () => {
           <>
             {/* HERO — davrning eng yaxshi sotuvchi mahsuloti */}
             {topProduct ? (
-              <div className="rounded-[28px] p-5 text-white shadow-lg shadow-indigo-600/20 relative overflow-hidden bg-gradient-to-br from-indigo-600 to-indigo-700">
+              <div className="lg:col-span-2 rounded-[28px] p-5 lg:p-7 text-white shadow-lg shadow-indigo-600/20 relative overflow-hidden bg-gradient-to-br from-indigo-600 to-indigo-700">
                 <div className="flex items-start justify-between">
                   <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/80 uppercase tracking-wider">
                     <Trophy size={12} /> {t("productAnalytics.bestSellerLabel")}
@@ -340,13 +341,13 @@ const ProductAnalytics = () => {
                 </div>
               </div>
             ) : (
-              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 text-center">
+              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-5 text-center lg:col-span-2">
                 <p className="text-xs text-slate-400 dark:text-slate-500">{t("productAnalytics.noSalesInPeriod")}</p>
               </div>
             )}
 
             {/* QISQA XULOSA — 3 ta ko'rsatkich */}
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-2.5 lg:gap-4 lg:col-span-2">
               <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3 rounded-xl">
                 <Layers size={14} className="text-indigo-500 mb-1.5" />
                 <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t("productAnalytics.totalProductsLabel")}</p>
@@ -365,7 +366,7 @@ const ProductAnalytics = () => {
             </div>
 
             {/* TOP MAHSULOTLAR — grafik + reyting */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 lg:p-5 shadow-sm space-y-3 lg:col-span-2">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t("productAnalytics.topProductsTitle")}</h3>
                 <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
@@ -454,13 +455,13 @@ const ProductAnalytics = () => {
 
             {/* O'LIK MAHSULOTLAR */}
             {deadStock.length > 0 && (
-              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-2">
+              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-2 lg:col-span-2">
                 <div className="flex items-center gap-1.5 text-rose-500">
                   <Clock size={13} />
                   <h3 className="text-xs font-black uppercase tracking-wider">{t("productAnalytics.deadStockTitle")}</h3>
                 </div>
                 <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500">{t("productAnalytics.deadStockSubtitle")}</p>
-                <div className="space-y-1.5 pt-1">
+                <div className="space-y-1.5 pt-1 lg:space-y-0 lg:grid lg:grid-cols-2 lg:gap-2">
                   {deadStock.slice(0, 8).map((p) => <DeadStockRow key={p.id} product={p} t={t} />)}
                 </div>
                 {deadStock.length > 8 && (
@@ -473,7 +474,7 @@ const ProductAnalytics = () => {
 
             {/* AI CEO — SHARH VA TAVSIYA (faqat premium mijozlarga) */}
             {store?.aiCeoEnabled === true && (deadStock.length > 0 || lowStockAlerts.length > 0 || topProduct) && (
-              <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-2xl p-4 text-white shadow-sm space-y-3">
+              <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-2xl p-4 text-white shadow-sm space-y-3 lg:col-span-2">
                 <div className="flex items-center gap-1.5">
                   <Sparkles size={13} />
                   <h3 className="text-xs font-black uppercase tracking-wider">{t("aiCeo.insightTitle")}</h3>

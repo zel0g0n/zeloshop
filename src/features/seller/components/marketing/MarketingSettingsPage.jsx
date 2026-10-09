@@ -325,7 +325,7 @@ const MarketingSettingsPage = () => {
 
   return (
     <div className="min-h-screen bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased pb-36 transition-colors duration-300">
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center gap-3">
+      <div className="page-header sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center gap-3">
         <button
           type="button"
           onClick={() => navigate(-1)}
@@ -339,7 +339,7 @@ const MarketingSettingsPage = () => {
         </div>
       </div>
 
-      <div className="p-4 space-y-4">
+      <div className="p-4 space-y-4 lg:block lg:columns-2 lg:gap-4 lg:space-y-0 lg:[&>*]:mb-4 lg:[&>*]:break-inside-avoid">
 
         {/* REFERAL DASTURI */}
         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-xs space-y-3">

@@ -5,6 +5,7 @@ const { checkRateLimit } = require("./lib/rateLimit");
 const yandex = require("./lib/yandexDelivery");
 const { withSentry, SENTRY_DSN } = require("./lib/sentry");
 const { resolveActingSellerContext } = require("./lib/staffAccess");
+const { normalizePhoneE164 } = require("./lib/phone");
 
 // Yandex'ning "bekor qilingan" holatlari - frontend
 // (`YandexDeliveryPage.jsx`)dagi bilan bir xil ro'yxat, ikkalasi
@@ -114,22 +115,41 @@ async function handleDispatchYandexDelivery(request) {
     throw new HttpsError("failed-precondition", "Yandex Delivery ulanmagan.");
   }
   const yd = ydSnap.data();
+  if (!yd.oauthToken) {
+    throw new HttpsError("failed-precondition", "Yandex Delivery tokeni kiritilmagan. Yetkazib berish sozlamalarida tokenni qayta kiriting.");
+  }
+  if (!Number.isFinite(yd.pickupLat) || !Number.isFinite(yd.pickupLng)) {
+    throw new HttpsError("failed-precondition", "Do'kon manzili (jo'natish nuqtasi) xaritada belgilanmagan. Yetkazib berish sozlamalarida belgilang.");
+  }
   const sellerSnap = await db.collection("sellers").doc(sellerId).get();
   const storeName = sellerSnap.data()?.storeName || "Do'kon";
 
+  // Yandex kontakt telefonini xalqaro formatda talab qiladi. Bo'sh yoki
+  // noto'g'ri raqam "route_points[].contact.phone" xatosiga olib kelardi —
+  // endi so'rovdan OLDIN aniq tushunarli xabar bilan to'xtatamiz.
+  const pickupPhone = normalizePhoneE164(sellerSnap.data()?.phone);
+  if (!pickupPhone) {
+    throw new HttpsError("failed-precondition", "Do'kon telefon raqami kiritilmagan yoki noto'g'ri. Do'kon sozlamalarida telefon raqamini to'ldiring.");
+  }
+  const dropoffPhone = normalizePhoneE164(order.customer.phone);
+  if (!dropoffPhone) {
+    throw new HttpsError("failed-precondition", "Mijozning telefon raqami noto'g'ri, Yandex kuryerni chaqira olmaydi.");
+  }
+
+  let claim;
   try {
-    const claim = await yandex.createAndAcceptClaim(yd.oauthToken, {
+    claim = await yandex.createAndAcceptClaim(yd.oauthToken, {
       pickup: {
         contactName: storeName,
-        contactPhone: sellerSnap.data()?.phone || "",
+        contactPhone: pickupPhone,
         address: yd.pickupAddress,
         lat: yd.pickupLat,
         lng: yd.pickupLng,
       },
       dropoff: {
         contactName: order.customer.fullName,
-        contactPhone: order.customer.phone,
-        address: order.customer.address,
+        contactPhone: dropoffPhone,
+        address: order.customer.address || "Manzil ko'rsatilmagan",
         lat: order.customer.location.lat,
         lng: order.customer.location.lng,
       },
@@ -151,21 +171,31 @@ async function handleDispatchYandexDelivery(request) {
       // qaytadi.
       taxiClass,
     });
+  } catch (err) {
+    console.error("Yandex Delivery jo'natishda xatolik:", err.message, err.status, JSON.stringify(err.body || null));
+    throw mapYandexDispatchError(err);
+  }
 
-    await orderRef.update({
-      yandexClaimId: claim.id,
-      yandexStatus: claim.status || "new",
-      yandexDispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
-      ...(isStaff ? { yandexDispatchedByStaffId: String(request.auth.uid) } : {}),
-    });
+  await orderRef.update({
+    yandexClaimId: claim.id,
+    yandexStatus: claim.status || "new",
+    yandexDispatchedAt: admin.firestore.FieldValue.serverTimestamp(),
+    ...(isStaff ? { yandexDispatchedByStaffId: String(request.auth.uid) } : {}),
+  });
 
-    // `accept` — alohida qadam, chunki `create`dan keyin holat darhol
-    // "ready_for_approval"ga yetmagan bo'lishi mumkin. Bir necha marta,
-    // qisqa kutish bilan urinib ko'ramiz (jami ~25 soniyagacha - agar
-    // shu oralig'da ham ulgurmasa, davriy sinxronlash
-    // (`syncYandexDeliveryStatuses`) buni keyinroq qayta tasdiqlaydi,
-    // shuning uchun buyurtma abadiy "muzlab" qolmaydi).
-    let accepted = false;
+  // `accept` — alohida qadam, chunki `create`dan keyin holat darhol
+  // "ready_for_approval"ga yetmagan bo'lishi mumkin. Bir necha marta,
+  // qisqa kutish bilan urinib ko'ramiz (jami ~25 soniyagacha - agar
+  // shu oralig'da ham ulgurmasa, davriy sinxronlash
+  // (`syncYandexDeliveryStatuses`) buni keyinroq qayta tasdiqlaydi,
+  // shuning uchun buyurtma abadiy "muzlab" qolmaydi).
+  //
+  // Da'vo ALLAQACHON yaratilgan va buyurtmaga yozilgan — shu sababli
+  // bu bosqichdagi vaqtinchalik xato foydalanuvchiga "xatolik" bo'lib
+  // ko'rinmasligi kerak (u qayta bossa, "allaqachon jo'natilgan" deb
+  // chalkashadi): `accepted:false` qaytaramiz, sinxronlash tugatadi.
+  let accepted = false;
+  try {
     for (let attempt = 0; attempt < 10 && !accepted; attempt++) {
       const info = await yandex.getClaimInfo(yd.oauthToken, claim.id);
       if (info.status === "ready_for_approval") {
@@ -177,12 +207,31 @@ async function handleDispatchYandexDelivery(request) {
         break; // Kutilmagan holat — keyingi sinxronlashda (polling) hal bo'ladi.
       }
     }
-
-    return { success: true, claimId: claim.id, accepted };
   } catch (err) {
-    console.error("Yandex Delivery jo'natishda xatolik:", err.message, err.body);
-    throw new HttpsError("internal", err.message || "Yandex Delivery'ga jo'natishda xatolik yuz berdi.");
+    console.error("Yandex Delivery tasdiqlashda xatolik (da'vo yaratilgan):", err.message, err.status);
   }
+
+  return { success: true, claimId: claim.id, accepted };
+}
+
+/**
+ * Yandex API xatosini sotuvchiga tushunarli `HttpsError`ga aylantiradi.
+ * Kutilgan (foydalanuvchi tuzata oladigan) holatlar `failed-precondition`
+ * bo'ladi — Sentry'ga "internal" shovqin bo'lib tushmaydi.
+ */
+function mapYandexDispatchError(err) {
+  const status = err && err.status;
+  const detail = (err && err.message) ? String(err.message).slice(0, 300) : "";
+  if (status === 401 || status === 403) {
+    return new HttpsError("failed-precondition", "Yandex Delivery tokeni yaroqsiz yoki ruxsati yo'q. Yetkazib berish sozlamalarida tokenni yangilang.");
+  }
+  if (status === 400 || status === 404 || status === 409 || status === 422) {
+    return new HttpsError("failed-precondition", `Yandex buyurtmani qabul qilmadi: ${detail || "so'rov ma'lumotlari noto'g'ri"}`);
+  }
+  if (status === 429) {
+    return new HttpsError("resource-exhausted", "Yandex so'rovlari ko'payib ketdi. Bir ozdan keyin qayta urining.");
+  }
+  return new HttpsError("internal", detail || "Yandex Delivery'ga jo'natishda xatolik yuz berdi.");
 }
 
 // Yandex'ning holatini bizning `orders.status`ga moslashtirish —

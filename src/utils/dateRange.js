@@ -53,4 +53,21 @@ export const getRecentMonthOptions = (count = 12) => {
   return options;
 };
 
+/**
+ * Grafik/kartochkalar uchun qisqa sana: "1 Okt". Brauzerning `uz-UZ`
+ * locale'iga ishonilmaydi (Chromium'da oy nomi "M10" bo'lib chiqadi va
+ * kun-oy tartibi har xil) - oy nomi loyihaning o'z tarjimasidan
+ * (`common.monthNamesShort`) olinadi. `date` — "YYYY-MM-DD" matni yoki
+ * Date/ms; kun UTC bo'yicha o'qiladi (matn UTC yarim tunga parslanadi).
+ */
+export const formatDayMonth = (date, monthNamesShort = []) => {
+  if (date === null || date === undefined || date === "") return "";
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return "";
+  const isDateOnly = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date);
+  const day = isDateOnly ? d.getUTCDate() : d.getDate();
+  const month = isDateOnly ? d.getUTCMonth() : d.getMonth();
+  return `${day} ${monthNamesShort[month] ?? String(month + 1).padStart(2, "0")}`;
+};
+
 export const MS_IN_DAY_VALUE = MS_IN_DAY;

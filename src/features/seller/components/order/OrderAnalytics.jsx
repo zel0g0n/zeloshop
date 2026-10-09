@@ -19,6 +19,9 @@ import { exportToCsv } from "@/utils/csvExport";
 import { generateWinBackMessage } from "@/services/ai/aiCeoInsights";
 import { sendCrmNotification } from "@/services/crm/sendNotification";
 import { useLanguage } from "@/context/LanguageContext";
+import { formatDayMonth } from "@/utils/dateRange";
+import { useIsDesktop } from "@/hooks/useIsDesktop";
+import { useTheme } from "@/context/ThemeContext";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const money = (n) => `${Math.round(n).toLocaleString()} so'm`;
@@ -224,6 +227,9 @@ LapsedCustomerRow.displayName = "LapsedCustomerRow";
 const OrderAnalytics = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
+  const isDesktop = useIsDesktop();
+  const { isDark } = useTheme();
+  const monthNamesShort = t("common.monthNamesShort");
   const { sellerId, store } = useSession();
   const TIME_FILTERS = useMemo(() => TIME_FILTER_DAYS.map((f) => ({ ...f, label: t(`productAnalytics.${f.labelKey}`) })), [t]);
 
@@ -251,8 +257,8 @@ const OrderAnalytics = () => {
   const maxDayPartCount = Math.max(1, ...dayPartBreakdown.map((p) => p.count));
 
   const chartData = useMemo(
-    () => dailySeries.map((d) => ({ ...d, label: new Date(d.date).toLocaleDateString("uz-UZ", { day: "2-digit", month: "2-digit" }) })),
-    [dailySeries]
+    () => dailySeries.map((d) => ({ ...d, label: formatDayMonth(d.date, monthNamesShort) })),
+    [dailySeries, monthNamesShort]
   );
 
   const zoneLabel = useCallback(
@@ -281,7 +287,7 @@ const OrderAnalytics = () => {
   return (
     <div className="h-screen overflow-y-auto bg-[#F4F5F9] dark:bg-slate-950 text-slate-900 dark:text-white font-sans antialiased transition-colors duration-300">
 
-      <div className="sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center justify-between gap-3">
+      <div className="page-header sticky top-0 z-30 bg-white/95 dark:bg-slate-900/95 px-4 py-4 shadow-xs flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
@@ -299,16 +305,17 @@ const OrderAnalytics = () => {
           type="button"
           onClick={handleExport}
           disabled={periodOrders.length === 0}
-          className="shrink-0 w-9 h-9 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
+          className="shrink-0 w-9 h-9 lg:w-auto lg:px-4 lg:gap-2 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center active:scale-95 transition-transform disabled:opacity-40"
           aria-label={t("productAnalytics.exportAria")}
         >
           <Download size={16} />
+          <span className="hidden lg:inline text-xs font-bold">{t("common.exportCsv")}</span>
         </button>
       </div>
 
-      <div className="p-4 space-y-4 pb-36">
+      <div className="p-4 space-y-4 pb-36 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:items-start">
 
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar lg:col-span-2">
           {TIME_FILTERS.map((f) => (
             <button
               key={f.key}
@@ -325,38 +332,27 @@ const OrderAnalytics = () => {
         </div>
 
         {isLoading ? (
-          <div className="h-64 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500">{t("productAnalytics.loading")}</div>
+          <div className="h-64 flex items-center justify-center text-xs text-slate-400 dark:text-slate-500 lg:col-span-2">{t("productAnalytics.loading")}</div>
         ) : periodOrders.length === 0 ? (
-          <div className="h-64 flex flex-col items-center justify-center gap-2 text-center px-6">
+          <div className="h-64 flex flex-col items-center justify-center gap-2 text-center px-6 lg:col-span-2">
             <ShoppingBag size={28} className="text-slate-300 dark:text-slate-600" />
             <p className="text-xs text-slate-400 dark:text-slate-500">{t("orderAnalytics.noOrdersInPeriod")}</p>
           </div>
         ) : (
           <>
             {/* HERO — davrning yetkazilgan daromadi */}
-            <div className="rounded-[28px] p-5 text-white shadow-lg shadow-indigo-600/20 relative overflow-hidden bg-gradient-to-br from-indigo-600 to-indigo-700">
+            <div className="lg:col-span-2 rounded-[28px] p-5 lg:p-7 text-white shadow-lg shadow-indigo-600/20 relative overflow-hidden bg-gradient-to-br from-indigo-600 to-indigo-700">
               <span className="flex items-center gap-1.5 text-[10px] font-bold text-white/80 uppercase tracking-wider">
                 <Trophy size={12} /> {t("orderAnalytics.heroLabel")}
               </span>
-              <p className="text-2xl font-black tracking-tight mt-2">{money(summary.deliveredRevenue)}</p>
+              <p className="text-2xl lg:text-4xl font-black tracking-tight mt-2">{money(summary.deliveredRevenue)}</p>
               <p className="text-[11px] font-semibold text-white/70 mt-0.5">
                 {summary.deliveredCount} {t("orderAnalytics.deliveredOrdersSuffix")}
               </p>
-
-              <div className="grid grid-cols-2 gap-3 mt-4">
-                <div className="bg-white/15 rounded-2xl p-3">
-                  <span className="text-[10px] font-bold uppercase text-white/80">{t("orderAnalytics.aovLabel")}</span>
-                  <p className="text-base font-black mt-1">{money(summary.aov)}</p>
-                </div>
-                <div className="bg-white/15 rounded-2xl p-3">
-                  <span className="text-[10px] font-bold uppercase text-white/80">{t("orderAnalytics.totalOrdersLabel")}</span>
-                  <p className="text-base font-black mt-1">{summary.totalOrders}</p>
-                </div>
-              </div>
             </div>
 
             {/* QISQA XULOSA — 3 ta ko'rsatkich */}
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-3 gap-2.5 lg:gap-4 lg:col-span-2">
               <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-3 rounded-xl">
                 <ShoppingBag size={14} className="text-indigo-500 mb-1.5" />
                 <p className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide">{t("orderAnalytics.totalOrdersLabel")}</p>
@@ -375,36 +371,43 @@ const OrderAnalytics = () => {
             </div>
 
             {/* DAROMAD DINAMIKASI (grafik) */}
-            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-1">
+            <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 lg:p-5 shadow-sm space-y-1 lg:col-span-2">
               <h3 className="text-xs font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider">{t("orderAnalytics.revenueTrendTitle")}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={chartData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
+              <ResponsiveContainer width="100%" height={isDesktop ? 300 : 200}>
+                <AreaChart data={chartData} margin={{ top: 10, right: 12, left: -8, bottom: 0 }}>
                   <defs>
                     <linearGradient id="orderRevenueGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="currentColor" className="text-slate-100 dark:text-slate-800" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? "#1e293b" : "#f1f5f9"} vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 10, fill: "currentColor" }}
-                    className="text-slate-400 dark:text-slate-500"
+                    tick={{ fontSize: 10, fill: isDark ? "#64748b" : "#94a3b8" }}
                     axisLine={false}
                     tickLine={false}
-                    interval={Math.max(0, Math.ceil(chartData.length / 7) - 1)}
+                    interval="preserveStartEnd"
+                    minTickGap={28}
+                    padding={{ left: 8, right: 14 }}
                   />
                   <YAxis
-                    tick={{ fontSize: 10, fill: "currentColor" }}
-                    className="text-slate-400 dark:text-slate-500"
+                    tick={{ fontSize: 10, fill: isDark ? "#64748b" : "#94a3b8" }}
                     axisLine={false}
                     tickLine={false}
                     width={56}
-                    tickFormatter={(v) => (v >= 1_000_000 ? `${(v / 1_000_000).toFixed(1)}mln` : `${Math.round(v / 1000)}k`)}
+                    domain={[0, (dataMax) => Math.max(dataMax, 10000)]}
+                    allowDecimals={false}
+                    tickFormatter={(v) => {
+                      if (v === 0) return "0";
+                      if (v >= 1_000_000) return `${+(v / 1_000_000).toFixed(1)}mln`;
+                      if (v >= 1000) return `${+(v / 1000).toFixed(1)}k`;
+                      return String(Math.round(v));
+                    }}
                   />
                   <Tooltip
                     formatter={(value) => [money(value), t("orderAnalytics.deliveredRevenueLabel")]}
-                    contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, fontWeight: 600 }}
+                    contentStyle={{ borderRadius: 12, border: isDark ? "1px solid #334155" : "1px solid #e2e8f0", background: isDark ? "#0f172a" : "#ffffff", color: isDark ? "#e2e8f0" : "#0f172a", fontSize: 12, fontWeight: 600 }}
                   />
                   <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} fill="url(#orderRevenueGradient)" />
                 </AreaChart>

@@ -122,7 +122,7 @@ const CouponsSection = () => {
           className="w-full h-11 px-3 bg-[#F4F5F9] dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl font-black text-sm uppercase tracking-wider focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-60"
         />
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-[1.35fr_1fr] gap-2">
           <CustomSelect
             disabled={creating}
             value={discountType}
@@ -201,7 +201,12 @@ const CouponsSection = () => {
         {loading && <p className="text-center text-xs text-slate-400 dark:text-slate-500 py-6">{t("marketing.loading")}</p>}
 
         {!loading && coupons.length === 0 && (
-          <p className="text-center text-xs text-slate-400 dark:text-slate-500 py-8">{t("marketing.noCoupons")}</p>
+          <div className="flex flex-col items-center justify-center gap-2.5 text-center py-10 px-6 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40">
+            <div className="w-11 h-11 rounded-2xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 flex items-center justify-center">
+              <Tag size={20} />
+            </div>
+            <p className="text-xs font-bold text-slate-500 dark:text-slate-400">{t("marketing.noCoupons")}</p>
+          </div>
         )}
 
         {!loading && coupons.map((coupon) => (
